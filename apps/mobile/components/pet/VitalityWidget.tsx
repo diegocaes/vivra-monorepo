@@ -15,6 +15,7 @@ const PILLAR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 interface VitalityWidgetProps {
   vitality: VitalityScoreResult;
+  compact?: boolean;
 }
 
 function PillarBar({ name, pct, isEstimated }: { name: string; pct: number; isEstimated: boolean }) {
@@ -43,7 +44,30 @@ function PillarBar({ name, pct, isEstimated }: { name: string; pct: number; isEs
   );
 }
 
-export function VitalityWidget({ vitality }: VitalityWidgetProps) {
+export function VitalityWidget({ vitality, compact }: VitalityWidgetProps) {
+  if (compact) {
+    return (
+      <Card>
+        <View style={styles.compactRow}>
+          <ScoreCircle
+            score={vitality.total}
+            color={vitality.color}
+            showScore={vitality.showScore}
+            label={vitality.category === 'building' ? 'Completando' : undefined}
+          />
+          <View style={styles.compactInfo}>
+            <Text style={styles.title}>Vitality Score</Text>
+            <Text style={styles.headline}>{vitality.headline}</Text>
+            {vitality.subline ? (
+              <Text style={styles.compactSubline}>{vitality.subline}</Text>
+            ) : null}
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+        </View>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <View style={styles.header}>
@@ -134,6 +158,20 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.muted,
     marginTop: Spacing.md,
+    fontStyle: 'italic',
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  compactInfo: {
+    flex: 1,
+  },
+  compactSubline: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: 2,
     fontStyle: 'italic',
   },
 });

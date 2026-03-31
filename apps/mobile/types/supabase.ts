@@ -192,6 +192,7 @@ export interface PreventiveTreatment {
   product_name: string | null;
   date_given: string;
   next_due: string | null;
+  cost: number | null;
   notes: string | null;
   created_at: string;
 }

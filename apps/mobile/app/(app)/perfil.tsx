@@ -18,6 +18,8 @@ import { SelectField } from '../../components/ui/SelectField';
 import { useSubscription } from '../../hooks/useSubscription';
 import { PremiumGate } from '../../components/ui/PremiumGate';
 import { FREE_LIMITS } from '../../constants/revenueCat';
+import { SpendingSummary } from '../../components/pet/SpendingSummary';
+import * as Linking from 'expo-linking';
 
 const THEME_COLORS = Object.entries(PetThemeColors).map(([key, hex]) => ({ key, hex }));
 
@@ -340,6 +342,38 @@ export default function PerfilScreen() {
               } />
             </Card>
 
+            {/* Spending summary */}
+            <SpendingSummary petId={pet.id} isPremium={isPremium} />
+
+            {/* Export passport */}
+            {isPremium ? (
+              <TouchableOpacity
+                style={styles.passportBtn}
+                onPress={() => Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.passportTitle}>Exportar pasaporte</Text>
+                  <Text style={styles.passportDesc}>Genera el pasaporte de viaje de {pet.name}</Text>
+                </View>
+                <Ionicons name="open-outline" size={18} color={Colors.accent} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.passportBtn}
+                onPress={() => router.push('/paywall' as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="document-text-outline" size={20} color={Colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.passportTitle}>Exportar pasaporte</Text>
+                  <Text style={styles.passportDesc}>Disponible con Premium</Text>
+                </View>
+                <Ionicons name="lock-closed" size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            )}
+
             {/* Theme color */}
             <Card>
               <Text style={styles.sectionTitle}>Color del perfil</Text>
@@ -579,4 +613,12 @@ const styles = StyleSheet.create({
   premiumInfo: { flex: 1 },
   premiumTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink },
   premiumDesc: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
+  // Passport
+  passportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
+    borderWidth: 1, borderColor: Colors.cardBorder,
+  },
+  passportTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  passportDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
 });

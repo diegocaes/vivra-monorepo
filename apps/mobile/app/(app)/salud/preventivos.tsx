@@ -75,6 +75,7 @@ export default function PreventivosScreen() {
   // Form
   const [dateApplied, setDateApplied] = useState(new Date().toISOString().slice(0, 10));
   const [productName, setProductName] = useState('');
+  const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
 
   const fetchData = useCallback(async () => {
@@ -102,6 +103,7 @@ export default function PreventivosScreen() {
     setFormType(type);
     setDateApplied(new Date().toISOString().slice(0, 10));
     setProductName('');
+    setCost('');
     setNotes('');
     setShowForm(true);
   };
@@ -116,6 +118,7 @@ export default function PreventivosScreen() {
       type: formType,
       date_given: dateApplied,
       product_name: productName || null,
+      cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
     });
     setSaving(false);
@@ -149,6 +152,11 @@ export default function PreventivosScreen() {
               <View style={styles.itemInfo}>
                 <Text style={styles.itemDate}>{formatDate(item.date_given)}</Text>
                 {item.product_name && <Text style={styles.itemProduct}>{item.product_name}</Text>}
+                {item.cost != null && item.cost > 0 && (
+                  <View style={styles.costBadge}>
+                    <Text style={styles.costText}>${item.cost}</Text>
+                  </View>
+                )}
                 {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
               </View>
               <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -204,6 +212,13 @@ export default function PreventivosScreen() {
           placeholder="Ej: Frontline, Drontal..."
         />
         <FormField
+          label="Costo (opcional)"
+          value={cost}
+          onChangeText={setCost}
+          placeholder="0.00"
+          keyboardType="decimal-pad"
+        />
+        <FormField
           label="Notas (opcional)"
           value={notes}
           onChangeText={setNotes}
@@ -248,4 +263,9 @@ const styles = StyleSheet.create({
   itemDate: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
   itemProduct: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 2 },
+  costBadge: {
+    backgroundColor: Colors.accentLight, borderRadius: Radius.full,
+    paddingHorizontal: Spacing.sm, paddingVertical: 1, alignSelf: 'flex-start', marginTop: 2,
+  },
+  costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
 });

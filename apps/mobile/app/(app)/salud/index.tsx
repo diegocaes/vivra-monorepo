@@ -93,14 +93,13 @@ export default function SaludScreen() {
           </View>
         </View>
 
-        {/* Navigation cards */}
+        {/* Navigation cards — ordered by frequency of use */}
         <NavCard
-          icon="medkit"
-          iconColor={Colors.good}
-          title="Vacunas"
-          subtitle="Registro y badges de vacunación"
-          onPress={() => router.push('/(app)/salud/vacunas')}
-          badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
+          icon="shield-checkmark"
+          iconColor={Colors.warn}
+          title="Preventivos"
+          subtitle="Antipulgas y desparasitante"
+          onPress={() => router.push('/(app)/salud/preventivos')}
         />
         <NavCard
           icon="scale"
@@ -119,18 +118,12 @@ export default function SaludScreen() {
           badge={visitCount > 0 ? `${visitCount}` : undefined}
         />
         <NavCard
-          icon="cut"
-          iconColor={Colors.accentDark}
-          title="Grooming"
-          subtitle="Baños, cortes y limpieza"
-          onPress={() => router.push('/(app)/salud/grooming')}
-        />
-        <NavCard
-          icon="shield-checkmark"
-          iconColor={Colors.warn}
-          title="Preventivos"
-          subtitle="Antipulgas y desparasitante"
-          onPress={() => router.push('/(app)/salud/preventivos')}
+          icon="medkit"
+          iconColor={Colors.good}
+          title="Vacunas"
+          subtitle="Registro y badges de vacunación"
+          onPress={() => router.push('/(app)/salud/vacunas')}
+          badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />
 
         {/* Premium upsell */}

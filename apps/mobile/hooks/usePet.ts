@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+import { useSubscription } from './useSubscription';
+import { scheduleVaccineReminder, scheduleGroomingReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food } from '../types/supabase';
 
 export interface PetData {
@@ -23,6 +25,7 @@ export interface PetData {
 
 export function usePet(): PetData {
   const { user } = useAuth();
+  const { isPremium } = useSubscription();
   const [pets, setPets] = useState<Pet[]>([]);
   const [activePetId, setActivePetId] = useState<string | null>(null);
   const [vaccines, setVaccines] = useState<PetData['vaccines']>([]);
@@ -93,10 +96,27 @@ export function usePet(): PetData {
       setAdventures(adventuresRes.data ?? []);
       setLastAntipulgas(antipulgasRes.data?.[0] ?? null);
       setLastDesparasitante(desparasitanteRes.data?.[0] ?? null);
+
+      // Schedule premium-only notifications
+      if (isPremium && pet) {
+        // Vaccine reminders (7 days before next dose)
+        for (const v of vaccinesRes.data ?? []) {
+          if (v.date_given) {
+            const nextDue = new Date(v.date_given);
+            nextDue.setFullYear(nextDue.getFullYear() + 1);
+            scheduleVaccineReminder({ petName: pet.name, vaccineName: v.name, nextDueDate: nextDue });
+          }
+        }
+        // Grooming reminder (28 days after last)
+        const lastGroom = groomingsRes.data?.[0];
+        if (lastGroom?.date) {
+          scheduleGroomingReminder({ petName: pet.name, lastGroomingDate: new Date(lastGroom.date + 'T00:00:00') });
+        }
+      }
     } catch (e: any) {
       setError(e.message ?? 'Error cargando datos');
     }
-  }, [pet?.id]);
+  }, [pet?.id, isPremium]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

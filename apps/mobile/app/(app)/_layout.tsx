@@ -55,11 +55,11 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="viajes"
+        name="actividad"
         options={{
-          title: 'Viajes',
+          title: 'Actividad',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'airplane' : 'airplane-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'flash' : 'flash-outline'} size={24} color={color} />
           ),
         }}
       />

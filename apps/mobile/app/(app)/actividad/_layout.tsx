@@ -3,7 +3,7 @@ import { Stack, useNavigation } from 'expo-router';
 import { StackActions } from '@react-navigation/native';
 import { Colors } from '../../../constants/theme';
 
-export default function SaludLayout() {
+export default function ActividadLayout() {
   const navigation = useNavigation();
 
   useEffect(() => {

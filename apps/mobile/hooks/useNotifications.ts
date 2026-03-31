@@ -193,6 +193,96 @@ export async function scheduleBirthdayNotification(opts: {
   });
 }
 
+/** Schedule a daily activity reminder at 7pm — Freemium + Premium */
+export async function scheduleDailyActivityReminder(opts: { petName: string }) {
+  const { petName } = opts;
+
+  // Cancel any existing daily activity reminder before scheduling a new one
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if (n.content.data?.type === 'daily_activity') {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `¿Saliste a pasear con ${petName} hoy?`,
+      body: `Registra la actividad diaria de ${petName} en Vivra.`,
+      data: { type: 'daily_activity' },
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour: 19,
+      minute: 0,
+    },
+  });
+}
+
+/** Cancel daily activity reminder — call after user logs activity today */
+export async function cancelDailyActivityNotification() {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if (n.content.data?.type === 'daily_activity') {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+}
+
+/** Schedule a vaccine reminder 7 days before due date — Premium only */
+export async function scheduleVaccineReminder(opts: {
+  petName: string;
+  vaccineName: string;
+  nextDueDate: Date;
+}) {
+  const { petName, vaccineName, nextDueDate } = opts;
+
+  const alertDate = new Date(nextDueDate);
+  alertDate.setDate(alertDate.getDate() - 7);
+
+  if (alertDate <= new Date()) return;
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `${petName}: vacuna próxima`,
+      body: `💉 La vacuna de ${vaccineName} de ${petName} vence en 7 días.`,
+      data: { type: 'vaccine_reminder', vaccineName },
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: alertDate,
+    },
+  });
+}
+
+/** Schedule a grooming/bath reminder 28 days after last session — Premium only */
+export async function scheduleGroomingReminder(opts: {
+  petName: string;
+  lastGroomingDate: Date;
+}) {
+  const { petName, lastGroomingDate } = opts;
+
+  const alertDate = new Date(lastGroomingDate);
+  alertDate.setDate(alertDate.getDate() + 28);
+
+  if (alertDate <= new Date()) return;
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `${petName}: hora del baño`,
+      body: `🛁 Los expertos recomiendan bañar a tu mascota cada 4 semanas. ¡Ya es momento para ${petName}!`,
+      data: { type: 'grooming_reminder' },
+      sound: true,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: alertDate,
+    },
+  });
+}
+
 /** Cancel all scheduled notifications (useful on logout) */
 export async function cancelAllNotifications() {
   await Notifications.cancelAllScheduledNotificationsAsync();

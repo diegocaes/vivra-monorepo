@@ -35,7 +35,7 @@ The `(auth)/` group contains login/register/forgot-password screens. The `(app)/
 | Home | `index.tsx` | Dashboard with vitality score, reminders, food progress |
 | Health | `salud/` | Nested routes: vaccines, weight, grooming, preventive, vet history |
 | Nutrition | `alimentacion.tsx` | Food brand, portions, bag tracking |
-| Travel | `viajes.tsx` | Flight info, travel documents, checklist |
+| Activity | `actividad/` | Activity hub: walks, grooming, flights, badges |
 | Profile | `perfil.tsx` | Account settings, pet editing, subscription |
 
 ### State Management

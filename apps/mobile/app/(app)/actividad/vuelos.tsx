@@ -1,17 +1,18 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
-import { supabase } from '../../lib/supabase';
-import { usePetContext } from '../../contexts/PetContext';
+import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
+import { supabase } from '../../../lib/supabase';
+import { usePetContext } from '../../../contexts/PetContext';
 import { formatDate } from '@vivra/shared';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { BottomSheet } from '../../components/ui/BottomSheet';
-import { FormField } from '../../components/ui/FormField';
-import { SelectField } from '../../components/ui/SelectField';
-import type { Flight } from '../../types/supabase';
+import { Card } from '../../../components/ui/Card';
+import { Button } from '../../../components/ui/Button';
+import { BottomSheet } from '../../../components/ui/BottomSheet';
+import { FormField } from '../../../components/ui/FormField';
+import { SelectField } from '../../../components/ui/SelectField';
+import type { Flight } from '../../../types/supabase';
 
 const CABIN_OPTIONS = [
   { key: 'cabina', label: 'Cabina' },
@@ -27,7 +28,8 @@ const CHECKLIST_ITEMS: { key: keyof Pick<Flight, 'vet_certificate' | 'health_cer
   { key: 'crate_approved', label: 'Transportín IATA', icon: 'cube-outline' },
 ];
 
-export default function ViajesScreen() {
+export default function VuelosScreen() {
+  const router = useRouter();
   const { pet } = usePetContext();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,7 +58,6 @@ export default function ViajesScreen() {
 
   const fetchData = useCallback(async () => {
     if (!pet) return;
-
     const { data } = await supabase
       .from('flights').select('*').eq('pet_id', pet.id).order('flight_date', { ascending: false });
     setFlights((data as Flight[]) ?? []);
@@ -150,7 +151,10 @@ export default function ViajesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Viajes</Text>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.ink} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Vuelos</Text>
         <TouchableOpacity onPress={openAdd}>
           <Ionicons name="add-circle" size={28} color={Colors.accent} />
         </TouchableOpacity>
@@ -241,7 +245,6 @@ export default function ViajesScreen() {
                     )}
                   </View>
 
-                  {/* Checklist progress bar */}
                   <View style={styles.checkProgressRow}>
                     <View style={styles.checkProgressBg}>
                       <View style={[styles.checkProgressFill, { width: `${progress}%`, backgroundColor: progress === 100 ? Colors.good : Colors.accent }]} />
@@ -261,7 +264,6 @@ export default function ViajesScreen() {
         )}
       </ScrollView>
 
-      {/* Flight form */}
       <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingFlight ? 'Editar vuelo' : 'Nuevo vuelo'}>
         <FormField label="Aerolínea" value={airline} onChangeText={setAirline} placeholder="Ej: Copa Airlines" />
         <FormField label="Nro. de vuelo (opcional)" value={flightNumber} onChangeText={setFlightNumber} placeholder="Ej: CM 391" />
@@ -278,7 +280,6 @@ export default function ViajesScreen() {
         <FormField label="Precio ticket (USD)" value={ticketPrice} onChangeText={setTicketPrice} placeholder="0.00" keyboardType="decimal-pad" />
         <FormField label="Notas (opcional)" value={notes} onChangeText={setNotes} placeholder="Detalles adicionales..." multiline style={{ minHeight: 60 }} />
 
-        {/* Document checklist */}
         <Text style={styles.checklistTitle}>Documentos</Text>
         {CHECKLIST_ITEMS.map(item => (
           <TouchableOpacity key={item.key} style={styles.checkItem} onPress={() => toggleCheck(item.key)} activeOpacity={0.7}>
@@ -307,7 +308,6 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
   scroll: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
-  // Stats
   statsRow: { flexDirection: 'row', gap: Spacing.sm },
   statBox: {
     flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg,
@@ -315,7 +315,6 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
   statLabel: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
-  // Tabs
   tabRow: { flexDirection: 'row', gap: Spacing.sm, marginVertical: Spacing.xs },
   tabBtn: {
     flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, alignItems: 'center',
@@ -324,11 +323,9 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   tabText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.muted },
   tabTextActive: { color: Colors.white },
-  // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },
   emptyText: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-  // Flight card
   flightHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.xs },
   flightRoute: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink },
   flightAirline: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
@@ -339,14 +336,11 @@ const styles = StyleSheet.create({
   cabinRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   flightCabin: { fontSize: FontSize.xs, color: Colors.muted },
   flightPrice: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
-  // Checklist progress
   checkProgressRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
   checkProgressBg: { flex: 1, height: 4, backgroundColor: Colors.cardBorder, borderRadius: Radius.full, overflow: 'hidden' },
   checkProgressFill: { height: 4, borderRadius: Radius.full },
   checkProgressText: { fontSize: FontSize.xs, color: Colors.muted, width: 32, textAlign: 'right' },
-  // Actions
   flightActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: Spacing.xs },
-  // Form
   formRow: { flexDirection: 'row', gap: Spacing.sm },
   checklistTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.md, marginBottom: Spacing.xs },
   checkItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs },

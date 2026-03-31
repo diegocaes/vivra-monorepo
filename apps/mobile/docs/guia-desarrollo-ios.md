@@ -192,7 +192,7 @@ vivra-mobile/
 │   │   ├── index.tsx       # Home / Dashboard
 │   │   ├── salud/          # Tab de salud (vacunas, peso, etc.)
 │   │   ├── alimentacion.tsx
-│   │   ├── viajes.tsx
+│   │   ├── actividad/
 │   │   └── perfil.tsx
 │   ├── onboarding.tsx      # Registro de mascota
 │   └── login.tsx           # Login

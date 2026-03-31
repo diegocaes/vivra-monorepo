@@ -120,17 +120,33 @@ export default function DashboardScreen() {
         <PetHeroCard pet={petData.pet} />
 
         {/* Vitality Score */}
-        {vitality && <VitalityWidget vitality={vitality} />}
+        {vitality && (
+          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/salud' as any)}>
+            <VitalityWidget vitality={vitality} compact />
+          </TouchableOpacity>
+        )}
 
         {/* Food progress */}
-        {activeFood && activeFood.daily_grams && activeFood.bag_size && (
-          <FoodProgressBar
-            brand={activeFood.brand ?? 'Alimento'}
-            dailyGrams={activeFood.daily_grams}
-            bagSize={activeFood.bag_size}
-            bagUnit={activeFood.bag_unit ?? 'g'}
-            startDate={activeFood.start_date ?? activeFood.created_at}
-          />
+        {activeFood && activeFood.daily_grams && activeFood.bag_size ? (
+          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/alimentacion' as any)}>
+            <FoodProgressBar
+              brand={activeFood.brand ?? 'Alimento'}
+              dailyGrams={activeFood.daily_grams}
+              bagSize={activeFood.bag_size}
+              bagUnit={activeFood.bag_unit ?? 'g'}
+              startDate={activeFood.start_date ?? activeFood.created_at}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.foodCta}
+            onPress={() => router.navigate('/(app)/alimentacion' as any)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="restaurant-outline" size={20} color={Colors.accent} />
+            <Text style={styles.foodCtaText}>¿Qué come {petData.pet.name}? Registra su alimento</Text>
+            <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
+          </TouchableOpacity>
         )}
 
         {/* Preventive reminders */}
@@ -140,6 +156,7 @@ export default function DashboardScreen() {
               type="antipulgas"
               lastDate={petData.lastAntipulgas?.date_given ?? null}
               productName={petData.lastAntipulgas?.product_name}
+              onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
           </View>
           <View style={styles.reminderCol}>
@@ -147,6 +164,7 @@ export default function DashboardScreen() {
               type="desparasitante"
               lastDate={petData.lastDesparasitante?.date_given ?? null}
               productName={petData.lastDesparasitante?.product_name}
+              onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
           </View>
         </View>
@@ -229,6 +247,21 @@ const styles = StyleSheet.create({
   },
   reminderCol: {
     flex: 1,
+  },
+  foodCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.accentLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent + '30',
+    padding: Spacing.md,
+  },
+  foodCtaText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    color: Colors.ink,
   },
   emptyContainer: {
     flex: 1,

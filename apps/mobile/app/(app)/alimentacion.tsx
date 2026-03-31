@@ -1,10 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Rect, Text as SvgText, Line, G } from 'react-native-svg';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
+import { useSubscription } from '../../hooks/useSubscription';
 import { formatDate } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
@@ -26,6 +28,60 @@ const FREQUENCY_OPTIONS = [
   { key: '3x', label: '3 veces al día' },
   { key: 'libre', label: 'Libre acceso' },
 ];
+
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function TreatSpendChart({ treats }: { treats: Treat[] }) {
+  const monthly = useMemo(() => {
+    const now = new Date();
+    const months: { label: string; total: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const total = treats
+        .filter(t => t.price && t.purchase_date?.startsWith(key))
+        .reduce((s, t) => s + (t.price ?? 0), 0);
+      months.push({ label: MONTH_LABELS[d.getMonth()], total });
+    }
+    return months;
+  }, [treats]);
+
+  const maxVal = Math.max(...monthly.map(m => m.total), 1);
+  const W = 320;
+  const H = 140;
+  const PAD = { top: 12, bottom: 24, left: 8, right: 8 };
+  const barW = 32;
+  const gap = (W - PAD.left - PAD.right - barW * 6) / 5;
+
+  return (
+    <Card>
+      <Text style={styles.chartTitle}>Gasto en snacks (últimos 6 meses)</Text>
+      <Svg width={W} height={H}>
+        <Line x1={PAD.left} y1={H - PAD.bottom} x2={W - PAD.right} y2={H - PAD.bottom} stroke={Colors.cardBorder} strokeWidth={1} />
+        {monthly.map((m, i) => {
+          const x = PAD.left + i * (barW + gap);
+          const barH = maxVal > 0 ? (m.total / maxVal) * (H - PAD.top - PAD.bottom) : 0;
+          const y = H - PAD.bottom - barH;
+          return (
+            <G key={i}>
+              {m.total > 0 && (
+                <Rect x={x} y={y} width={barW} height={barH} rx={4} fill={Colors.accent} opacity={0.8} />
+              )}
+              {m.total > 0 && (
+                <SvgText x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={9} fill={Colors.ink}>
+                  ${m.total}
+                </SvgText>
+              )}
+              <SvgText x={x + barW / 2} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={10} fill={Colors.muted}>
+                {m.label}
+              </SvgText>
+            </G>
+          );
+        })}
+      </Svg>
+    </Card>
+  );
+}
 
 function bagToGrams(size: number, unit: string): number {
   if (unit === 'kg') return size * 1000;
@@ -56,6 +112,7 @@ function enrichFood(food: Food): FoodWithCalc {
 
 export default function AlimentacionScreen() {
   const { pet } = usePetContext();
+  const { isPremium } = useSubscription();
   const [foods, setFoods] = useState<FoodWithCalc[]>([]);
   const [treats, setTreats] = useState<Treat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -285,6 +342,11 @@ export default function AlimentacionScreen() {
           )}
         </View>
 
+        {/* Monthly spend chart (premium) */}
+        {isPremium && treats.some(t => t.price) && (
+          <TreatSpendChart treats={treats} />
+        )}
+
         {/* Add buttons row */}
         <View style={styles.addRow}>
           <TouchableOpacity style={styles.addBtn} onPress={openAddFood} activeOpacity={0.7}>
@@ -449,6 +511,8 @@ const styles = StyleSheet.create({
   itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 2 },
   costBadge: { backgroundColor: Colors.accentLight, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full },
   costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
+  // Chart
+  chartTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink, marginBottom: Spacing.sm },
   // Form
   formRow: { flexDirection: 'row', gap: Spacing.sm },
 });

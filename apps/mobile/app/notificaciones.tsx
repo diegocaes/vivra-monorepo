@@ -113,7 +113,10 @@ export default function NotificacionesScreen() {
                 activeOpacity={0.7}
                 onPress={() => {
                   markAsRead(notif.id);
-                  if (notif.href) router.push(notif.href as any);
+                  if (notif.href) {
+                    router.back();
+                    setTimeout(() => router.push(notif.href as any), 150);
+                  }
                 }}
               >
                 <Card style={!notif.read ? styles.unreadCard : undefined}>

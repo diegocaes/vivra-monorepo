@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../ui/Card';
 import { Colors, Spacing, FontSize, FontWeight } from '../../constants/theme';
@@ -8,6 +8,7 @@ interface ReminderCardProps {
   type: 'antipulgas' | 'desparasitante';
   lastDate: string | null;
   productName?: string | null;
+  onPress?: () => void;
 }
 
 const CONFIG = {
@@ -15,16 +16,19 @@ const CONFIG = {
   desparasitante: { icon: 'medical' as const, iconColor: '#E879F9', label: 'Desparasitante', cycleDays: 30 },
 };
 
-export function ReminderCard({ type, lastDate, productName }: ReminderCardProps) {
+export function ReminderCard({ type, lastDate, productName, onPress }: ReminderCardProps) {
   const { icon, iconColor, label, cycleDays } = CONFIG[type];
 
   if (!lastDate) {
     return (
-      <Card>
-        <Ionicons name={icon} size={24} color={iconColor} />
-        <Text style={styles.title} numberOfLines={1}>{label}</Text>
-        <Text style={styles.noData}>Sin registros</Text>
-      </Card>
+      <TouchableOpacity activeOpacity={onPress ? 0.7 : 1} onPress={onPress} disabled={!onPress}>
+        <Card>
+          <Ionicons name={icon} size={24} color={iconColor} />
+          <Text style={styles.title} numberOfLines={1}>{label}</Text>
+          <Text style={styles.noData}>Sin registros</Text>
+          {onPress && <Text style={styles.register}>Registrar →</Text>}
+        </Card>
+      </TouchableOpacity>
     );
   }
 
@@ -43,17 +47,19 @@ export function ReminderCard({ type, lastDate, productName }: ReminderCardProps)
       : `En ${daysLeft}d`;
 
   return (
-    <Card>
-      <View style={styles.topRow}>
-        <Ionicons name={icon} size={24} color={iconColor} />
-        <View style={[styles.badge, { backgroundColor: statusColor + '18' }]}>
-          <Text style={[styles.badgeText, { color: statusColor }]}>{statusText}</Text>
+    <TouchableOpacity activeOpacity={onPress ? 0.7 : 1} onPress={onPress} disabled={!onPress}>
+      <Card>
+        <View style={styles.topRow}>
+          <Ionicons name={icon} size={24} color={iconColor} />
+          <View style={[styles.badge, { backgroundColor: statusColor + '18' }]}>
+            <Text style={[styles.badgeText, { color: statusColor }]}>{statusText}</Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.title} numberOfLines={1}>{label}</Text>
-      {productName && <Text style={styles.product} numberOfLines={1}>{productName}</Text>}
-      <Text style={styles.lastDate} numberOfLines={1}>Último: {formatDate(lastDate)}</Text>
-    </Card>
+        <Text style={styles.title} numberOfLines={1}>{label}</Text>
+        {productName && <Text style={styles.product} numberOfLines={1}>{productName}</Text>}
+        <Text style={styles.lastDate} numberOfLines={1}>Último: {formatDate(lastDate)}</Text>
+      </Card>
+    </TouchableOpacity>
   );
 }
 
@@ -84,6 +90,12 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  register: {
+    fontSize: FontSize.xs,
+    color: Colors.accent,
+    marginTop: 4,
+    fontWeight: FontWeight.semibold,
   },
   badge: {
     paddingHorizontal: Spacing.sm,
