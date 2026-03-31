@@ -1,0 +1,55 @@
+---
+/**
+ * PremiumGate — Wraps content that requires premium.
+ * Free users see a blurred overlay with upgrade CTA.
+ * Premium users see the content normally.
+ *
+ * Usage:
+ *   <PremiumGate isPremium={premium.isPremium} feature="weightChart">
+ *     <WeightChart ... />
+ *   </PremiumGate>
+ */
+interface Props {
+  isPremium: boolean;
+  feature?: string;
+  title?: string;
+  description?: string;
+}
+
+const {
+  isPremium,
+  feature = '',
+  title = 'Funcion Premium',
+  description = 'Refiere un amigo o suscríbete para desbloquear.',
+} = Astro.props;
+---
+
+{isPremium ? (
+  <slot />
+) : (
+  <div class="rounded-2xl border border-card-border bg-card px-6 py-6 text-center">
+    <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-accent/10">
+      <svg class="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    </div>
+    <p class="text-sm font-bold text-ink mb-1">{title}</p>
+    <p class="text-xs text-muted mb-4 leading-relaxed">{description}</p>
+    <div class="flex flex-col sm:flex-row gap-2 justify-center">
+      <a
+        href="/referidos"
+        class="inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition-all active:scale-95"
+        style="background:#F97316;box-shadow:0 3px 10px rgba(249,115,22,0.3);"
+        data-feature={feature}
+      >
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Invitar amigo
+      </a>
+      <a
+        href="/premium"
+        class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-card-border bg-canvas px-5 py-2.5 text-xs font-semibold text-ink transition-all hover:border-accent/30 active:scale-95"
+        data-feature={feature}
+      >
+        Ver planes
+      </a>
+    </div>
+  </div>
+)}

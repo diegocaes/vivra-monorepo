@@ -1,0 +1,138 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+
+const sections = [
+  {
+    title: 'El score de bienestar',
+    emoji: '🐾',
+    questions: [
+      {
+        q: '¿Qué es el score de bienestar?',
+        a: 'Es un número del 0 al 100 que resume qué tan completo y saludable se ve el registro de tu perro. No mide si tu perro está enfermo — mide qué tan bien tienes documentado su cuidado. Cuantos más datos tengas registrados, más preciso es.',
+      },
+      {
+        q: '¿Por qué no veo el número todavía?',
+        a: 'El score aparece cuando hay suficiente información para que sea útil. Si acabas de crear la cuenta, primero necesitas agregar algunos datos básicos: el peso, vacunas, o una visita al vet. La app te muestra exactamente qué falta.',
+      },
+      {
+        q: '¿Un score bajo significa que mi perro está mal?',
+        a: 'No. Un score bajo casi siempre significa que faltan datos — no que haya un problema real. Por ejemplo, si nunca registraste una visita al veterinario, ese dato no cuenta, aunque tu perro vaya regularmente. El score solo refleja lo que está en Vivra.',
+      },
+      {
+        q: '¿Puede bajar el score sin que haga nada?',
+        a: 'Puede bajar un poco si pasa mucho tiempo sin agregar registros, como si llevas más de un año sin anotar una visita al vet. Se actualiza cada vez que entras, y sube rápido cuando agregas información nueva.',
+      },
+      {
+        q: '¿Es un diagnóstico médico?',
+        a: 'No. Vivra no reemplaza al veterinario. El score es una herramienta para ayudarte a llevar mejor el historial de tu perro, no para diagnosticar enfermedades. Si tu perro tiene algún síntoma o te preocupa algo, siempre consulta a un vet.',
+      },
+    ],
+  },
+  {
+    title: 'Qué mide el score',
+    emoji: '📋',
+    questions: [
+      {
+        q: '¿Qué áreas revisa el score?',
+        a: 'Revisa cinco cosas: el peso de tu perro, su historial de vacunas y visitas al vet, su raza y edad, qué tan activo está, y su alimentación. Cada área aporta hasta 20 puntos.',
+      },
+      {
+        q: '¿Qué pasa si no tengo todos los datos?',
+        a: 'No hay problema — el score funciona con los datos que tengas. Las áreas sin información simplemente no cuentan todavía. Puedes completar el perfil poco a poco y el score se va ajustando.',
+      },
+      {
+        q: '¿Cómo se evalúa el peso?',
+        a: 'Se compara con el rango habitual para su raza y edad. Si el peso está en el rango esperado, esa área tiene buen puntaje. Si está muy por encima o por debajo, baja un poco. También mira si el peso viene subiendo o bajando con el tiempo.',
+      },
+      {
+        q: '¿Cómo cuenta la actividad si no tengo GPS ni wearable?',
+        a: 'Se basa en lo que registras manualmente: salidas, paseos y sesiones de grooming. No es una medición exacta de pasos, pero registrar las salidas de tu perro — aunque sea una vez a la semana — ya suma.',
+      },
+    ],
+  },
+  {
+    title: 'Las sugerencias',
+    emoji: '💡',
+    questions: [
+      {
+        q: '¿Qué son las sugerencias que aparecen?',
+        a: 'Son recordatorios amigables basados en lo que tienes registrado — por ejemplo, si llevas más de un año sin anotar una visita al vet, o si la raza de tu perro tiene recomendaciones de cuidado específicas para su edad. No son alertas de emergencia, son recordatorios útiles.',
+      },
+      {
+        q: '¿Por qué me aparece una sugerencia si mi perro está bien?',
+        a: 'Puede ser porque el dato no está registrado en Vivra. Por ejemplo, si aparece "lleva tiempo sin visita al vet" pero sí fue al vet, simplemente falta registrar esa visita en la app. Al agregarla, la sugerencia desaparece.',
+      },
+      {
+        q: '¿Las sugerencias se van solas?',
+        a: 'Sí. Se actualizan cada vez que entras a la sección de Salud. En cuanto agregas el dato que falta, la sugerencia desaparece automáticamente.',
+      },
+    ],
+  },
+  {
+    title: 'Sobre Vivra',
+    emoji: '🐶',
+    questions: [
+      {
+        q: '¿Para qué sirve Vivra?',
+        a: 'Es el historial de vida de tu perro. Puedes guardar vacunas, visitas al vet, peso, grooming, fotos, alimentación y vuelos. La idea es que siempre tengas todo organizado — para llevarlo al vet, para viajes, o simplemente para no olvidar nada importante.',
+      },
+      {
+        q: '¿Puedo tener más de un perro?',
+        a: 'Sí. Puedes agregar todos los perros que quieras en la misma cuenta. Cada uno tiene su propio perfil e historial. Cambias entre ellos desde el menú lateral.',
+      },
+      {
+        q: '¿Habrá app para el celular?',
+        a: 'Sí, está en camino. Por ahora la web funciona muy bien desde el navegador del celular. Cuando salga la app, todos tus datos van a estar ahí automáticamente.',
+      },
+      {
+        q: '¿Vivra reemplaza al veterinario?',
+        a: 'No, y nunca lo va a reemplazar. El vet sigue siendo indispensable. Lo que Vivra hace es ayudarte a llegar a esas citas con toda la información organizada y al día.',
+      },
+    ],
+  },
+];
+---
+
+<MainLayout title="Ayuda">
+
+  <div class="mb-6 animate-fade-up">
+    <h1 class="text-2xl font-black text-ink tracking-tight">Preguntas frecuentes</h1>
+    <p class="text-sm text-muted mt-1">Todo lo que necesitas saber sobre Vivra.</p>
+  </div>
+
+  <div class="space-y-6 animate-fade-up animate-fade-up-delay-1">
+    {sections.map(section => (
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-lg" aria-hidden="true">{section.emoji}</span>
+          <p class="text-xs font-bold text-ink uppercase tracking-wider">{section.title}</p>
+        </div>
+
+        <div class="rounded-2xl border border-card-border bg-card overflow-hidden divide-y divide-card-border">
+          {section.questions.map(item => (
+            <details class="group">
+              <summary class="flex items-start justify-between gap-3 px-4 py-4 cursor-pointer list-none select-none hover:bg-canvas transition-colors">
+                <p class="text-sm font-semibold text-ink leading-snug pr-2">{item.q}</p>
+                <svg
+                  class="h-4 w-4 shrink-0 text-muted mt-0.5 transition-transform duration-200 group-open:rotate-180"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                >
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </summary>
+              <div class="px-4 pb-4 pt-0">
+                <p class="text-sm text-muted leading-relaxed">{item.a}</p>
+              </div>
+            </details>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <div class="mt-8 mb-4 rounded-2xl border border-card-border bg-card px-4 py-4 text-center animate-fade-up animate-fade-up-delay-2">
+    <p class="text-sm font-semibold text-ink mb-1">¿Tienes otra pregunta?</p>
+    <p class="text-xs text-muted">Si algo no funciona como esperas o tienes una sugerencia, tu feedback nos ayuda a mejorar.</p>
+  </div>
+
+</MainLayout>

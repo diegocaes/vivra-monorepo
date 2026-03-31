@@ -1,0 +1,21 @@
+---
+interface Props {
+  title: string;
+  subtitle?: string;
+  action?: { href: string; label: string };
+}
+
+const { title, subtitle, action } = Astro.props;
+---
+
+<div class="mb-6 flex items-center justify-between animate-fade-up">
+  <div>
+    <h1 class="text-xl sm:text-2xl font-bold text-ink">{title}</h1>
+    {subtitle && <p class="text-sm text-muted mt-0.5">{subtitle}</p>}
+  </div>
+  {action && (
+    <a href={action.href} class="text-sm font-medium text-accent hover:text-accent-dark transition-colors">
+      {action.label} →
+    </a>
+  )}
+</div>

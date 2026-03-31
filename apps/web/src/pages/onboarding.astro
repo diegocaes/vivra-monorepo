@@ -1,0 +1,768 @@
+---
+import '../styles/global.css';
+import { DOG_BREEDS, BREED_FACTS } from '@vivra/shared';
+import { uploadPetPhoto } from '../lib/storage';
+import { createSupabaseAdminClient } from '../lib/supabase';
+import { getPremiumStatus, isAtLimit } from '../lib/premium';
+
+const { supabase, user } = Astro.locals;
+
+const isAddMode = Astro.url.searchParams.get('add') === '1';
+
+// Check existing pets
+const { data: existingPets } = await supabase
+  .from('pets')
+  .select('id')
+  .eq('user_id', user.id)
+  .order('created_at', { ascending: true });
+
+const hasPet = (existingPets?.length ?? 0) > 0;
+
+// If not in add mode and user already has a pet → go to dashboard
+if (!isAddMode && hasPet) {
+  return Astro.redirect('/dashboard');
+}
+
+// Multi-pet limit: if in add mode, check premium limit
+if (isAddMode) {
+  const premium = await getPremiumStatus(supabase, user.id);
+  if (isAtLimit('maxPets', existingPets?.length ?? 0, premium)) {
+    return Astro.redirect('/premium?toast_error=' + encodeURIComponent('Para agregar otra mascota necesitas Premium. Refiere un amigo o suscríbete para desbloquear.'));
+  }
+}
+
+// Personalized greeting
+const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
+const firstName = fullName.split(' ')[0] || user.email?.split('@')[0] || 'amigo';
+const onboardingError = Astro.url.searchParams.get('error');
+
+// Handle final form submission
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+
+  const breedSelect = formData.get('breed') as string;
+  const breedOther = formData.get('breed_other') as string;
+  const breed = breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null;
+
+  const newWeight = formData.get('weight_kg') ? Number(formData.get('weight_kg')) : null;
+
+  const rawName = (formData.get('name') as string)?.trim().slice(0, 100);
+  if (!rawName) {
+    const qs = isAddMode ? '?add=1&error=save_failed' : '?error=save_failed';
+    return Astro.redirect(`/onboarding${qs}`);
+  }
+
+  const petData = {
+    user_id: user.id,
+    name: rawName,
+    breed: breed?.slice(0, 100) || null,
+    birth_date: (formData.get('birth_date') as string) || null,
+    gender: (formData.get('gender') as string) || null,
+    weight_kg: newWeight,
+    chip_id: ((formData.get('chip_id') as string)?.trim().slice(0, 50)) || null,
+    color: ((formData.get('color') as string)?.trim().slice(0, 50)) || null,
+  };
+
+  // Handle photo upload
+  const photo_url = await uploadPetPhoto(formData.get('photo') as File, user.id, supabase, 'pet-profile');
+
+  const { data: newPet, error: insertError } = await supabase
+    .from('pets')
+    .insert({ ...petData, photo_url })
+    .select('id')
+    .single();
+
+  if (insertError || !newPet) {
+    const qs = isAddMode ? '?add=1&error=save_failed' : '?error=save_failed';
+    return Astro.redirect(`/onboarding${qs}`);
+  }
+
+  // Auto-log initial weight
+  if (newWeight && newPet.id) {
+    await supabase.from('weight_records').insert({
+      pet_id: newPet.id,
+      weight_kg: newWeight,
+      date: new Date().toISOString().split('T')[0],
+    });
+  }
+
+  // Set the new pet as active via cookie
+  Astro.cookies.set('active_pet_id', newPet.id, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 365,
+    secure: import.meta.env.PROD,
+  });
+
+  // ── Referral system: generate code + complete referral + grant rewards ──
+  if (!isAddMode) {
+    try {
+      const admin = createSupabaseAdminClient();
+      const petName = rawName || 'PET';
+
+      // 1. Generate this user's unique referral code (based on pet name)
+      const { data: existingCode } = await admin
+        .from('referral_codes')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!existingCode) {
+        // Generate code: PETNAME + 4 random digits
+        const base = petName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+        const digits = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+        let code = base + digits;
+
+        // Check uniqueness, retry if needed
+        const { data: codeExists } = await admin
+          .from('referral_codes')
+          .select('id')
+          .eq('code', code)
+          .maybeSingle();
+        if (codeExists) {
+          code = base + String(Math.floor(Math.random() * 1000000)).padStart(6, '0');
+        }
+
+        await admin.from('referral_codes').insert({
+          user_id: user.id,
+          code,
+        });
+      }
+
+      // 2. Mark pending referral as completed and grant rewards
+      const { data: pendingRef } = await admin
+        .from('referrals')
+        .select('id, referrer_id')
+        .eq('referred_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (pendingRef) {
+        // Mark referral as completed
+        await admin.from('referrals').update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        }).eq('id', pendingRef.id);
+
+        // Grant referrer: 30 days premium
+        const { data: referrerSub } = await admin
+          .from('user_subscriptions')
+          .select('id, premium_until')
+          .eq('user_id', pendingRef.referrer_id)
+          .maybeSingle();
+
+        const now = new Date();
+        const currentEnd = referrerSub?.premium_until ? new Date(referrerSub.premium_until) : now;
+        const newEnd = new Date(Math.max(currentEnd.getTime(), now.getTime()) + 30 * 24 * 60 * 60 * 1000);
+
+        if (referrerSub) {
+          await admin.from('user_subscriptions').update({
+            plan: 'premium',
+            source: 'referral',
+            premium_until: newEnd.toISOString(),
+            updated_at: now.toISOString(),
+          }).eq('id', referrerSub.id);
+        } else {
+          await admin.from('user_subscriptions').insert({
+            user_id: pendingRef.referrer_id,
+            plan: 'premium',
+            source: 'referral',
+            premium_until: newEnd.toISOString(),
+          });
+        }
+
+        // Increment referrer's uses_count
+        const { data: refCodeRow } = await admin
+          .from('referral_codes')
+          .select('uses_count')
+          .eq('user_id', pendingRef.referrer_id)
+          .maybeSingle();
+        await admin.from('referral_codes')
+          .update({ uses_count: (refCodeRow?.uses_count ?? 0) + 1 })
+          .eq('user_id', pendingRef.referrer_id);
+
+        // Mark referral as rewarded
+        await admin.from('referrals').update({
+          status: 'rewarded',
+          reward_granted: true,
+          premium_days_granted: 30,
+        }).eq('id', pendingRef.id);
+
+        // Grant referred user: 14 days premium trial
+        const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+        await admin.from('user_subscriptions').upsert({
+          user_id: user.id,
+          plan: 'premium',
+          source: 'trial',
+          trial_ends_at: trialEnd.toISOString(),
+          premium_until: trialEnd.toISOString(),
+        }, { onConflict: 'user_id' });
+      } else {
+        // No referral — create free subscription record
+        const { data: existingSub } = await admin
+          .from('user_subscriptions')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!existingSub) {
+          await admin.from('user_subscriptions').insert({
+            user_id: user.id,
+            plan: 'free',
+          });
+        }
+      }
+    } catch {
+      // Silently ignore if referral tables don't exist yet
+    }
+  }
+
+  return Astro.redirect('/dashboard?onboarded=1');
+}
+
+// Serialize breed facts for client-side use (base64 to avoid special char issues)
+const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64');
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F97316" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Bienvenido | Vivra</title>
+  </head>
+  <body class="min-h-screen bg-canvas flex flex-col" data-add-mode={isAddMode ? 'true' : 'false'}>
+
+    <!-- Progress bar (hidden on steps 1 & 2) -->
+    <div class="fixed top-0 left-0 right-0 z-50" id="progress-bar-wrap" style="display:none">
+      <div class="h-2 bg-card-border">
+        <div id="progress-fill" class="h-full bg-accent transition-all duration-500 rounded-r-full" style="width:25%"></div>
+      </div>
+      <div id="progress-text" class="absolute top-4 right-4 text-xs text-muted font-medium">Paso 1 de 4</div>
+    </div>
+
+    <!-- Wizard container -->
+    <main class="flex-1 flex items-center justify-center p-6 pt-8">
+      <div class="w-full max-w-sm mx-auto">
+
+        {onboardingError === 'save_failed' && (
+          <div class="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            Hubo un error al guardar. Intenta de nuevo.
+          </div>
+        )}
+
+        <!-- ───────────── PASO 1: Bienvenida ───────────── -->
+        <div data-step="1" class="animate-fade-up">
+          <div class="relative overflow-hidden rounded-3xl text-white px-6 py-8 shadow-xl" style="background: var(--color-accent)">
+            <div class="absolute -top-10 -right-10 h-36 w-36 rounded-full bg-white/5"></div>
+            <div class="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-white/5"></div>
+
+            <div class="relative text-center">
+              <div class="mb-4 animate-float inline-block">
+                <img src="/Vivra-white.svg" alt="Vivra" class="h-14 w-14 mx-auto" />
+              </div>
+              <h1 class="text-2xl font-bold tracking-tight mb-2">
+                ¡Hola, {firstName}!
+              </h1>
+              <p class="text-sm text-white/70 leading-relaxed mb-6">
+                Estás a un minuto de poder tener toda la información en un sólo lugar de tu mascota.
+              </p>
+
+              <div class="space-y-3 text-left mb-8">
+                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
+                  <svg class="h-5 w-5 shrink-0 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6"/></svg>
+                  <div>
+                    <p class="text-sm font-semibold">Perfil y pasaporte</p>
+                    <p class="text-xs text-white/60">Toda su info y un pasaporte digital para viajes</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
+                  <span class="text-lg shrink-0">💉</span>
+                  <div>
+                    <p class="text-sm font-semibold">Historial de vacunas</p>
+                    <p class="text-xs text-white/60">Nunca pierdas un registro</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
+                  <span class="text-lg shrink-0">🏃</span>
+                  <div>
+                    <p class="text-sm font-semibold">Registro de actividad</p>
+                    <p class="text-xs text-white/60">Paseos, ejercicio y bienestar</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                id="btn-step1-next"
+                class="w-full rounded-2xl bg-white text-gray-900 px-6 py-3.5 font-bold text-sm transition-all hover:bg-white/90 active:scale-95 shadow-lg"
+              >
+                Empezar →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ───────────── PASO 2: Nombre, raza y foto ───────────── -->
+        <div data-step="2" class="hidden">
+          <div class="mb-6 text-center">
+            <p class="text-xs font-semibold text-accent uppercase tracking-widest mb-1">Paso 1 de 3</p>
+            <h2 class="text-2xl font-bold text-ink">¿Cómo se llama tu peludo?</h2>
+            <p class="text-sm text-muted mt-1">Empieza por lo más importante.</p>
+          </div>
+
+          <div class="space-y-5">
+            <!-- Photo picker -->
+            <div class="flex flex-col items-center gap-2">
+              <div class="relative">
+                <img
+                  id="ob-photo-preview"
+                  src="/icons/default-pet.svg"
+                  alt="Foto"
+                  class="h-24 w-24 rounded-full object-cover border-2 border-card-border shadow-md"
+                />
+                <label class="absolute -bottom-1 -right-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all hover:bg-accent-dark active:scale-95">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                  <input type="file" id="ob-photo-input" accept="image/*" class="hidden" />
+                </label>
+              </div>
+              <p class="text-xs text-muted">Foto opcional — puedes agregar después</p>
+            </div>
+
+            <!-- Name -->
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Nombre <span class="text-red-500">*</span></label>
+              <input
+                type="text"
+                id="ob-name"
+                placeholder="Ej: Luna"
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink placeholder-muted transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+              <p id="ob-name-error" class="text-xs text-red-500 mt-1 hidden">Por favor ingresa el nombre</p>
+            </div>
+
+            <!-- Breed (only for dogs) -->
+            <div id="breed-section">
+              <label class="block text-sm font-medium text-ink mb-1.5">Raza</label>
+              <select
+                id="ob-breed-select"
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              >
+                <option value="">Seleccionar raza</option>
+                {DOG_BREEDS.map((breed) => (
+                  <option value={breed}>{breed}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                id="ob-breed-other"
+                placeholder="Escribe la raza"
+                class="hidden mt-2 w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink placeholder-muted transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+
+              <!-- Fun facts card -->
+              <div id="breed-facts-card" class="hidden mt-3 rounded-2xl border border-accent/20 bg-accent/5 px-4 py-4">
+                <p class="text-xs font-bold text-accent-dark uppercase tracking-wider mb-3">¿Sabías que...?</p>
+                <div id="breed-facts-list" class="space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 space-y-3">
+            <button
+              id="btn-step3-next"
+              class="w-full rounded-2xl bg-accent px-6 py-3.5 font-bold text-sm text-white transition-all hover:bg-accent-dark active:scale-95 shadow-md"
+            >
+              Continuar →
+            </button>
+            <button type="button" id="btn-step3-back" class="w-full text-sm text-muted hover:text-ink transition-colors py-1">
+              ← Atrás
+            </button>
+          </div>
+        </div>
+
+        <!-- ───────────── PASO 3: Fecha y género ───────────── -->
+        <div data-step="3" class="hidden">
+          <div class="mb-6 text-center">
+            <p class="text-xs font-semibold text-accent uppercase tracking-widest mb-1">Paso 2 de 3</p>
+            <h2 class="text-2xl font-bold text-ink">¿Cuándo nació? 🎂</h2>
+            <p class="text-sm text-muted mt-1">Para calcular su edad y recordar su cumpleaños.</p>
+          </div>
+
+          <div class="space-y-5">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Fecha de nacimiento</label>
+              <input
+                type="date"
+                id="ob-birth-date"
+                max={new Date().toISOString().split('T')[0]}
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-ink mb-2">Género</label>
+              <div class="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  data-gender="macho"
+                  class="gender-pill rounded-2xl border-2 border-card-border bg-white px-4 py-3.5 text-sm font-semibold text-ink transition-all hover:border-accent active:scale-95"
+                >
+                  Macho ♂
+                </button>
+                <button
+                  type="button"
+                  data-gender="hembra"
+                  class="gender-pill rounded-2xl border-2 border-card-border bg-white px-4 py-3.5 text-sm font-semibold text-ink transition-all hover:border-accent active:scale-95"
+                >
+                  Hembra ♀
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-6 space-y-3">
+            <button
+              id="btn-step4-next"
+              class="w-full rounded-2xl bg-accent px-6 py-3.5 font-bold text-sm text-white transition-all hover:bg-accent-dark active:scale-95 shadow-md"
+            >
+              Continuar →
+            </button>
+            <button type="button" id="btn-step4-skip" class="w-full text-sm text-muted underline hover:text-ink transition-colors py-1">
+              Saltar por ahora →
+            </button>
+            <button type="button" id="btn-step4-back" class="w-full text-sm text-muted hover:text-ink transition-colors py-1">
+              ← Atrás
+            </button>
+          </div>
+        </div>
+
+        <!-- ───────────── PASO 4: Datos de salud ───────────── -->
+        <div data-step="4" class="hidden">
+          <div class="mb-6 text-center">
+            <p class="text-xs font-semibold text-accent uppercase tracking-widest mb-1">Paso 3 de 3</p>
+            <h2 class="text-2xl font-bold text-ink">Datos de salud</h2>
+            <p class="text-sm text-muted mt-1">Opcional — puedes completarlo después.</p>
+          </div>
+
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-ink mb-1.5">Peso (kg)</label>
+                <input
+                  type="number"
+                  id="ob-weight"
+                  step="0.1"
+                  placeholder="Ej: 12.5"
+                  class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink placeholder-muted transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-ink mb-1.5">Microchip</label>
+                <input
+                  type="text"
+                  id="ob-chip"
+                  placeholder="Nº chip"
+                  class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink placeholder-muted transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Color de pelaje</label>
+              <input
+                type="text"
+                id="ob-color"
+                placeholder="Ej: Dorado, Negro, Blanco..."
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-3 text-ink placeholder-muted transition-all hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+          </div>
+
+          <div class="mt-6 space-y-3">
+            <button
+              id="btn-step5-next"
+              class="w-full rounded-2xl bg-accent px-6 py-3.5 font-bold text-sm text-white transition-all hover:bg-accent-dark active:scale-95 shadow-md"
+            >
+              Continuar →
+            </button>
+            <button type="button" id="btn-step5-skip" class="w-full text-sm text-muted underline hover:text-ink transition-colors py-1">
+              Saltar y continuar →
+            </button>
+            <button type="button" id="btn-step5-back" class="w-full text-sm text-muted hover:text-ink transition-colors py-1">
+              ← Atrás
+            </button>
+          </div>
+        </div>
+
+        <!-- ───────────── PASO 5: Celebración ───────────── -->
+        <div data-step="5" class="hidden">
+          <div class="relative overflow-hidden rounded-3xl text-white px-6 py-10 shadow-xl text-center" style="background: var(--color-accent)">
+            <div class="absolute -top-10 -right-10 h-36 w-36 rounded-full bg-white/5"></div>
+            <div class="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-white/5"></div>
+
+            <div class="relative">
+              <div class="text-6xl mb-4 animate-float inline-block">🐕</div>
+
+              <div class="mb-3 flex items-center justify-center">
+                <div class="flex items-center gap-2.5 rounded-full bg-green-500 px-5 py-2.5 shadow-lg">
+                  <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>
+                  <span class="text-sm font-bold text-white tracking-wide">¡Completado!</span>
+                </div>
+              </div>
+
+              <h2 class="text-2xl font-bold tracking-tight mt-4 mb-2" id="celebration-title">
+                ¡Listo! El perfil está creado 🎉
+              </h2>
+              <p class="text-sm text-white/70 leading-relaxed mb-8" id="celebration-subtitle">
+                {isAddMode
+                  ? 'Ya puedes empezar a llevar toda la información e historial de tu peludo.'
+                  : 'Bienvenido a Vivra. Tu mejor amigo ya tiene su historial digital: vacunas, peso, actividad y más.'}
+              </p>
+
+              <button
+                id="btn-final-submit"
+                class="w-full rounded-2xl bg-white text-gray-900 px-6 py-3.5 font-bold text-sm transition-all hover:bg-white/90 active:scale-95 shadow-lg"
+              >
+                <span id="btn-final-label">Vamos a Vivra →</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Hidden form — populated by JS before final submit -->
+    <form id="final-form" method="POST" enctype="multipart/form-data" class="hidden">
+      <input type="hidden" name="name" id="ff-name" />
+      <input type="hidden" name="breed" id="ff-breed" />
+      <input type="hidden" name="breed_other" id="ff-breed-other" />
+      <input type="hidden" name="birth_date" id="ff-birth-date" />
+      <input type="hidden" name="gender" id="ff-gender" />
+      <input type="hidden" name="weight_kg" id="ff-weight" />
+      <input type="hidden" name="chip_id" id="ff-chip" />
+      <input type="hidden" name="color" id="ff-color" />
+    </form>
+
+    <!-- Breed facts data (server → client, base64 encoded) -->
+    <div id="breed-facts-data" data-facts={breedFactsB64} hidden></div>
+
+    <script>
+      // ── State ──
+      let selectedGender = '';
+      let photoFileRef: File | null = null;
+      const store: Record<string, string> = {};
+
+      // ── Breed facts ──
+      const factsData: Record<string, Array<{emoji: string; fact: string}>> = (() => {
+        try {
+          const b64 = document.getElementById('breed-facts-data')?.getAttribute('data-facts') || '';
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+        } catch { return {}; }
+      })();
+
+      // ── Progress bar ──
+      function updateProgress(step: number) {
+        const wrap = document.getElementById('progress-bar-wrap') as HTMLElement;
+        const fill = document.getElementById('progress-fill') as HTMLElement;
+        const text = document.getElementById('progress-text') as HTMLElement;
+
+        // Show progress only from step 2 onward (step 1 is welcome)
+        if (step <= 1) {
+          wrap.style.display = 'none';
+          return;
+        }
+        wrap.style.display = 'block';
+
+        const stepMap: Record<number, { width: string; label: string }> = {
+          2: { width: '33%', label: 'Paso 1 de 3' },
+          3: { width: '66%', label: 'Paso 2 de 3' },
+          4: { width: '100%', label: 'Paso 3 de 3' },
+          5: { width: '100%', label: 'Completado' },
+        };
+        const info = stepMap[step] || { width: '33%', label: '' };
+        fill.style.width = info.width;
+        text.textContent = info.label;
+      }
+
+      // ── Navigate ──
+      function goTo(step: number) {
+        document.querySelectorAll('[data-step]').forEach((el) => {
+          (el as HTMLElement).classList.add('hidden');
+          (el as HTMLElement).classList.remove('animate-fade-up');
+        });
+        const target = document.querySelector(`[data-step="${step}"]`) as HTMLElement;
+        target.classList.remove('hidden');
+        requestAnimationFrame(() => target.classList.add('animate-fade-up'));
+        updateProgress(step);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      // ── Add-mode: skip step 1, go straight to name/breed ──
+      const isAddMode = document.body.dataset.addMode === 'true';
+      if (isAddMode) {
+        goTo(2);
+      }
+
+      // ── Step 1 → 2 ──
+      document.getElementById('btn-step1-next')?.addEventListener('click', () => goTo(2));
+
+      // ── Photo preview ──
+      const photoInput = document.getElementById('ob-photo-input') as HTMLInputElement;
+      const photoPreview = document.getElementById('ob-photo-preview') as HTMLImageElement;
+      photoInput?.addEventListener('change', () => {
+        const file = photoInput.files?.[0];
+        if (file) {
+          photoFileRef = file;
+          const reader = new FileReader();
+          reader.onload = (e) => { photoPreview.src = e.target?.result as string; };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // ── Breed select + fun facts ──
+      const breedSelect = document.getElementById('ob-breed-select') as HTMLSelectElement;
+      const breedOtherInput = document.getElementById('ob-breed-other') as HTMLInputElement;
+      const factsCard = document.getElementById('breed-facts-card') as HTMLElement;
+      const factsList = document.getElementById('breed-facts-list') as HTMLElement;
+
+      breedSelect?.addEventListener('change', () => {
+        const val = breedSelect.value;
+        // Toggle "Other" input
+        breedOtherInput.classList.toggle('hidden', val !== 'Other');
+        if (val !== 'Other') breedOtherInput.value = '';
+
+        // Show 2 random fun facts (save the rest for the dashboard)
+        const facts = factsData[val];
+        if (facts && facts.length > 0) {
+          const shuffled = [...facts].sort(() => Math.random() - 0.5);
+          const picked = shuffled.slice(0, 2);
+          factsList.innerHTML = picked.map(f =>
+            `<div class="flex items-start gap-2">
+              <span class="text-base shrink-0 leading-tight">${f.emoji}</span>
+              <p class="text-xs text-ink/80 leading-relaxed">${f.fact}</p>
+            </div>`
+          ).join('');
+          factsCard.classList.remove('hidden');
+          factsCard.classList.add('animate-scale-in');
+        } else {
+          factsCard.classList.add('hidden');
+        }
+      });
+
+      // ── Step 2 (name/breed) → 3 ──
+      document.getElementById('btn-step3-next')?.addEventListener('click', () => {
+        const nameInput = document.getElementById('ob-name') as HTMLInputElement;
+        const nameError = document.getElementById('ob-name-error') as HTMLElement;
+
+        if (!nameInput.value.trim()) {
+          nameInput.classList.add('border-red-400');
+          nameError.classList.remove('hidden');
+          nameInput.focus();
+          return;
+        }
+        nameInput.classList.remove('border-red-400');
+        nameError.classList.add('hidden');
+
+        store.name = nameInput.value.trim();
+        store.breed = breedSelect?.value || '';
+        store.breedOther = breedOtherInput?.value.trim() || '';
+
+        // Update celebration screen title
+        const celebTitle = document.getElementById('celebration-title');
+        const celebBtn = document.getElementById('btn-final-label');
+        if (celebTitle) celebTitle.textContent = `¡Listo! El pasaporte de ${store.name} está creado 🎉`;
+        if (celebBtn) celebBtn.textContent = `Vamos al perfil de ${store.name} →`;
+
+        goTo(3);
+      });
+      document.getElementById('btn-step3-back')?.addEventListener('click', () => {
+        if (isAddMode) { window.location.href = '/dashboard'; return; }
+        goTo(1);
+      });
+
+      // ── Gender pills ──
+      document.querySelectorAll('.gender-pill').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.gender-pill').forEach((b) => {
+            b.classList.remove('bg-accent', 'text-white', 'border-accent');
+            b.classList.add('border-card-border', 'text-ink', 'bg-white');
+          });
+          btn.classList.add('bg-accent', 'text-white', 'border-accent');
+          btn.classList.remove('border-card-border', 'text-ink', 'bg-white');
+          selectedGender = (btn as HTMLElement).dataset.gender || '';
+        });
+      });
+
+      // ── Step 3 (date/gender) → 4 ──
+      document.getElementById('btn-step4-next')?.addEventListener('click', () => {
+        store.birthDate = (document.getElementById('ob-birth-date') as HTMLInputElement).value;
+        store.gender = selectedGender;
+        goTo(4);
+      });
+      document.getElementById('btn-step4-skip')?.addEventListener('click', () => {
+        store.birthDate = '';
+        store.gender = '';
+        goTo(4);
+      });
+      document.getElementById('btn-step4-back')?.addEventListener('click', () => goTo(2));
+
+      // ── Step 4 (health) → 5 ──
+      function goToStep5Next(skipOptional: boolean) {
+        if (!skipOptional) {
+          store.weight = (document.getElementById('ob-weight') as HTMLInputElement).value;
+          store.chip = (document.getElementById('ob-chip') as HTMLInputElement).value;
+          store.color = (document.getElementById('ob-color') as HTMLInputElement).value;
+        } else {
+          store.weight = '';
+          store.chip = '';
+          store.color = '';
+        }
+        goTo(5);
+      }
+      document.getElementById('btn-step5-next')?.addEventListener('click', () => goToStep5Next(false));
+      document.getElementById('btn-step5-skip')?.addEventListener('click', () => goToStep5Next(true));
+      document.getElementById('btn-step5-back')?.addEventListener('click', () => goTo(3));
+
+      // ── Final submit (from celebration screen) ──
+      function submitFinal() {
+        (document.getElementById('ff-name') as HTMLInputElement).value = store.name || '';
+        (document.getElementById('ff-breed') as HTMLInputElement).value = store.breed || '';
+        (document.getElementById('ff-breed-other') as HTMLInputElement).value = store.breedOther || '';
+        (document.getElementById('ff-birth-date') as HTMLInputElement).value = store.birthDate || '';
+        (document.getElementById('ff-gender') as HTMLInputElement).value = store.gender || '';
+        (document.getElementById('ff-weight') as HTMLInputElement).value = store.weight || '';
+        (document.getElementById('ff-chip') as HTMLInputElement).value = store.chip || '';
+        (document.getElementById('ff-color') as HTMLInputElement).value = store.color || '';
+
+        // Inject photo file via DataTransfer
+        if (photoFileRef) {
+          const dt = new DataTransfer();
+          dt.items.add(photoFileRef);
+          let photoHidden = document.querySelector<HTMLInputElement>('#final-form input[name="photo"]');
+          if (!photoHidden) {
+            photoHidden = document.createElement('input');
+            photoHidden.type = 'file';
+            photoHidden.name = 'photo';
+            document.getElementById('final-form')?.appendChild(photoHidden);
+          }
+          photoHidden.files = dt.files;
+        }
+
+        const btn = document.getElementById('btn-final-submit') as HTMLButtonElement;
+        btn.classList.add('btn-loading');
+        btn.setAttribute('disabled', '');
+
+        (document.getElementById('final-form') as HTMLFormElement).submit();
+      }
+
+      document.getElementById('btn-final-submit')?.addEventListener('click', submitFinal);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,99 @@
+---
+import Sidebar from '../components/Sidebar.astro';
+import FormEnhancements from '../components/ui/FormEnhancements.astro';
+import Toast from '../components/ui/Toast.astro';
+import { ClientRouter } from 'astro:transitions';
+import { getActivePet } from '../lib/pet';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'El diario digital de tu mascota' } = Astro.props;
+
+// Fetch pets for sidebar switcher (only if user is authenticated)
+const { user, supabase, activePetId } = Astro.locals;
+const { pet: activePet, pets } = user
+  ? await getActivePet(supabase, user.id, activePetId)
+  : { pet: null, pets: [] };
+
+// Theme color: user-selected, falls back to 'orange'
+const petTheme = activePet?.theme_color || 'orange';
+
+// Notification unread count (filtered by active pet, exclude dismissed)
+let unreadCount = 0;
+if (user) {
+  let query = supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('read', false)
+    .eq('dismissed', false);
+  if (activePet) query = query.eq('pet_id', activePet.id);
+  const { count } = await query;
+  unreadCount = count ?? 0;
+}
+
+
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#13161C" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>{title} | Vivra</title>
+    <ClientRouter />
+  </head>
+  <body class="min-h-screen bg-canvas" data-pet-theme={petTheme}>
+    <Sidebar activePet={activePet} pets={pets} unreadCount={unreadCount} />
+
+    <!-- Mobile top bar spacer -->
+    <div class="h-13 lg:hidden"></div>
+
+    <!-- Main content — offset by sidebar on desktop -->
+    <main class="lg:ml-55 px-4 py-6 sm:px-6 lg:px-8 max-w-full">
+      <div class="mx-auto max-w-3xl">
+        <slot />
+      </div>
+    </main>
+
+    <Toast />
+    <FormEnhancements />
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    </script>
+
+    <script is:inline>
+      // Restrict date inputs to today or earlier (past events only)
+      // Exceptions: next_due (vaccine next dose), flight_date (future flights), start_date (food start)
+      function capDateInputs() {
+        var today = new Date().toISOString().split('T')[0];
+        var skip = ['next_due', 'flight_date', 'start_date'];
+        document.querySelectorAll('input[type="date"]').forEach(function(el) {
+          if (skip.indexOf(el.name) === -1 && !el.getAttribute('max')) {
+            el.setAttribute('max', today);
+          }
+        });
+      }
+      document.addEventListener('astro:page-load', capDateInputs);
+    </script>
+  </body>
+</html>

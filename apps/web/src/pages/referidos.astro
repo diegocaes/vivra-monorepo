@@ -1,0 +1,233 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+
+const { supabase, user } = Astro.locals;
+
+// Get user's referral code
+const { data: refCode } = await supabase
+  .from('referral_codes')
+  .select('code, uses_count')
+  .eq('user_id', user.id)
+  .maybeSingle();
+
+// Get referral stats
+const { data: referrals } = await supabase
+  .from('referrals')
+  .select('id, referred_id, status, reward_granted, premium_days_granted, created_at')
+  .eq('referrer_id', user.id)
+  .order('created_at', { ascending: false });
+
+const totalReferrals = referrals?.length ?? 0;
+const completedReferrals = referrals?.filter(r => r.status === 'rewarded' || r.status === 'completed').length ?? 0;
+const pendingReferrals = referrals?.filter(r => r.status === 'pending').length ?? 0;
+const totalPremiumDays = referrals?.reduce((sum, r) => sum + (r.premium_days_granted ?? 0), 0) ?? 0;
+
+// Get subscription status
+const { data: sub } = await supabase
+  .from('user_subscriptions')
+  .select('plan, premium_until, trial_ends_at, source')
+  .eq('user_id', user.id)
+  .maybeSingle();
+
+const isPremium = sub?.plan === 'premium' && sub?.premium_until && new Date(sub.premium_until) > new Date();
+const premiumDaysLeft = isPremium ? Math.ceil((new Date(sub!.premium_until!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
+
+const code = refCode?.code ?? '';
+const origin = new URL(Astro.request.url).origin;
+const shareLink = code ? `${origin}/register?ref=${code}` : '';
+
+// Milestones
+const milestones = [
+  { target: 1, label: '1 referido', reward: '1 mes premium', done: completedReferrals >= 1 },
+  { target: 3, label: '3 referidos', reward: '3 meses premium', done: completedReferrals >= 3 },
+  { target: 5, label: '5 referidos', reward: '6 meses premium', done: completedReferrals >= 5 },
+  { target: 10, label: '10 referidos', reward: '1 ano premium', done: completedReferrals >= 10 },
+];
+---
+
+<MainLayout title="Referidos">
+  <div class="max-w-lg mx-auto space-y-5 animate-fade-up">
+
+    <!-- Header -->
+    <div>
+      <h1 class="text-xl font-bold text-ink">Invita amigos</h1>
+      <p class="text-sm text-muted mt-0.5">Cada amigo que se une te da 1 mes de premium gratis</p>
+    </div>
+
+    <!-- Premium status -->
+    {isPremium && (
+      <div class="rounded-2xl border border-accent/30 bg-accent/5 px-5 py-4">
+        <div class="flex items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-lg">
+            <svg class="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-accent-dark">Premium activo</p>
+            <p class="text-xs text-muted">{premiumDaysLeft} dias restantes{sub?.source === 'referral' ? ' (por referidos)' : sub?.source === 'trial' ? ' (trial)' : ''}</p>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <!-- Share code card -->
+    {code ? (
+      <div class="rounded-2xl border border-card-border bg-card p-5">
+        <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Tu codigo de invitacion</p>
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex-1 rounded-xl bg-canvas border border-card-border px-4 py-3 font-mono text-lg font-bold text-ink tracking-widest text-center">
+            {code}
+          </div>
+          <button
+            id="btn-copy-code"
+            data-code={code}
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-card-border bg-white text-muted hover:text-accent hover:border-accent/30 transition-colors"
+            title="Copiar codigo"
+          >
+            <svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+
+        <button
+          id="btn-share"
+          data-link={shareLink}
+          data-text={`Únete a Vivra, el diario digital de tu mascota. Usa mi codigo ${code} para registrarte: ${shareLink}`}
+          class="w-full flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-95"
+          style="background:#F97316; box-shadow:0 4px 14px rgba(249,115,22,0.35);"
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Compartir link de invitacion
+        </button>
+
+        <p class="text-xs text-muted text-center mt-3">O comparte el link directamente:</p>
+        <p class="text-xs text-accent font-medium text-center mt-1 break-all">{shareLink}</p>
+      </div>
+    ) : (
+      <div class="rounded-2xl border border-card-border bg-card p-5 text-center">
+        <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-canvas text-2xl">
+          <svg class="h-6 w-6 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        </div>
+        <p class="text-sm font-medium text-ink mb-1">Tu codigo se genera al crear tu mascota</p>
+        <p class="text-xs text-muted">Completa el onboarding para obtener tu codigo personal</p>
+      </div>
+    )}
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-3">
+      <div class="rounded-2xl border border-card-border bg-card px-4 py-3.5 text-center">
+        <p class="text-2xl font-bold text-ink">{totalReferrals}</p>
+        <p class="text-xs text-muted mt-0.5">Invitados</p>
+      </div>
+      <div class="rounded-2xl border border-card-border bg-card px-4 py-3.5 text-center">
+        <p class="text-2xl font-bold text-accent">{completedReferrals}</p>
+        <p class="text-xs text-muted mt-0.5">Completados</p>
+      </div>
+      <div class="rounded-2xl border border-card-border bg-card px-4 py-3.5 text-center">
+        <p class="text-2xl font-bold text-ink">{totalPremiumDays}d</p>
+        <p class="text-xs text-muted mt-0.5">Premium ganado</p>
+      </div>
+    </div>
+
+    <!-- Milestones -->
+    <div class="rounded-2xl border border-card-border bg-card p-5">
+      <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Metas</p>
+      <div class="space-y-3">
+        {milestones.map(m => (
+          <div class="flex items-center gap-3">
+            <div class={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${m.done ? 'bg-accent/15' : 'bg-canvas'}`}>
+              {m.done ? (
+                <svg class="h-4 w-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : (
+                <span class="text-xs font-bold text-muted">{m.target}</span>
+              )}
+            </div>
+            <div class="flex-1">
+              <p class={`text-sm font-medium ${m.done ? 'text-ink' : 'text-muted'}`}>{m.label}</p>
+            </div>
+            <span class={`text-xs font-semibold px-2 py-0.5 rounded-full ${m.done ? 'bg-accent/10 text-accent-dark' : 'bg-canvas text-muted'}`}>
+              {m.reward}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <!-- Pending referrals -->
+    {pendingReferrals > 0 && (
+      <div class="rounded-2xl border border-amber/30 bg-amber/5 px-5 py-4">
+        <div class="flex items-center gap-2">
+          <svg class="h-4 w-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <p class="text-sm text-amber-800">
+            <span class="font-semibold">{pendingReferrals}</span> {pendingReferrals === 1 ? 'persona se registro' : 'personas se registraron'} con tu codigo y {pendingReferrals === 1 ? 'esta creando' : 'estan creando'} su mascota
+          </p>
+        </div>
+      </div>
+    )}
+
+    <!-- How it works -->
+    <div class="rounded-2xl border border-card-border bg-card p-5">
+      <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Como funciona</p>
+      <div class="space-y-4">
+        <div class="flex items-start gap-3">
+          <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">1</div>
+          <div>
+            <p class="text-sm font-medium text-ink">Comparte tu codigo</p>
+            <p class="text-xs text-muted mt-0.5">Enviale tu link a otros duenos de perros</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">2</div>
+          <div>
+            <p class="text-sm font-medium text-ink">Ellos se registran y crean su mascota</p>
+            <p class="text-xs text-muted mt-0.5">Reciben 14 dias de premium gratis al unirse</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">3</div>
+          <div>
+            <p class="text-sm font-medium text-ink">Tu ganas 1 mes de premium</p>
+            <p class="text-xs text-muted mt-0.5">Automatico, sin limite. Mas amigos = mas premium</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script is:inline>
+  document.addEventListener('astro:page-load', function() {
+    // Copy code button
+    var btnCopy = document.getElementById('btn-copy-code');
+    if (btnCopy) {
+      btnCopy.addEventListener('click', function() {
+        var code = btnCopy.getAttribute('data-code');
+        if (code && navigator.clipboard) {
+          navigator.clipboard.writeText(code).then(function() {
+            btnCopy.innerHTML = '<svg class="h-4.5 w-4.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+            setTimeout(function() {
+              btnCopy.innerHTML = '<svg class="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+            }, 2000);
+          });
+        }
+      });
+    }
+
+    // Share button (uses Web Share API on mobile, clipboard on desktop)
+    var btnShare = document.getElementById('btn-share');
+    if (btnShare) {
+      btnShare.addEventListener('click', function() {
+        var text = btnShare.getAttribute('data-text');
+        var link = btnShare.getAttribute('data-link');
+        if (navigator.share) {
+          navigator.share({ title: 'Vivra', text: text, url: link });
+        } else if (navigator.clipboard && link) {
+          navigator.clipboard.writeText(link).then(function() {
+            var orig = btnShare.textContent;
+            btnShare.textContent = 'Link copiado!';
+            setTimeout(function() { btnShare.textContent = orig; }, 2000);
+          });
+        }
+      });
+    }
+  });
+  </script>
+</MainLayout>

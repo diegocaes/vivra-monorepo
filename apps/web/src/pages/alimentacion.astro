@@ -1,0 +1,614 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import Card from '../components/ui/Card.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import EmptyState from '../components/ui/EmptyState.astro';
+import PremiumGate from '../components/ui/PremiumGate.astro';
+import { formatDate } from '@vivra/shared';
+import { getActivePet } from '../lib/pet';
+import { getPremiumStatus, isAtLimit } from '../lib/premium';
+import { FOOD_TYPES } from '@vivra/shared';
+
+const { supabase, user, activePetId } = Astro.locals;
+
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+
+if (!pet) return Astro.redirect('/perfil?new=1');
+
+const premium = await getPremiumStatus(supabase, user.id);
+
+function bagToGrams(size: number, unit: string): number {
+  if (unit === 'kg') return size * 1000;
+  if (unit === 'lb') return size * 453.592;
+  return size;
+}
+
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action') as string;
+
+  // ── Food actions ──
+  if (action === 'add' || action === 'edit' || action === 'delete') {
+    const fields = {
+      brand:       formData.get('brand') as string,
+      type:        (formData.get('type') as string) || null,
+      daily_grams: formData.get('daily_grams') ? Number(formData.get('daily_grams')) : null,
+      frequency:   (formData.get('frequency') as string) || null,
+      bag_size:    formData.get('bag_size') ? Number(formData.get('bag_size')) : null,
+      bag_unit:    (formData.get('bag_unit') as string) || 'kg',
+      price:       formData.get('price') ? Number(formData.get('price')) : null,
+      start_date:  (formData.get('start_date') as string) || null,
+      notes:       (formData.get('notes') as string) || null,
+    };
+
+    if (action === 'add') {
+      const { count: foodCount } = await supabase.from('foods').select('id', { count: 'exact', head: true }).eq('pet_id', pet.id);
+      if (isAtLimit('maxFoods', foodCount ?? 0, premium)) {
+        return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent('Límite alcanzado. Refiere un amigo o suscríbete a Premium para ilimitados.'));
+      }
+      const { error } = await supabase.from('foods').insert({ pet_id: pet.id, ...fields });
+      if (error) return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent(error.message));
+    }
+
+    if (action === 'edit') {
+      const foodId = formData.get('food_id') as string;
+      const { error } = await supabase.from('foods').update(fields).eq('id', foodId).eq('pet_id', pet.id);
+      if (error) return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent(error.message));
+    }
+
+    if (action === 'delete') {
+      const foodId = formData.get('food_id') as string;
+      await supabase.from('foods').delete().eq('id', foodId).eq('pet_id', pet.id);
+      return Astro.redirect('/alimentacion?deleted=1');
+    }
+  }
+
+  // ── Treat actions ──
+  if (action === 'add_treat') {
+    await supabase.from('treats').insert({
+      pet_id: pet.id,
+      name: formData.get('treat_name') as string,
+      brand: (formData.get('treat_brand') as string) || null,
+      price: formData.get('treat_price') ? Number(formData.get('treat_price')) : null,
+      purchase_date: (formData.get('treat_date') as string) || null,
+      notes: (formData.get('treat_notes') as string) || null,
+    });
+    return Astro.redirect('/alimentacion?saved=1');
+  }
+
+  if (action === 'delete_treat') {
+    await supabase.from('treats').delete().eq('id', formData.get('treat_id') as string).eq('pet_id', pet.id);
+    return Astro.redirect('/alimentacion?deleted=1');
+  }
+
+  return Astro.redirect('/alimentacion?saved=1');
+}
+
+const { data: rawFoods } = await supabase
+  .from('foods')
+  .select('*')
+  .eq('pet_id', pet.id)
+  .order('created_at', { ascending: false });
+
+const foods = (rawFoods ?? []).map(food => {
+  const totalGrams = food.bag_size ? bagToGrams(food.bag_size, food.bag_unit ?? 'kg') : null;
+  const daysTotal  = (totalGrams && food.daily_grams) ? Math.floor(totalGrams / food.daily_grams) : null;
+  const costPerDay = (food.price && daysTotal && daysTotal > 0)
+    ? (food.price / daysTotal).toFixed(2) : null;
+  // Días restantes basado en start_date
+  const daysElapsed = food.start_date
+    ? Math.floor((Date.now() - new Date(food.start_date + 'T00:00:00').getTime()) / 86400000)
+    : null;
+  const daysRemaining = (daysTotal && daysElapsed !== null)
+    ? Math.max(0, daysTotal - daysElapsed)
+    : null;
+  const progressPct = (daysTotal && daysRemaining !== null)
+    ? Math.round((daysRemaining / daysTotal) * 100)
+    : null;
+  const foodType = food.type ?? null;
+  return { ...food, totalGrams, daysTotal, costPerDay, daysElapsed, daysRemaining, progressPct, foodType };
+});
+
+// Analytics
+const currentFood = foods[0] ?? null;
+const avgDaysPerBag = foods.filter(f => f.daysTotal).length > 0
+  ? Math.round(foods.filter(f => f.daysTotal).reduce((s, f) => s + f.daysTotal!, 0) / foods.filter(f => f.daysTotal).length)
+  : null;
+
+// Fetch treats
+let treats: any[] = [];
+try {
+  const { data: rawTreats } = await supabase
+    .from('treats')
+    .select('*')
+    .eq('pet_id', pet.id)
+    .order('created_at', { ascending: false });
+  treats = rawTreats ?? [];
+} catch { /* table may not exist yet */ }
+
+const totalTreatSpend = treats.filter(t => t.price).reduce((s: number, t: any) => s + t.price, 0);
+
+function bagStatusText(daysRemaining: number | null, daysElapsed: number | null): string | null {
+  if (daysRemaining === null) return null;
+  if (daysRemaining === 0) return 'Se terminó — hora de reabastecer';
+  if (daysRemaining <= 3) return `Quedan ${daysRemaining} días — ¡casi se acaba!`;
+  return `${daysElapsed} días desde que se abrió`;
+}
+---
+
+<MainLayout title="Alimentación">
+  <SectionHeader title="Alimentación" subtitle={`Dieta y control de comida de ${pet.name}`} />
+
+  {/* ── ANALYTICS ── */}
+  {currentFood ? (
+    <div class="mb-5 animate-fade-up">
+      {/* Hero stat */}
+      <div class="rounded-2xl mb-3 px-5 py-4 border border-card-border bg-card">
+        <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-1">Alimento actual</p>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xl font-bold text-ink">{currentFood.brand}</p>
+            <p class="text-sm text-muted">{FOOD_TYPES[currentFood.foodType] || currentFood.foodType || '—'}{currentFood.daily_grams ? ` · ${currentFood.daily_grams}g/día` : ''}</p>
+          </div>
+          {currentFood.daysTotal && (
+            <div class="text-right shrink-0">
+              {currentFood.daysRemaining !== null ? (
+                <>
+                  <p class="text-2xl font-black text-ink">≈{currentFood.daysRemaining}</p>
+                  <p class="text-xs text-muted">días restantes</p>
+                </>
+              ) : (
+                <>
+                  <p class="text-2xl font-black text-ink">≈{currentFood.daysTotal}</p>
+                  <p class="text-xs text-muted">{['barf', 'mixto'].includes(currentFood.foodType ?? '') ? 'días/lote' : 'días/bolsa'}</p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {currentFood.daysTotal && (
+          <div class="mt-3">
+            <div class="h-1.5 w-full rounded-full bg-canvas overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all"
+                style={`width: ${currentFood.progressPct ?? 100}%; background-color: ${(currentFood.progressPct ?? 100) < 20 ? '#EF4444' : (currentFood.progressPct ?? 100) < 40 ? '#F59E0B' : '#22C55E'};`}
+              />
+            </div>
+            {bagStatusText(currentFood.daysRemaining, currentFood.daysElapsed) && (
+              <p class="text-[11px] text-muted mt-1">{bagStatusText(currentFood.daysRemaining, currentFood.daysElapsed)}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Stats row — premium analytics */}
+      {(currentFood.costPerDay || avgDaysPerBag || foods.length > 1) && (
+        <PremiumGate isPremium={premium.isPremium} feature="costAnalysis" title="Analytics de comida" description="Costo por dia, promedios y mas. Refiere un amigo o suscríbete para desbloquear.">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+              <p class="text-lg font-black text-ink">{currentFood.costPerDay ? `$${currentFood.costPerDay}` : '—'}</p>
+              <p class="text-[10px] text-muted font-medium mt-0.5">costo/día</p>
+            </div>
+            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+              <p class="text-lg font-black text-ink">{avgDaysPerBag ?? '—'}</p>
+              <p class="text-[10px] text-muted font-medium mt-0.5">días prom.</p>
+            </div>
+            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+              <p class="text-lg font-black text-ink">{foods.length}</p>
+              <p class="text-[10px] text-muted font-medium mt-0.5">alimentos</p>
+            </div>
+          </div>
+        </PremiumGate>
+      )}
+    </div>
+  ) : (
+    <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
+      <p class="text-sm font-semibold text-ink mb-1">Sin alimento registrado</p>
+      <p class="text-xs text-muted">Agrega el alimento actual de {pet.name} para ver los análisis</p>
+    </div>
+  )}
+
+  {/* ── BOTONES REGISTRO (lado a lado) ── */}
+  <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
+    <div class="grid grid-cols-2 gap-3">
+      <button
+        type="button"
+        id="toggle-food-form"
+        class="flex items-center justify-between rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95"
+      >
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10">
+            <svg class="h-3.5 w-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">Alimento</p>
+        </div>
+        <svg id="toggle-food-icon" class="h-3.5 w-3.5 text-muted transition-transform shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+
+      <button
+        type="button"
+        id="toggle-treat-form"
+        class="flex items-center justify-between rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-amber-200 active:scale-95"
+      >
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber/10">
+            <svg class="h-3.5 w-3.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <p class="text-xs font-semibold text-ink">Snack</p>
+        </div>
+        <svg id="toggle-treat-icon" class="h-3.5 w-3.5 text-muted transition-transform shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+
+    {/* Food form */}
+    <div id="food-form-body" class="hidden mt-2">
+      <Card>
+        <form method="POST" class="space-y-4">
+          <input type="hidden" name="_action" value="add" />
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Marca <span class="text-red-500">*</span></label>
+              <input type="text" name="brand" required placeholder="Ej: Royal Canin" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Tipo <span class="text-red-500">*</span></label>
+              <select name="type" required class="field-input">
+                {Object.entries(FOOD_TYPES).map(([val, label]) => (
+                  <option value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Ración diaria (g)</label>
+              <input type="number" name="daily_grams" placeholder="Ej: 200" min="1" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Frecuencia</label>
+              <select name="frequency" class="field-input">
+                <option value="">— Sin especificar</option>
+                <option value="1x">1 vez al día</option>
+                <option value="2x">2 veces al día</option>
+                <option value="3x">3 veces al día</option>
+                <option value="libre">Libre acceso</option>
+              </select>
+            </div>
+          </div>
+          <div id="barf-hint" class="hidden rounded-xl bg-accent-light px-4 py-2.5 text-xs text-accent-dark">
+            💡 Indica el peso total de tu preparación y cuántos gramos consume al día
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="col-span-1">
+              <label id="bag-size-label" class="block text-sm font-medium text-ink mb-1">Tamaño bolsa</label>
+              <input type="number" name="bag_size" placeholder="Ej: 10" min="0" step="0.1" class="field-input" />
+            </div>
+            <div class="col-span-1">
+              <label class="block text-sm font-medium text-ink mb-1">Unidad</label>
+              <select name="bag_unit" class="field-input">
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+                <option value="lb">lb</option>
+              </select>
+            </div>
+            <div class="col-span-1">
+              <label id="price-label" class="block text-sm font-medium text-ink mb-1">Precio ($)</label>
+              <input type="number" name="price" placeholder="Ej: 45.00" min="0" step="0.01" class="field-input" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Fecha de inicio</label>
+              <input type="date" name="start_date" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1">Notas</label>
+              <input type="text" name="notes" placeholder="Alergias, marca anterior..." class="field-input" />
+            </div>
+          </div>
+          <button type="submit" class="w-full rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
+            Registrar alimento
+          </button>
+        </form>
+      </Card>
+    </div>
+
+    {/* Treat form */}
+    <div id="treat-form-body" class="hidden mt-2">
+      <div class="rounded-2xl border border-card-border bg-card p-5">
+        <form method="POST" class="space-y-3">
+          <input type="hidden" name="_action" value="add_treat" />
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Nombre <span class="text-red-500">*</span></label>
+              <input type="text" name="treat_name" required placeholder="Ej: Dentastix" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Marca</label>
+              <input type="text" name="treat_brand" placeholder="Ej: Pedigree" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Precio ($)</label>
+              <input type="number" name="treat_price" step="0.01" min="0" placeholder="Ej: 8.50" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-muted mb-1">Fecha de compra</label>
+              <input type="date" name="treat_date" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Notas</label>
+            <input type="text" name="treat_notes" placeholder="Sabor, tamaño, reacción..." class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+          </div>
+          <button type="submit" class="w-full rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
+            Registrar premio
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {/* ── HISTORIAL ── */}
+  {foods.length > 0 && (
+    <div class="mb-1">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Historial de alimentos</p>
+    </div>
+  )}
+
+  {foods.length === 0 ? (
+    <EmptyState
+      icon="food"
+      title="Sin alimentos registrados"
+      description={`Registra qué come ${pet.name} para hacer seguimiento de su dieta`}
+    />
+  ) : (
+    <div class="space-y-3">
+      {foods.map((food, i) => (
+        <Card variant="elevated" class:list={['animate-fade-up', i < 5 && `animate-fade-up-delay-${Math.min(i + 1, 5)}`]}>
+
+          {/* ── VIEW ── */}
+          <div class="item-view" data-id={food.id}>
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3 flex-1 min-w-0">
+                <div class="shrink-0 rounded-xl bg-amber/10 p-2.5 text-amber-dark">
+                  <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <p class="font-semibold text-ink">{food.brand}</p>
+                    {food.foodType && (
+                      <span class="rounded-full bg-canvas px-2 py-0.5 text-xs font-medium text-muted">
+                        {FOOD_TYPES[food.foodType] || food.foodType}
+                      </span>
+                    )}
+                  </div>
+                  {food.daysTotal && (
+                    <div class="mt-2.5 mb-2">
+                      <div class="flex items-baseline gap-1.5 mb-1">
+                        {food.daysRemaining !== null ? (
+                          <>
+                            <span class="text-xl font-bold text-ink">≈ {food.daysRemaining}</span>
+                            <span class="text-sm text-muted">días restantes</span>
+                          </>
+                        ) : (
+                          <>
+                            <span class="text-xl font-bold text-ink">≈ {food.daysTotal}</span>
+                            <span class="text-sm text-muted">días por {['barf', 'mixto'].includes(food.foodType ?? '') ? 'lote' : 'bolsa'}</span>
+                          </>
+                        )}
+                      </div>
+                      <div class="h-1.5 w-full rounded-full bg-canvas overflow-hidden">
+                        <div
+                          class="h-full rounded-full bg-accent transition-all"
+                          style={`width: ${food.progressPct ?? 100}%;`}
+                        />
+                      </div>
+                      {bagStatusText(food.daysRemaining, food.daysElapsed) && (
+                        <p class="text-[11px] text-muted mt-1">{bagStatusText(food.daysRemaining, food.daysElapsed)}</p>
+                      )}
+                    </div>
+                  )}
+                  <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                    {food.daily_grams && <span class="text-xs text-muted">{food.daily_grams}g/día</span>}
+                    {food.bag_size && <span class="text-xs text-muted">{food.bag_size} {food.bag_unit ?? 'kg'}</span>}
+                    {food.costPerDay && <span class="text-xs font-semibold text-accent">${food.costPerDay}/día</span>}
+                    {food.price && <span class="text-xs text-muted">${food.price} {['barf', 'mixto'].includes(food.foodType ?? '') ? 'lote' : 'bolsa'}</span>}
+                    {food.frequency && (
+                      <span class="text-xs text-muted">{food.frequency === '1x' ? '1x/día' : food.frequency === '2x' ? '2x/día' : food.frequency === '3x' ? '3x/día' : 'Libre acceso'}</span>
+                    )}
+                  </div>
+                  {food.start_date && <p class="text-xs text-muted mt-1">Desde {formatDate(food.start_date)}</p>}
+                  {food.notes && <p class="text-xs text-muted mt-1 italic">{food.notes}</p>}
+                </div>
+              </div>
+              <div class="flex gap-1 shrink-0">
+                <button type="button" class="edit-btn rounded-xl p-2 text-gray-300 transition-colors hover:bg-accent/10 hover:text-accent" data-id={food.id} title="Editar">
+                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                </button>
+                <form method="POST">
+                  <input type="hidden" name="_action" value="delete" />
+                  <input type="hidden" name="food_id" value={food.id} />
+                  <button type="submit" class="rounded-xl p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500" title="Eliminar">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          {/* ── EDIT ── */}
+          <form method="POST" class="item-edit hidden space-y-3" data-id={food.id}>
+            <input type="hidden" name="_action" value="edit" />
+            <input type="hidden" name="food_id" value={food.id} />
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-semibold text-accent uppercase tracking-wider">Editando</p>
+              <button type="button" class="cancel-edit text-xs text-muted hover:text-ink" data-id={food.id}>Cancelar</button>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <input type="text" name="brand" value={food.brand} required placeholder="Marca" class="field-input-sm" />
+              <select name="type" required class="field-input-sm">
+                {Object.entries(FOOD_TYPES).map(([val, label]) => (
+                  <option value={val} selected={food.foodType === val}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <input type="number" name="daily_grams" value={food.daily_grams || ''} placeholder="Ración/día (g)" min="1" class="field-input-sm" />
+              <select name="frequency" class="field-input-sm">
+                <option value="">Frecuencia</option>
+                <option value="1x" selected={food.frequency === '1x'}>1x/día</option>
+                <option value="2x" selected={food.frequency === '2x'}>2x/día</option>
+                <option value="3x" selected={food.frequency === '3x'}>3x/día</option>
+                <option value="libre" selected={food.frequency === 'libre'}>Libre</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input type="number" name="bag_size" value={food.bag_size || ''} placeholder="Bolsa" step="0.1" class="field-input-sm" />
+              <select name="bag_unit" class="field-input-sm">
+                <option value="kg" selected={food.bag_unit === 'kg'}>kg</option>
+                <option value="g" selected={food.bag_unit === 'g'}>g</option>
+                <option value="lb" selected={food.bag_unit === 'lb'}>lb</option>
+              </select>
+              <input type="number" name="price" value={food.price || ''} placeholder="Precio $" step="0.01" class="field-input-sm" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <input type="date" name="start_date" value={food.start_date || ''} class="field-input-sm" />
+              <input type="text" name="notes" value={food.notes || ''} placeholder="Notas" class="field-input-sm" />
+            </div>
+            <button type="submit" class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
+              Guardar cambios
+            </button>
+          </form>
+
+        </Card>
+      ))}
+    </div>
+  )}
+
+  <script is:inline>
+    function setupAlimentacion() {
+      var toggleBtn = document.getElementById('toggle-food-form');
+      var formBody = document.getElementById('food-form-body');
+      var toggleIcon = document.getElementById('toggle-food-icon');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+          var isOpen = formBody && !formBody.classList.contains('hidden');
+          if (formBody) formBody.classList.toggle('hidden');
+          if (toggleIcon) toggleIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
+        });
+      }
+
+      // Dynamic labels for BARF/raw/casero
+      var typeSelect = document.querySelector('select[name="type"]');
+      var bagLabel = document.getElementById('bag-size-label');
+      var priceLabel = document.getElementById('price-label');
+      var barfHint = document.getElementById('barf-hint');
+      var barfTypes = ['barf', 'mixto'];
+
+      function updateLabels() {
+        var isBarf = barfTypes.indexOf(typeSelect ? typeSelect.value : '') !== -1;
+        if (bagLabel) bagLabel.textContent = isBarf ? 'Peso por lote' : 'Tamaño bolsa';
+        if (priceLabel) priceLabel.textContent = isBarf ? 'Costo lote ($)' : 'Precio ($)';
+        if (barfHint) barfHint.classList.toggle('hidden', !isBarf);
+      }
+      if (typeSelect) typeSelect.addEventListener('change', updateLabels);
+
+      // Edit / cancel
+      document.querySelectorAll('.edit-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var id = btn.dataset.id;
+          var view = document.querySelector('.item-view[data-id="' + id + '"]');
+          var edit = document.querySelector('.item-edit[data-id="' + id + '"]');
+          if (view) view.classList.add('hidden');
+          if (edit) edit.classList.remove('hidden');
+        });
+      });
+      document.querySelectorAll('.cancel-edit').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var id = btn.dataset.id;
+          var view = document.querySelector('.item-view[data-id="' + id + '"]');
+          var edit = document.querySelector('.item-edit[data-id="' + id + '"]');
+          if (view) view.classList.remove('hidden');
+          if (edit) edit.classList.add('hidden');
+        });
+      });
+
+      // Treat form toggle (mutual exclusivity with food form)
+      var toggleTreatBtn = document.getElementById('toggle-treat-form');
+      var treatFormBody = document.getElementById('treat-form-body');
+      var toggleTreatIcon = document.getElementById('toggle-treat-icon');
+      if (toggleTreatBtn) {
+        toggleTreatBtn.addEventListener('click', function() {
+          var isOpen = treatFormBody && !treatFormBody.classList.contains('hidden');
+          if (treatFormBody) treatFormBody.classList.toggle('hidden');
+          if (toggleTreatIcon) toggleTreatIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
+          // Close food form when opening treat form
+          if (!isOpen && formBody && !formBody.classList.contains('hidden')) {
+            formBody.classList.add('hidden');
+            if (toggleIcon) toggleIcon.style.transform = '';
+          }
+        });
+      }
+
+      // Close treat form when opening food form
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+          if (treatFormBody && !treatFormBody.classList.contains('hidden')) {
+            treatFormBody.classList.add('hidden');
+            if (toggleTreatIcon) toggleTreatIcon.style.transform = '';
+          }
+        });
+      }
+
+      // Close food form when navigating away (prevents accidental submit)
+      var menuBtn = document.getElementById('mobile-menu-btn');
+      if (menuBtn && formBody) {
+        menuBtn.addEventListener('click', function() {
+          if (!formBody.classList.contains('hidden')) {
+            formBody.classList.add('hidden');
+            if (toggleIcon) toggleIcon.style.transform = '';
+          }
+        });
+      }
+    }
+    document.addEventListener('astro:page-load', setupAlimentacion);
+  </script>
+
+  {/* ── TREATS / PREMIOS ── */}
+  {treats.length > 0 && (
+    <div class="mt-6 mb-5 animate-fade-up">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Premios y snacks</p>
+      <div class="rounded-2xl bg-card border border-card-border divide-y divide-card-border overflow-hidden">
+        {treats.map((t: any) => (
+          <div class="flex items-center gap-3 px-4 py-3">
+            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-amber/10 text-base">🦴</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-ink">{t.name}{t.brand ? ` · ${t.brand}` : ''}</p>
+              <p class="text-[11px] text-muted">
+                {t.price ? `$${t.price}` : ''}{t.purchase_date ? `${t.price ? ' · ' : ''}${formatDate(t.purchase_date)}` : ''}
+              </p>
+              {t.notes && <p class="text-[11px] text-muted/70 truncate mt-0.5">{t.notes}</p>}
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_action" value="delete_treat" />
+              <input type="hidden" name="treat_id" value={t.id} />
+              <button type="submit" class="p-1.5 rounded-lg text-muted/40 hover:text-red-400 hover:bg-red-50 transition-colors" onclick="return confirm('¿Eliminar este premio?')">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </form>
+          </div>
+        ))}
+        {totalTreatSpend > 0 && (
+          <div class="px-4 py-2.5 bg-canvas">
+            <p class="text-[11px] text-muted text-center">Total gastado en premios: <span class="font-semibold text-ink">${totalTreatSpend.toFixed(2)}</span></p>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  <p class="mt-10 mb-4 text-center text-xs text-muted/40 leading-relaxed max-w-xs mx-auto">Una buena alimentación es la base de la salud de tu mascota. Registra su dieta actual para saber cuándo se acaba el alimento y llevar el control de costos.</p>
+
+</MainLayout>

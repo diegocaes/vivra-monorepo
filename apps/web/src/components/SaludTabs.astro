@@ -1,0 +1,42 @@
+---
+const currentPath = Astro.url.pathname;
+const tabs = [
+  { href: '/salud',               label: 'Resumen'     },
+  { href: '/salud/vacunas',       label: 'Vacunas'     },
+  { href: '/salud/preventivos',   label: 'Preventivos' },
+  { href: '/salud/historial',     label: 'Historial Vet' },
+  { href: '/salud/peso',          label: 'Peso'        },
+  { href: '/salud/grooming',      label: 'Grooming'    },
+  { href: '/salud/actividad',     label: 'Actividad'   },
+];
+
+const isActive = (href: string) =>
+  href === '/salud'
+    ? currentPath === '/salud' || currentPath === '/salud/'
+    : currentPath === href;
+
+const activeTab = tabs.find(t => isActive(t.href)) ?? tabs[0];
+---
+
+{/* ── HEADER — igual para todos los tabs ── */}
+<div class="mb-4 animate-fade-up">
+  <h1 class="text-2xl font-black text-ink tracking-tight">Salud</h1>
+  <p class="text-sm text-muted mt-0.5">{activeTab.label}</p>
+</div>
+
+{/* ── TABS ── */}
+<div class="flex gap-0 mb-6 border-b border-card-border animate-fade-up overflow-x-auto scrollbar-hide -mx-4 px-4">
+  {tabs.map((tab) => (
+    <a
+      href={tab.href}
+      class:list={[
+        'shrink-0 px-4 py-2.5 text-sm font-medium transition-all duration-200 border-b-2 -mb-px',
+        isActive(tab.href)
+          ? 'border-accent text-accent'
+          : 'border-transparent text-muted hover:text-ink',
+      ]}
+    >
+      {tab.label}
+    </a>
+  ))}
+</div>

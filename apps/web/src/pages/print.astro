@@ -1,0 +1,517 @@
+---
+import '../styles/global.css';
+import { calculateAge, formatDate } from '@vivra/shared';
+import { getActivePet } from '../lib/pet';
+import { getPremiumStatus, canAccess } from '../lib/premium';
+
+const { supabase, user, activePetId } = Astro.locals;
+
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+
+if (!pet) return Astro.redirect('/perfil?new=1');
+
+const premium = await getPremiumStatus(supabase, user.id);
+if (!canAccess('printPassport', premium)) {
+  return Astro.redirect('/premium');
+}
+
+const { data: vaccines } = await supabase
+  .from('vaccines')
+  .select('name, date_given')
+  .eq('pet_id', pet.id)
+  .order('date_given', { ascending: false });
+
+const { data: flights } = await supabase
+  .from('flights')
+  .select('*, flight_documents(*)')
+  .eq('pet_id', pet.id)
+  .order('flight_date', { ascending: false });
+
+
+const { data: weightRows } = await supabase
+  .from('weight_records')
+  .select('weight_kg, date')
+  .eq('pet_id', pet.id)
+  .order('date', { ascending: false })
+  .limit(1);
+
+const latestWeight = weightRows?.[0]?.weight_kg ?? pet.weight_kg;
+const petColor = pet.color;
+const petSpecies = (pet as any).species as string | null;
+const speciesLabel = petSpecies === 'cat' ? 'Felino' : 'Canino';
+const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pasaporte · {pet.name}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&display=swap');
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      :root {
+        --green: #2A6B3F;
+        --green-light: #E8F5EE;
+        --green-mid: #4E9B6A;
+        --ink: #111827;
+        --muted: #6B7280;
+        --border: #D1D5DB;
+        --bg: #F9FAFB;
+      }
+
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 16px 80px;
+        min-height: 100vh;
+      }
+
+      /* ── PASSPORT BOOK ── */
+      .passport {
+        width: 100%;
+        max-width: 520px;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+        overflow: hidden;
+      }
+
+      /* ── COVER ── */
+      .cover {
+        background: linear-gradient(160deg, #1C4D2E 0%, #2A6B3F 60%, #3D8B58 100%);
+        padding: 36px 32px 32px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .cover::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%),
+                          radial-gradient(circle at 80% 20%, rgba(255,255,255,0.06) 0%, transparent 50%);
+      }
+      .cover-label {
+        position: relative;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.55);
+        margin-bottom: 20px;
+      }
+      .paw-icon {
+        position: relative;
+        font-size: 40px;
+        margin-bottom: 20px;
+        display: block;
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+      }
+      .cover-title {
+        position: relative;
+        font-size: 22px;
+        font-weight: 900;
+        color: white;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+      .cover-subtitle {
+        position: relative;
+        font-size: 10px;
+        color: rgba(255,255,255,0.5);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+
+      /* ── PHOTO PAGE ── */
+      .photo-page {
+        padding: 28px 32px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .photo-frame {
+        flex-shrink: 0;
+        width: 110px;
+        height: 130px;
+        border-radius: 10px;
+        border: 2px solid var(--green);
+        overflow: hidden;
+        background: var(--green-light);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+      }
+      .photo-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .photo-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .passport-type {
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--green);
+        margin-bottom: 4px;
+      }
+      .pet-name {
+        font-size: 26px;
+        font-weight: 900;
+        color: var(--ink);
+        letter-spacing: -0.5px;
+        line-height: 1;
+        margin-bottom: 14px;
+      }
+      .field-row {
+        margin-bottom: 10px;
+        border-bottom: 1px solid #E5E7EB;
+        padding-bottom: 6px;
+      }
+      .field-label {
+        font-size: 8px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .field-value {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .field-value.empty { color: var(--border); }
+
+      /* ── SECTIONS ── */
+      .section {
+        padding: 20px 32px;
+        border-bottom: 1px solid var(--border);
+      }
+      .section:last-of-type { border-bottom: none; }
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .section-header-line {
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .section-title {
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--green);
+        white-space: nowrap;
+      }
+
+      /* Data grid inside section */
+      .data-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 20px;
+      }
+
+      /* Vaccine list */
+      .vaccine-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .vaccine-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px dashed #E5E7EB;
+      }
+      .vaccine-row:last-child { border-bottom: none; }
+      .vaccine-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .vaccine-date {
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .vaccine-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green-mid);
+        margin-right: 10px;
+        flex-shrink: 0;
+      }
+
+      /* Flight table */
+      .flight-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .flight-table th {
+        text-align: left;
+        padding: 6px 8px;
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--green-light);
+        border-radius: 4px;
+      }
+      .flight-table td {
+        padding: 8px 8px;
+        border-bottom: 1px solid #F3F4F6;
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      /* ── MRZ STRIP (bottom, like a real passport) ── */
+      .mrz {
+        background: var(--green-light);
+        border-top: 2px solid var(--green);
+        padding: 12px 24px;
+        font-family: 'Courier New', monospace;
+        font-size: 9px;
+        color: var(--green);
+        letter-spacing: 2px;
+        word-break: break-all;
+        line-height: 1.8;
+        opacity: 0.7;
+      }
+
+      /* ── PRINT BUTTON ── */
+      .print-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--green);
+        color: white;
+        border: none;
+        padding: 14px 28px;
+        border-radius: 50px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(42,107,63,0.4);
+        font-family: 'Inter', sans-serif;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .print-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 24px rgba(42,107,63,0.5);
+      }
+
+      .back-btn {
+        position: fixed;
+        bottom: 24px;
+        left: 24px;
+        background: white;
+        color: var(--ink);
+        border: 1px solid var(--border);
+        padding: 14px 28px;
+        border-radius: 50px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        font-family: 'Inter', sans-serif;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: transform 0.15s, box-shadow 0.15s;
+        text-decoration: none;
+      }
+      .back-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 24px rgba(0,0,0,0.15);
+      }
+
+      @media print {
+        body { background: white; padding: 0; }
+        .passport { box-shadow: none; border-radius: 0; max-width: 100%; }
+        .print-btn { display: none !important; }
+        .back-btn { display: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+
+    <div class="passport">
+
+      <!-- ── COVER ── -->
+      <div class="cover">
+        <p class="cover-label">{pet.birth_city || pet.birth_country ? [pet.birth_city, pet.birth_country].filter(Boolean).join(', ') : 'Pasaporte de Mascota · Pet Travel'}</p>
+        <img src="/Vivra-white.svg" alt="Vivra" style="height:56px;width:auto;margin-bottom:8px;" />
+        <h1 class="cover-title">Pet Passport</h1>
+        <p class="cover-subtitle">Pasaporte de Mascota</p>
+      </div>
+
+      <!-- ── PHOTO & IDENTITY ── -->
+      <div class="photo-page">
+        <div class="photo-frame">
+          {pet.photo_url ? (
+            <img src={pet.photo_url} alt={pet.name} />
+          ) : '🐶'}
+        </div>
+        <div class="photo-info">
+          <p class="passport-type">Pasaporte · Canino</p>
+          <h2 class="pet-name">{pet.name}</h2>
+
+          <div class="field-row">
+            <p class="field-label">Raza / Breed</p>
+            <p class:list={['field-value', !pet.breed && 'empty']}>{pet.breed || '—'}</p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Fecha de nacimiento</p>
+            <p class:list={['field-value', !pet.birth_date && 'empty']}>
+              {pet.birth_date ? formatDate(pet.birth_date) : '—'}
+              {age && <span style="color:#6B7280;font-weight:400;"> ({age})</span>}
+            </p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Sexo / Sex</p>
+            <p class:list={['field-value', !pet.gender && 'empty']}>
+              {pet.gender === 'macho' ? 'Macho / M' : pet.gender === 'hembra' ? 'Hembra / F' : '—'}
+            </p>
+          </div>
+          {pet.support_type && (
+            <div class="field-row">
+              <p class="field-label">Tipo de asistencia</p>
+              <p class="field-value" style="color: var(--green);">
+                {pet.support_type === 'emotional_support' ? 'Apoyo Emocional / ESA' : 'Perro de Servicio / Service Dog'}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <!-- ── DATOS ESENCIALES ── -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-header-line"></div>
+          <span class="section-title">Datos de Identificación</span>
+          <div class="section-header-line"></div>
+        </div>
+        <div class="data-grid">
+          <div class="field-row">
+            <p class="field-label">Nº Microchip</p>
+            <p class:list={['field-value', !pet.chip_id && 'empty']}>{pet.chip_id || '—'}</p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Peso actual</p>
+            <p class:list={['field-value', !latestWeight && 'empty']}>{latestWeight ? `${latestWeight} kg` : '—'}</p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Color de pelaje</p>
+            <p class:list={['field-value', !petColor && 'empty']}>{petColor || '—'}</p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Especie</p>
+            <p class="field-value">{speciesLabel}</p>
+          </div>
+          <div class="field-row">
+            <p class="field-label">Lugar de nacimiento</p>
+            <p class:list={['field-value', !(pet.birth_city || pet.birth_country) && 'empty']}>
+              {pet.birth_city || pet.birth_country ? [pet.birth_city, pet.birth_country].filter(Boolean).join(', ') : '—'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── VACUNAS ── -->
+      {vaccines && vaccines.length > 0 && (
+        <div class="section">
+          <div class="section-header">
+            <div class="section-header-line"></div>
+            <span class="section-title">Registro de Vacunación</span>
+            <div class="section-header-line"></div>
+          </div>
+          <div class="vaccine-list">
+            {vaccines.map((v) => (
+              <div class="vaccine-row">
+                <div style="display:flex;align-items:center;">
+                  <div class="vaccine-dot"></div>
+                  <span class="vaccine-name">{v.name}</span>
+                </div>
+                <span class="vaccine-date">{formatDate(v.date_given)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <!-- ── VUELOS ── -->
+      {flights && flights.length > 0 && (
+        <div class="section">
+          <div class="section-header">
+            <div class="section-header-line"></div>
+            <span class="section-title">Historial de Viajes</span>
+            <div class="section-header-line"></div>
+          </div>
+          <table class="flight-table">
+            <thead>
+              <tr>
+                <th>Ruta</th>
+                <th>Fecha</th>
+                <th>Aerolínea</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flights.map((f) => (
+                <tr>
+                  <td>{f.origin} → {f.destination}</td>
+                  <td>{formatDate(f.flight_date)}</td>
+                  <td>{f.airline || '—'}{f.flight_number ? ` ${f.flight_number}` : ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <!-- ── MRZ (decorativo) ── -->
+      <div class="mrz">
+        {'P<PAN' + (pet.name?.toUpperCase().replace(/\s/g, '<') ?? '').padEnd(39, '<')}<br />
+        {(pet.chip_id ?? '000000000').padEnd(9, '<') + '9CAN' + (pet.birth_date?.replace(/-/g, '').slice(2) ?? '000000') + '0' + (pet.gender === 'macho' ? 'M' : 'F') + '<<<<<<<<<<<<<<'}
+      </div>
+
+    </div>
+
+    <button class="print-btn" onclick="window.print()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Imprimir pasaporte
+    </button>
+
+    <a href="/viajes" class="back-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Volver
+    </a>
+
+  </body>
+</html>

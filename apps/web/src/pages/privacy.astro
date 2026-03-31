@@ -1,0 +1,147 @@
+---
+import '../styles/global.css';
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F97316" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Política de Privacidad | Vivra</title>
+  </head>
+  <body class="bg-canvas font-sans text-ink antialiased">
+
+    <!-- Header -->
+    <header class="border-b border-card-border bg-white">
+      <div class="mx-auto max-w-3xl px-6 py-4 flex items-center justify-between">
+        <a href="/" class="hover:opacity-80 transition-opacity">
+          <img src="/Vivra.svg" alt="Vivra" style="height:36px;width:auto;" />
+        </a>
+        <a href="/login" class="text-sm font-medium text-accent hover:text-accent-dark transition-colors">Iniciar sesión</a>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="mx-auto max-w-3xl px-6 py-12">
+      <h1 class="text-3xl font-bold text-ink mb-2">Política de Privacidad</h1>
+      <p class="text-sm text-muted mb-10">Última actualización: 9 de marzo de 2026</p>
+
+      <div class="space-y-8 text-sm leading-relaxed text-gray-700">
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">1. Información que recopilamos</h2>
+          <p class="mb-3">Vivra recopila la siguiente información cuando usas nuestro servicio:</p>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li><strong>Datos de cuenta:</strong> dirección de email y nombre (al registrarte con email o Google).</li>
+            <li><strong>Datos de mascotas:</strong> nombre, raza, fecha de nacimiento, peso, foto, chip ID y color de tu mascota.</li>
+            <li><strong>Registros de salud:</strong> vacunas, visitas veterinarias, peso, grooming, tratamientos preventivos y actividad.</li>
+            <li><strong>Alimentación:</strong> marca de alimento, tipo, porciones y notas.</li>
+            <li><strong>Viajes:</strong> información de vuelos (aerolínea, ruta, fechas).</li>
+            <li><strong>Fotos:</strong> imágenes que subas de tu mascota.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">2. Cómo usamos tu información</h2>
+          <p class="mb-3">Usamos tus datos exclusivamente para:</p>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li>Proveer el servicio de Vivra: almacenar y mostrar los registros de tu mascota.</li>
+            <li>Calcular métricas de bienestar (Vitality Score) basadas en los datos que registras.</li>
+            <li>Enviar notificaciones relevantes (insignias ganadas, recordatorios) si las tienes activadas.</li>
+            <li>Mejorar el servicio y corregir errores.</li>
+          </ul>
+          <p class="mt-3"><strong>No vendemos, alquilamos ni compartimos tus datos personales con terceros.</strong></p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">3. Almacenamiento y seguridad</h2>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li>Tus datos se almacenan en <strong>Supabase</strong> (infraestructura AWS), con encriptación en reposo y en tránsito.</li>
+            <li>Las contraseñas se gestionan con Supabase Auth y nunca se almacenan en texto plano.</li>
+            <li>Usamos Row Level Security (RLS) en la base de datos para que solo tú puedas acceder a tus datos.</li>
+            <li>Las fotos de mascotas se almacenan en Supabase Storage con acceso autenticado.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">4. Uso de la cámara y galería de fotos</h2>
+          <p>Vivra solicita acceso a tu cámara y galería de fotos <strong>únicamente</strong> para que puedas tomar o seleccionar fotos de tu mascota. Estas fotos se suben a tu cuenta privada y no se comparten públicamente.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">5. Notificaciones</h2>
+          <p>Si activas las notificaciones push, Vivra podrá enviarte alertas sobre: insignias ganadas, mejoras en el bienestar de tu mascota y recordatorios relevantes. Puedes desactivar las notificaciones en cualquier momento desde la configuración de tu dispositivo.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">6. Cookies</h2>
+          <p>Vivra usa cookies estrictamente necesarias para:</p>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li>Mantener tu sesión activa (autenticación).</li>
+            <li>Recordar tu mascota activa si tienes más de una.</li>
+          </ul>
+          <p class="mt-2">No usamos cookies de rastreo ni publicidad.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">7. Tus derechos</h2>
+          <p class="mb-3">Tienes derecho a:</p>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li><strong>Acceder</strong> a todos tus datos en cualquier momento desde la app.</li>
+            <li><strong>Modificar</strong> cualquier registro de tu mascota.</li>
+            <li><strong>Eliminar</strong> registros individuales o tu cuenta completa desde la sección de perfil.</li>
+            <li><strong>Exportar</strong> tus datos: el pasaporte imprimible contiene un resumen de los datos de tu mascota.</li>
+          </ul>
+          <p class="mt-3">Al eliminar tu cuenta, todos tus datos (mascotas, registros, fotos) se borran permanentemente de nuestros servidores.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">8. Datos de menores</h2>
+          <p>Vivra no está dirigido a menores de 13 años. No recopilamos intencionalmente datos de menores. Si descubrimos que un menor ha creado una cuenta, la eliminaremos.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">9. Servicios de terceros</h2>
+          <p class="mb-3">Vivra utiliza los siguientes servicios de terceros:</p>
+          <ul class="list-disc pl-5 space-y-1.5">
+            <li><strong>Supabase:</strong> base de datos, autenticación y almacenamiento de archivos.</li>
+            <li><strong>Vercel:</strong> hosting de la aplicación web.</li>
+            <li><strong>Google OAuth:</strong> inicio de sesión con Google (opcional).</li>
+          </ul>
+          <p class="mt-2">Cada servicio opera bajo sus propias políticas de privacidad.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">10. Cambios a esta política</h2>
+          <p>Podemos actualizar esta política de privacidad ocasionalmente. Te notificaremos de cambios significativos a través de la app o por email. La fecha de última actualización se muestra al inicio de este documento.</p>
+        </section>
+
+        <section>
+          <h2 class="text-lg font-semibold text-ink mb-3">11. Contacto</h2>
+          <p>Si tienes preguntas sobre esta política de privacidad, puedes escribirnos a:</p>
+          <p class="mt-2 font-medium text-ink">admin@vivrapet.com</p>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-card-border bg-white mt-16">
+      <div class="mx-auto max-w-3xl px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p class="text-xs text-muted">&copy; 2026 Vivra. Todos los derechos reservados.</p>
+        <div class="flex gap-4 text-xs">
+          <span class="text-muted font-medium">Política de Privacidad</span>
+          <a href="/terms" class="text-muted hover:text-ink transition-colors">Términos de Servicio</a>
+        </div>
+      </div>
+    </footer>
+
+  </body>
+</html>

@@ -1,0 +1,25 @@
+---
+interface Props {
+  class?: string;
+  padding?: boolean;
+  variant?: 'default' | 'glass' | 'elevated' | 'dark';
+}
+
+const { class: className = '', padding = true, variant = 'default' } = Astro.props;
+
+const variantClasses: Record<string, string> = {
+  default:  'bg-card border border-card-border',
+  glass:    'bg-white/80 backdrop-blur-xl border border-card-border',
+  elevated: 'bg-card border border-card-border hover:shadow-md transition-shadow duration-200',
+  dark:     'bg-sidebar border border-white/10 text-white',
+};
+---
+
+<div class:list={[
+  'rounded-xl overflow-hidden',
+  variantClasses[variant],
+  { 'p-5 sm:p-6': padding },
+  className,
+]}>
+  <slot />
+</div>

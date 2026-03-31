@@ -1,0 +1,278 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+
+import { formatDate } from '@vivra/shared';
+import { getActivePet } from '../../lib/pet';
+
+const { supabase, user, activePetId } = Astro.locals;
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+if (!pet) return Astro.redirect('/perfil?new=1');
+
+// POST handler
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action') as string;
+
+  if (action === 'add') {
+    await supabase.from('preventive_treatments').insert({
+      pet_id: pet.id,
+      type: formData.get('type') as string,
+      date_given: formData.get('date_given') as string,
+      product_name: (formData.get('product_name') as string) || null,
+      lot_number: (formData.get('lot_number') as string) || null,
+      cost: formData.get('cost') ? Number(formData.get('cost')) : null,
+      notes: (formData.get('notes') as string) || null,
+    });
+    return Astro.redirect('/salud/preventivos?saved=1');
+  }
+
+  if (action === 'delete') {
+    await supabase.from('preventive_treatments').delete().eq('id', formData.get('id') as string).eq('pet_id', pet.id);
+    return Astro.redirect('/salud/preventivos?deleted=1');
+  }
+}
+
+// Load data
+const { data: treatments } = await supabase
+  .from('preventive_treatments')
+  .select('*')
+  .eq('pet_id', pet.id)
+  .order('date_given', { ascending: false });
+
+const antipulgasList = (treatments ?? []).filter(t => t.type === 'antipulgas');
+const desparasitanteList = (treatments ?? []).filter(t => t.type === 'desparasitante');
+
+function daysUntilNext(lastDateStr: string | null | undefined) {
+  if (!lastDateStr) return { daysLeft: 0, overdue: true, nextDate: null };
+  const last = new Date(lastDateStr + 'T00:00:00');
+  const next = new Date(last);
+  next.setDate(next.getDate() + 30);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  next.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return { daysLeft, overdue: daysLeft < 0, nextDate: next.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) };
+}
+
+const antipulgasStatus = daysUntilNext(antipulgasList[0]?.date_given);
+const desparasitanteStatus = daysUntilNext(desparasitanteList[0]?.date_given);
+
+const openForm = Astro.url.searchParams.get('new');
+const savedOk  = Astro.url.searchParams.get('saved') === '1';
+const deleted  = Astro.url.searchParams.get('deleted') === '1';
+---
+
+<MainLayout title="Preventivos">
+  <a href="/salud" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-4">
+    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    Salud
+  </a>
+
+  {/* ── STATUS CARDS ── */}
+  <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up">
+
+    {/* Antipulgas */}
+    <div class:list={[
+      'rounded-2xl p-4 border',
+      antipulgasStatus.overdue || !antipulgasList.length ? 'bg-red-50 border-red-100' : antipulgasStatus.daysLeft <= 5 ? 'bg-amber/10 border-amber/20' : 'bg-green-50 border-green-100'
+    ]}>
+      <div class="text-2xl mb-2">🐛</div>
+      <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Antipulgas</p>
+      {!antipulgasList.length ? (
+        <p class="text-sm font-bold text-red-500">Nunca aplicado</p>
+      ) : antipulgasStatus.overdue ? (
+        <>
+          <p class="text-sm font-bold text-red-500">Vencido</p>
+          <p class="text-[11px] text-muted mt-0.5">Último: {formatDate(antipulgasList[0].date_given)}</p>
+        </>
+      ) : (
+        <>
+          <p class:list={['text-2xl font-black leading-none', antipulgasStatus.daysLeft <= 5 ? 'text-amber-600' : 'text-accent-dark']}>
+            {antipulgasStatus.daysLeft}d
+          </p>
+          <p class="text-[11px] text-muted mt-0.5">Próximo: {antipulgasStatus.nextDate}</p>
+        </>
+      )}
+    </div>
+
+    {/* Desparasitante */}
+    <div class:list={[
+      'rounded-2xl p-4 border',
+      desparasitanteStatus.overdue || !desparasitanteList.length ? 'bg-red-50 border-red-100' : desparasitanteStatus.daysLeft <= 5 ? 'bg-amber/10 border-amber/20' : 'bg-green-50 border-green-100'
+    ]}>
+      <div class="text-2xl mb-2">💊</div>
+      <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Desparasitante</p>
+      {!desparasitanteList.length ? (
+        <p class="text-sm font-bold text-red-500">Nunca aplicado</p>
+      ) : desparasitanteStatus.overdue ? (
+        <>
+          <p class="text-sm font-bold text-red-500">Vencido</p>
+          <p class="text-[11px] text-muted mt-0.5">Último: {formatDate(desparasitanteList[0].date_given)}</p>
+        </>
+      ) : (
+        <>
+          <p class:list={['text-2xl font-black leading-none', desparasitanteStatus.daysLeft <= 5 ? 'text-amber-600' : 'text-accent-dark']}>
+            {desparasitanteStatus.daysLeft}d
+          </p>
+          <p class="text-[11px] text-muted mt-0.5">Próximo: {desparasitanteStatus.nextDate}</p>
+        </>
+      )}
+    </div>
+  </div>
+
+  {/* ── ADD BUTTON ── */}
+  <div class="flex gap-2 mb-6 animate-fade-up">
+    <a href="/salud/preventivos?new=antipulgas" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-card border border-card-border px-4 py-3 text-sm font-semibold text-ink hover:border-accent/30 transition-all active:scale-95">
+      <span>🐛</span> Registrar antipulgas
+    </a>
+    <a href="/salud/preventivos?new=desparasitante" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-card border border-card-border px-4 py-3 text-sm font-semibold text-ink hover:border-accent/30 transition-all active:scale-95">
+      <span>💊</span> Registrar desparasitante
+    </a>
+  </div>
+
+  {/* ── FORM (inline) ── */}
+  {openForm && (
+    <div class="mb-6 animate-fade-up" id="form-section">
+      <div class="rounded-2xl bg-card border border-card-border p-5">
+        <h2 class="text-sm font-bold text-ink mb-4">
+          {openForm === 'antipulgas' ? '🐛 Registrar antipulgas' : '💊 Registrar desparasitante'}
+        </h2>
+        <form method="POST" class="space-y-3">
+          <input type="hidden" name="_action" value="add" />
+          <input type="hidden" name="type" value={openForm} />
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Fecha de aplicación *</label>
+            <input
+              type="date"
+              name="date_given"
+              required
+              max={new Date().toISOString().split('T')[0]}
+              class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Producto (opcional)</label>
+            <input
+              type="text"
+              name="product_name"
+              placeholder={openForm === 'antipulgas' ? 'Ej: Frontline, NexGard...' : 'Ej: Drontal, Milbemax...'}
+              class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Nº de lote (opcional)</label>
+            <input
+              type="text"
+              name="lot_number"
+              placeholder="Ej: AB1234-56"
+              class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Costo (opcional)</label>
+            <input
+              type="number"
+              name="cost"
+              step="0.01"
+              min="0"
+              placeholder="Ej: 25.00"
+              class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Notas (opcional)</label>
+            <textarea
+              name="notes"
+              rows="2"
+              placeholder="Peso al momento de aplicar, observaciones..."
+              class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors resize-none"
+            ></textarea>
+          </div>
+
+          <div class="flex gap-2 pt-1">
+            <button type="submit" class="flex-1 rounded-xl bg-accent text-white font-semibold py-2.5 text-sm hover:bg-accent-dark transition-colors active:scale-95">
+              Guardar
+            </button>
+            <a href="/salud/preventivos" class="flex-1 rounded-xl bg-canvas border border-card-border text-muted font-semibold py-2.5 text-sm text-center hover:text-ink transition-colors">
+              Cancelar
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* ── ANTIPULGAS LIST ── */}
+  <div class="mb-6 animate-fade-up">
+    <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">🐛 Historial antipulgas</p>
+    {antipulgasList.length === 0 ? (
+      <div class="rounded-2xl bg-card border border-dashed border-card-border p-6 text-center">
+        <p class="text-sm text-muted">Sin registros de antipulgas</p>
+        <a href="/salud/preventivos?new=antipulgas" class="inline-block mt-2 text-xs font-semibold text-accent hover:text-accent-dark">
+          + Registrar ahora
+        </a>
+      </div>
+    ) : (
+      <div class="rounded-2xl bg-card border border-card-border divide-y divide-card-border overflow-hidden">
+        {antipulgasList.map((t) => (
+          <div class="flex items-center gap-3 px-4 py-3">
+            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-green-50 text-base">🐛</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-ink">{t.product_name || 'Antipulgas'}</p>
+              <p class="text-[11px] text-muted">{formatDate(t.date_given)}{t.lot_number ? ` · Lote: ${t.lot_number}` : ''}{t.cost ? ` · $${t.cost}` : ''}</p>
+              {t.notes && <p class="text-[11px] text-muted/70 truncate mt-0.5">{t.notes}</p>}
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_action" value="delete" />
+              <input type="hidden" name="id" value={t.id} />
+              <button type="submit" class="p-1.5 rounded-lg text-muted/40 hover:text-red-400 hover:bg-red-50 transition-colors" onclick="return confirm('¿Eliminar este registro?')">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </form>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* ── DESPARASITANTE LIST ── */}
+  <div class="mb-6 animate-fade-up">
+    <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">💊 Historial desparasitante</p>
+    {desparasitanteList.length === 0 ? (
+      <div class="rounded-2xl bg-card border border-dashed border-card-border p-6 text-center">
+        <p class="text-sm text-muted">Sin registros de desparasitante</p>
+        <a href="/salud/preventivos?new=desparasitante" class="inline-block mt-2 text-xs font-semibold text-accent hover:text-accent-dark">
+          + Registrar ahora
+        </a>
+      </div>
+    ) : (
+      <div class="rounded-2xl bg-card border border-card-border divide-y divide-card-border overflow-hidden">
+        {desparasitanteList.map((t) => (
+          <div class="flex items-center gap-3 px-4 py-3">
+            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-blue-50 text-base">💊</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-ink">{t.product_name || 'Desparasitante'}</p>
+              <p class="text-[11px] text-muted">{formatDate(t.date_given)}{t.lot_number ? ` · Lote: ${t.lot_number}` : ''}{t.cost ? ` · $${t.cost}` : ''}</p>
+              {t.notes && <p class="text-[11px] text-muted/70 truncate mt-0.5">{t.notes}</p>}
+            </div>
+            <form method="POST">
+              <input type="hidden" name="_action" value="delete" />
+              <input type="hidden" name="id" value={t.id} />
+              <button type="submit" class="p-1.5 rounded-lg text-muted/40 hover:text-red-400 hover:bg-red-50 transition-colors" onclick="return confirm('¿Eliminar este registro?')">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </form>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <p class="mt-10 mb-4 text-center text-xs text-muted/40 leading-relaxed max-w-xs mx-auto">Los antipulgas y desparasitantes se recomiendan al menos una vez al mes. Registra cada aplicación para no perder de vista la salud de tu peludo.</p>
+
+</MainLayout>

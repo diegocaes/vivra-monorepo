@@ -1,0 +1,409 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+
+import PremiumGate from '../../components/ui/PremiumGate.astro';
+import { getActivePet } from '../../lib/pet';
+import { getPremiumStatus } from '../../lib/premium';
+import { calculateVitalityScore } from '@vivra/shared';
+import type { ScoreInput } from '@vivra/shared';
+
+const PILLAR_SVG: Record<string, string> = {
+  peso: '<path d="M12 3v17M3 12h18"/><circle cx="12" cy="12" r="9"/>',
+  cuidado: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  raza: '<circle cx="11" cy="4" r="2"/><path d="M6 9a4 4 0 0 1 4-1h2a4 4 0 0 1 4 1l1 5-3-1v5H8v-5l-3 1z"/>',
+  actividad: '<path d="M13 4v16M7 8l6-4 6 4M7 12l6 4 6-4"/>',
+  nutricion: '<path d="M3 2l1 7a5 5 0 0 0 5 4h0a5 5 0 0 0 5-4l1-7"/><path d="M12 13v9"/><path d="M18 2a3 3 0 0 1 0 6l-3 7v7"/>',
+};
+
+const { supabase, user, activePetId } = Astro.locals;
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+
+if (!pet) return Astro.redirect('/onboarding');
+
+const premium = await getPremiumStatus(supabase, user.id);
+
+const [
+  { data: weightRecords },
+  { data: vaccines },
+  { data: vetVisits },
+  { data: groomings },
+  { data: activityLogs },
+  { data: foods },
+  { data: adventures },
+] = await Promise.all([
+  supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('vet_visits').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('groomings').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
+  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type').eq('pet_id', pet.id).order('created_at', { ascending: false }),
+  supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
+]);
+
+// Blood tests (may not exist yet)
+let bloodTests: { id: string; date: string }[] = [];
+try {
+  const { data } = await supabase.from('blood_tests').select('id, date').eq('pet_id', pet.id).order('date', { ascending: false });
+  bloodTests = data ?? [];
+} catch { /* table may not exist yet */ }
+
+const scoreInput: ScoreInput = {
+  pet: {
+    breed: pet.breed ?? null,
+    birth_date: pet.birth_date ?? null,
+    weight_kg: pet.weight_kg ?? null,
+    gender: pet.gender ?? null,
+    is_neutered: pet.is_neutered ?? null,
+  },
+  weightRecords: weightRecords ?? [],
+  vaccines: vaccines ?? [],
+  vetVisits: vetVisits ?? [],
+  groomings: groomings ?? [],
+  activityLogs: activityLogs ?? [],
+  adventures: (adventures ?? []).map((a: any) => ({ date: a.date })),
+  foods: foods ?? [],
+  bloodTests,
+};
+
+const score = calculateVitalityScore(scoreInput);
+
+const R = 44;
+const FULL_ARC = Math.PI * R * 270 / 180;
+const filled = (score.total / 100) * FULL_ARC;
+
+// Latest weight
+const latestWeight = weightRecords?.[0]?.weight_kg ?? pet.weight_kg;
+const vaccineCount = vaccines?.length ?? 0;
+const visitCount = vetVisits?.length ?? 0;
+
+// Blood test status
+const lastBloodTest = bloodTests[0] ?? null;
+const bloodTestDaysAgo = lastBloodTest
+  ? Math.floor((Date.now() - new Date(lastBloodTest.date + 'T00:00:00').getTime()) / 86400000)
+  : null;
+const bloodTestUpToDate = bloodTestDaysAgo !== null && bloodTestDaysAgo <= 365;
+
+// Handle blood test POST
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action') as string;
+  if (action === 'add_blood_test') {
+    await supabase.from('blood_tests').insert({
+      pet_id: pet.id,
+      date: formData.get('blood_test_date') as string,
+      notes: (formData.get('blood_test_notes') as string) || null,
+    });
+    return Astro.redirect('/salud?saved=1');
+  }
+  if (action === 'delete_blood_test') {
+    await supabase.from('blood_tests').delete().eq('id', formData.get('blood_test_id') as string).eq('pet_id', pet.id);
+    return Astro.redirect('/salud?deleted=1');
+  }
+}
+---
+
+<MainLayout title="Salud">
+
+  {/* ── SIN DATOS: guía para completar perfil ── */}
+  {!score.showScore && (
+    <div class="rounded-2xl bg-card border border-card-border p-5 mb-4 animate-fade-up">
+      <div class="flex flex-col items-center text-center mb-5">
+        <div class="h-16 w-16 rounded-2xl bg-canvas flex items-center justify-center mb-3 border border-card-border">
+          <span class="text-3xl">🐾</span>
+        </div>
+        <p class="text-base font-bold text-ink">El score se activa con más datos</p>
+        <p class="text-sm text-muted mt-1 leading-relaxed max-w-xs">
+          Agrega la información de {pet.name} y verás aquí un resumen de su bienestar.
+        </p>
+      </div>
+      <div class="space-y-2">
+        {score.pendingAreas.map(area => (
+          <a
+            href={area.href}
+            class="flex items-center gap-3 rounded-xl border border-dashed border-accent/40 bg-accent/5 px-4 py-3 transition-all active:scale-95 hover:border-accent/60"
+          >
+            <div class="h-2 w-2 shrink-0 rounded-full bg-accent/50" />
+            <p class="flex-1 text-sm font-medium text-ink">{area.label}</p>
+            <svg class="h-4 w-4 text-muted/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </a>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {/* ── CON DATOS: gauge + score ── */}
+  {score.showScore && (
+    <div class="rounded-2xl bg-card border border-card-border p-5 mb-4 animate-fade-up">
+      <div class="flex flex-col items-center mb-4">
+        <svg viewBox="0 0 120 80" class="w-44 overflow-visible" aria-hidden="true">
+          <path d="M 16 74 A 44 44 0 1 1 104 74" fill="none" stroke="#EAECF0" stroke-width="10" stroke-linecap="round" />
+          <path
+            d="M 16 74 A 44 44 0 1 1 104 74"
+            fill="none"
+            stroke={score.color}
+            stroke-width="10"
+            stroke-linecap="round"
+            stroke-dasharray={`${filled.toFixed(1)} ${FULL_ARC.toFixed(1)}`}
+          />
+          <text x="60" y="62" text-anchor="middle" font-size="22" font-weight="900" fill="#0F1117" font-family="system-ui">{score.total}</text>
+          <text x="60" y="74" text-anchor="middle" font-size="7" fill="#6B7280" font-family="system-ui">de 100</text>
+        </svg>
+        <p class="text-base font-bold mt-2" style={`color: ${score.color};`}>{score.headline}</p>
+        <p class="text-xs text-muted mt-0.5 text-center max-w-xs">{score.subline}</p>
+      </div>
+
+      {/* Pillar breakdown bars — premium */}
+      <PremiumGate isPremium={premium.isPremium} feature="vitalityDetails" title="Desglose detallado" description="Score por pilar, flags y recomendaciones. Refiere un amigo o suscríbete.">
+        <div class="pt-3 border-t border-card-border space-y-1">
+          {score.pillars.map(pillar => (
+            <div class="pillar-row">
+              <button type="button" class="pillar-toggle w-full flex items-center gap-2.5 py-1.5 rounded-xl transition-colors hover:bg-canvas/50 -mx-1 px-1">
+                <svg class="h-4 w-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={PILLAR_SVG[pillar.id] ?? ''} />
+                <p class="text-xs shrink-0 w-20 truncate text-muted font-medium text-left">{pillar.name}</p>
+                <div class="flex-1 rounded-full h-2 overflow-hidden bg-canvas">
+                  <div
+                    class="h-2 rounded-full transition-all duration-700"
+                    style={`width: ${pillar.pct}%; background-color: ${pillar.pct >= 70 ? '#22C55E' : pillar.pct >= 40 ? '#F59E0B' : '#EF4444'};`}
+                  />
+                </div>
+                <p class="text-xs w-8 text-right font-bold text-ink shrink-0">{pillar.score}/{pillar.max}</p>
+              </button>
+              <div class="pillar-detail hidden ml-7 mr-1 mb-2 rounded-xl bg-canvas px-3 py-2.5">
+                <p class="text-[11px] text-muted leading-relaxed">{pillar.description}</p>
+                <p class="text-[11px] font-semibold text-ink mt-1.5">{pillar.status}</p>
+                {pillar.tips.length > 0 && (
+                  <ul class="mt-1.5 space-y-0.5">
+                    {pillar.tips.map(tip => (
+                      <li class="flex items-start gap-1.5">
+                        <div class="h-1 w-1 shrink-0 rounded-full bg-accent mt-1.5" />
+                        <p class="text-[11px] text-muted leading-relaxed">{tip}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </PremiumGate>
+
+      {/* Quick stats row */}
+      <div class="grid grid-cols-3 gap-3 pt-3 border-t border-card-border mt-3">
+        <div class="text-center">
+          <p class="text-lg font-black text-ink">{latestWeight ? `${latestWeight}` : '—'}</p>
+          <p class="text-[10px] text-muted">kg peso</p>
+        </div>
+        <div class="text-center">
+          <p class="text-lg font-black text-ink">{vaccineCount}</p>
+          <p class="text-[10px] text-muted">vacunas</p>
+        </div>
+        <div class="text-center">
+          <p class="text-lg font-black text-ink">{visitCount}</p>
+          <p class="text-[10px] text-muted">consultas</p>
+        </div>
+      </div>
+
+      {score.pendingAreas.length > 0 && (
+        <div class="pt-3 border-t border-card-border space-y-2 mt-3">
+          {score.pendingAreas.map(area => (
+            <a
+              href={area.href}
+              class="flex items-center gap-3 rounded-xl border border-dashed border-card-border bg-canvas px-3 py-2.5 transition-all active:scale-95 hover:border-accent/40"
+            >
+              <div class="h-2 w-2 shrink-0 rounded-full bg-muted/40" />
+              <p class="flex-1 text-xs text-muted">{area.label}</p>
+              <svg class="h-3.5 w-3.5 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* ── ACCESOS PRINCIPALES ── */}
+  <div class="space-y-2 mb-4 animate-fade-up animate-fade-up-delay-1">
+    <a href="/salud/vacunas" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10">
+        <svg class="h-4 w-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-ink">Vacunas</p>
+        <p class="text-[11px] text-muted">Historial y próximas dosis</p>
+      </div>
+      <span class="text-xs font-bold text-accent">{vaccineCount}</span>
+      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </a>
+
+    <a href="/salud/peso" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-sky-200 active:scale-95">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50">
+        <svg class="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 0 1 8 0"/><line x1="12" y1="12" x2="12" y2="8"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-ink">Peso</p>
+        <p class="text-[11px] text-muted">Historial y tendencia</p>
+      </div>
+      {latestWeight && <span class="text-xs font-bold text-ink">{latestWeight} kg</span>}
+      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </a>
+
+    <a href="/salud/preventivos" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-green-200 active:scale-95">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-green-50">
+        <svg class="h-4 w-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-ink">Preventivos</p>
+        <p class="text-[11px] text-muted">Antipulgas y desparasitante</p>
+      </div>
+      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </a>
+
+    {/* Blood test annual reminder */}
+    <div class:list={['rounded-2xl bg-card border px-4 py-3.5', bloodTestUpToDate ? 'border-green-200' : 'border-amber-200']}>
+      <div class="flex items-center gap-3">
+        <div class:list={['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', bloodTestUpToDate ? 'bg-green-50' : 'bg-amber-50']}>
+          <svg class:list={['h-4 w-4', bloodTestUpToDate ? 'text-green-600' : 'text-amber-500']} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-ink">Examen de sangre anual</p>
+          <p class="text-[11px] text-muted">
+            {bloodTestUpToDate
+              ? `Al día · hace ${bloodTestDaysAgo} días`
+              : lastBloodTest
+                ? `Hace ${bloodTestDaysAgo} días · renovar`
+                : 'Recomendado al menos 1 vez al año'}
+          </p>
+        </div>
+        {bloodTestUpToDate ? (
+          <svg class="h-5 w-5 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        ) : (
+          <button type="button" id="toggle-blood-test-form" class="shrink-0 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors active:scale-95">
+            Registrar
+          </button>
+        )}
+      </div>
+      {!bloodTestUpToDate && (
+        <div id="blood-test-form" class="hidden mt-3 pt-3 border-t border-card-border">
+          <form method="POST" class="flex items-end gap-2">
+            <input type="hidden" name="_action" value="add_blood_test" />
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-muted mb-1">Fecha del examen</label>
+              <input type="date" name="blood_test_date" required value={new Date().toISOString().split('T')[0]} class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-muted mb-1">Notas (opcional)</label>
+              <input type="text" name="blood_test_notes" placeholder="Resultados, vet..." class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            </div>
+            <button type="submit" class="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95">
+              Guardar
+            </button>
+          </form>
+        </div>
+      )}
+      {lastBloodTest && (
+        <form method="POST" class="mt-2">
+          <input type="hidden" name="_action" value="delete_blood_test" />
+          <input type="hidden" name="blood_test_id" value={lastBloodTest.id} />
+        </form>
+      )}
+    </div>
+
+    <a href="/salud/historial" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-blue-200 active:scale-95">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50">
+        <svg class="h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-sm font-semibold text-ink">Historial veterinario</p>
+        <p class="text-[11px] text-muted">Citas y consultas</p>
+      </div>
+      <span class="text-xs font-bold text-blue-500">{visitCount}</span>
+      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </a>
+  </div>
+
+  {/* ── INSIGHTS / RECOMENDACIONES — premium ── */}
+  {score.showScore && premium.isPremium && score.pillars.some(p => p.tips.length > 0) && (
+    <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
+      <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
+        <div class="flex items-center gap-2.5 px-4 py-3.5 border-b border-card-border">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-green-50">
+            <svg class="h-3.5 w-3.5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M9 21h6"/></svg>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-ink">Consejos para {pet.name}</p>
+            <p class="text-[11px] text-muted">Basados en los datos registrados</p>
+          </div>
+        </div>
+        <div class="divide-y divide-card-border">
+          {score.pillars.filter(p => p.tips.length > 0).map(pillar => (
+            <div class="px-4 py-3">
+              <p class="text-xs font-semibold text-ink mb-1.5">{pillar.name}</p>
+              <ul class="space-y-1">
+                {pillar.tips.map(tip => (
+                  <li class="flex items-start gap-2">
+                    <div class="h-1.5 w-1.5 shrink-0 rounded-full bg-green-400 mt-1.5" />
+                    <p class="text-xs text-muted leading-relaxed">{tip}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* ── AVISOS — premium, solo cuando hay score ── */}
+  {score.showScore && premium.isPremium && score.flags.length > 0 && (
+    <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Para tener en cuenta</p>
+      <div class="space-y-2">
+        {score.flags.slice(0, 3).map(flag => (
+          <a
+            href={flag.href}
+            class="flex items-start gap-3 rounded-2xl border border-card-border bg-card p-4 transition-all active:scale-95"
+          >
+            <div class:list={[
+              'mt-1 h-2 w-2 shrink-0 rounded-full',
+              flag.severity === 'suggestion' ? 'bg-amber-400' : flag.severity === 'reminder' ? 'bg-blue-400' : 'bg-muted/40',
+            ]} />
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-medium text-ink leading-snug">{flag.message}</p>
+              <p class="text-[11px] text-muted mt-0.5">{flag.action} →</p>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  )}
+
+  <div class="mt-2 mb-4 animate-fade-up animate-fade-up-delay-2">
+    <p class="text-[11px] text-muted text-center leading-relaxed">
+      El score es orientativo, no un diagnóstico médico.
+      <a href="/faq" class="text-accent hover:text-accent-dark ml-1">¿Cómo funciona? →</a>
+    </p>
+  </div>
+
+  <script is:inline>
+    document.addEventListener('astro:page-load', function() {
+      document.querySelectorAll('.pillar-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var detail = btn.nextElementSibling;
+          if (!detail || !detail.classList.contains('pillar-detail')) return;
+          var wasOpen = !detail.classList.contains('hidden');
+          document.querySelectorAll('.pillar-detail').forEach(function(d) { d.classList.add('hidden'); });
+          if (!wasOpen) detail.classList.remove('hidden');
+        });
+      });
+
+      // Blood test form toggle
+      var bloodBtn = document.getElementById('toggle-blood-test-form');
+      var bloodForm = document.getElementById('blood-test-form');
+      if (bloodBtn && bloodForm) {
+        bloodBtn.addEventListener('click', function() {
+          bloodForm.classList.toggle('hidden');
+        });
+      }
+    });
+  </script>
+
+</MainLayout>

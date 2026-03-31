@@ -1,0 +1,89 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+import { getActivePet } from '../../lib/pet';
+
+const { supabase, user, activePetId } = Astro.locals;
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+if (!pet) return Astro.redirect('/onboarding');
+
+// Stats for this week
+const { data: recentLogs } = await supabase
+  .from('activity_logs')
+  .select('date, walks, duration_minutes')
+  .eq('pet_id', pet.id)
+  .order('date', { ascending: false })
+  .limit(7);
+
+const thisWeek = (recentLogs ?? []).filter(l => {
+  const diff = Math.ceil((Date.now() - new Date(l.date + 'T00:00:00').getTime()) / 86400000);
+  return diff <= 7;
+});
+const weekWalks = thisWeek.reduce((s: number, l: any) => s + (l.walks || 0), 0);
+const weekMinutes = thisWeek.reduce((s: number, l: any) => s + (l.duration_minutes || 0), 0);
+
+// Grooming count
+const { count: groomingCount } = await supabase
+  .from('groomings')
+  .select('id', { count: 'exact', head: true })
+  .eq('pet_id', pet.id);
+---
+
+<MainLayout title="Actividad">
+
+  {/* ── STATS ── */}
+  <div class="grid grid-cols-3 gap-3 mb-5 animate-fade-up">
+    <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+      <p class="text-lg font-black text-ink">{thisWeek.length}</p>
+      <p class="text-[10px] text-muted font-medium mt-0.5">días activo</p>
+      <p class="text-[9px] text-muted/60">esta semana</p>
+    </div>
+    <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+      <p class="text-lg font-black text-ink">{weekWalks}</p>
+      <p class="text-[10px] text-muted font-medium mt-0.5">paseos</p>
+      <p class="text-[9px] text-muted/60">esta semana</p>
+    </div>
+    <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
+      <p class="text-lg font-black text-ink">{weekMinutes > 0 ? `${weekMinutes}` : '—'}</p>
+      <p class="text-[10px] text-muted font-medium mt-0.5">minutos</p>
+      <p class="text-[9px] text-muted/60">esta semana</p>
+    </div>
+  </div>
+
+  {/* ── SECCIONES (todas visibles) ── */}
+  <div class="grid grid-cols-2 gap-3 mb-4 animate-fade-up animate-fade-up-delay-1">
+    <a href="/salud/actividad" class="rounded-2xl bg-card border border-card-border px-4 py-4 transition-all hover:border-green-200 active:scale-95">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 mb-3">
+        <svg class="h-5 w-5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <p class="text-sm font-semibold text-ink">Paseos</p>
+      <p class="text-[11px] text-muted mt-0.5">Actividad diaria</p>
+      {weekWalks > 0 && <p class="text-xs font-bold text-green-600 mt-2">{weekWalks} esta semana</p>}
+    </a>
+
+    <a href="/salud/grooming" class="rounded-2xl bg-card border border-card-border px-4 py-4 transition-all hover:border-pink-200 active:scale-95">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-50 mb-3">
+        <svg class="h-5 w-5 text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/></svg>
+      </div>
+      <p class="text-sm font-semibold text-ink">Grooming</p>
+      <p class="text-[11px] text-muted mt-0.5">Baños y estética</p>
+      {(groomingCount ?? 0) > 0 && <p class="text-xs font-bold text-pink-500 mt-2">{groomingCount} sesiones</p>}
+    </a>
+
+    <a href="/viajes" class="rounded-2xl bg-card border border-card-border px-4 py-4 transition-all hover:border-purple-200 active:scale-95">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 mb-3">
+        <svg class="h-5 w-5 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+      </div>
+      <p class="text-sm font-semibold text-ink">Vuelos</p>
+      <p class="text-[11px] text-muted mt-0.5">Pasaporte y viajes</p>
+    </a>
+
+    <a href="/badges" class="rounded-2xl bg-card border border-card-border px-4 py-4 transition-all hover:border-amber-200 active:scale-95">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 mb-3">
+        <svg class="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+      </div>
+      <p class="text-sm font-semibold text-ink">Insignias</p>
+      <p class="text-[11px] text-muted mt-0.5">Logros y colección</p>
+    </a>
+  </div>
+
+</MainLayout>

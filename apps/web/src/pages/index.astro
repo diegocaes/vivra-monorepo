@@ -1,0 +1,603 @@
+---
+import '../styles/global.css';
+import { createSupabaseClient } from '../lib/supabase';
+
+const supabase = createSupabaseClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+
+if (user) {
+  return Astro.redirect('/dashboard');
+}
+
+if (Astro.url.searchParams.has('code') || Astro.url.searchParams.has('token_hash')) {
+  return Astro.redirect(`/api/auth/callback?${Astro.url.searchParams.toString()}`);
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F97316" />
+    <meta name="description" content="Vivra — El diario digital de tu mascota. Vacunas, peso, veterinario, actividad y pasaporte de viaje en un solo lugar. Gratis." />
+    <meta name="keywords" content="mascota, perro, vacunas, veterinario, peso, pasaporte mascota, diario mascota, pet tracker, dog health" />
+    <meta name="author" content="Vivra" />
+    <link rel="canonical" href="https://vivrapet.com/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vivrapet.com/" />
+    <meta property="og:title" content="Vivra — El diario digital de tu mascota" />
+    <meta property="og:description" content="Vacunas, peso, veterinario, actividad y pasaporte de viaje. Todo en un solo lugar, siempre actualizado." />
+    <meta property="og:image" content="https://vivrapet.com/og-image.png" />
+    <meta property="og:locale" content="es_PA" />
+    <meta property="og:site_name" content="Vivra" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vivra — El diario digital de tu mascota" />
+    <meta name="twitter:description" content="Vacunas, peso, veterinario, actividad y pasaporte de viaje. Todo en un solo lugar." />
+    <meta name="twitter:image" content="https://vivrapet.com/og-image.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" /></noscript>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>Vivra — El diario digital de tu mascota</title>
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Vivra",
+      "description": "El diario digital de tu mascota. Vacunas, peso, veterinario, actividad y pasaporte de viaje en un solo lugar.",
+      "url": "https://vivrapet.com",
+      "applicationCategory": "LifestyleApplication",
+      "operatingSystem": "Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Vivra"
+      }
+    }
+    </script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      :root {
+        --orange: #F97316;
+        --orange-dark: #EA6C0A;
+        --orange-light: rgba(249,115,22,0.10);
+        --sidebar: #13161C;
+        --ink: #0F1117;
+        --muted: #6B7280;
+        --card-border: #EAECF0;
+        --canvas: #F7F8FA;
+      }
+      html { scroll-behavior: smooth; }
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        background: white;
+        color: var(--ink);
+        overflow-x: hidden;
+      }
+
+      /* ── NAV ── */
+      nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 32px; height: 64px;
+        background: rgba(255,255,255,0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--card-border);
+      }
+      .nav-logo { display: flex; align-items: center; text-decoration: none; }
+      .nav-cta {
+        background: var(--orange); color: white; border: none;
+        padding: 10px 22px; border-radius: 50px; font-size: 14px; font-weight: 600;
+        cursor: pointer; text-decoration: none;
+        transition: background 0.15s, transform 0.1s;
+      }
+      .nav-cta:hover { background: var(--orange-dark); transform: translateY(-1px); }
+
+      /* ── HERO ── */
+      .hero {
+        min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        padding: 120px 48px 80px;
+        background: white;
+        position: relative; overflow: hidden;
+      }
+      .hero::before {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: url('/bg_home.png');
+        background-size: 420px auto;
+        background-repeat: repeat;
+        opacity: 0.15;
+        pointer-events: none;
+        mix-blend-mode: multiply;
+      }
+      .hero-inner {
+        position: relative;
+        max-width: 1100px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        align-items: center;
+        gap: 48px;
+      }
+      .hero-text { position: relative; }
+
+      .hero-badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--orange-light); color: var(--orange-dark);
+        border: 1px solid rgba(249,115,22,0.25);
+        padding: 6px 16px; border-radius: 50px;
+        font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+        margin-bottom: 28px;
+      }
+      .hero h1 {
+        font-size: clamp(38px, 5.5vw, 64px);
+        font-weight: 900; line-height: 1.05;
+        letter-spacing: -2.5px; color: var(--ink);
+        margin: 0 0 20px;
+      }
+      .hero h1 span { color: var(--orange); }
+      .hero-text > p {
+        font-size: clamp(16px, 2vw, 19px);
+        color: var(--muted); max-width: 480px; margin: 0 0 36px;
+        line-height: 1.65;
+      }
+      .hero-actions {
+        display: flex; gap: 12px; flex-wrap: wrap;
+      }
+      .btn-primary {
+        background: var(--orange); color: white;
+        padding: 15px 34px; border-radius: 50px;
+        font-size: 15px; font-weight: 700; text-decoration: none;
+        transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+        box-shadow: 0 4px 20px rgba(249,115,22,0.35);
+      }
+      .btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); box-shadow: 0 8px 28px rgba(249,115,22,0.45); }
+      .btn-secondary {
+        background: white; color: var(--ink);
+        border: 1.5px solid var(--card-border);
+        padding: 15px 34px; border-radius: 50px;
+        font-size: 15px; font-weight: 600; text-decoration: none;
+        transition: border-color 0.15s, transform 0.1s;
+      }
+      .btn-secondary:hover { border-color: var(--orange); color: var(--orange); transform: translateY(-2px); }
+
+      /* ── HERO PHONE MOCKUP ── */
+      .hero-mockup {
+        position: relative;
+        display: flex;
+        justify-content: center;
+      }
+      .hero-mockup img {
+        width: 300px;
+        height: auto;
+        filter: drop-shadow(0 30px 60px rgba(0,0,0,0.20));
+      }
+
+      @media (max-width: 768px) {
+        .hero { text-align: center; padding: 100px 24px 60px; }
+        .hero-inner {
+          grid-template-columns: 1fr;
+          gap: 48px;
+        }
+        .hero-text > p { margin-left: auto; margin-right: auto; }
+        .hero-actions { justify-content: center; }
+        .hero-mockup img { width: 260px; }
+      }
+
+      /* ── FEATURES SECTION ── */
+      .features-section {
+        padding: 100px 24px;
+        background: var(--canvas);
+        position: relative; overflow: hidden;
+      }
+      .features-section::before {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: url('/bg_home.png');
+        background-size: 480px auto;
+        background-repeat: repeat;
+        opacity: 0.03;
+        pointer-events: none;
+      }
+      .section-inner { max-width: 1040px; margin: 0 auto; position: relative; }
+      .section-label {
+        font-size: 11px; font-weight: 700; letter-spacing: 3px;
+        text-transform: uppercase; color: var(--orange);
+        margin-bottom: 12px; display: block;
+      }
+      .section-title {
+        font-size: clamp(28px, 4.5vw, 44px); font-weight: 900;
+        letter-spacing: -1.5px;
+        margin-bottom: 10px; line-height: 1.1;
+      }
+      .section-sub {
+        color: var(--muted); font-size: 16px;
+        max-width: 520px; margin-bottom: 52px; line-height: 1.65;
+      }
+
+      /* bento grid */
+      .features-bento {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-rows: auto auto;
+        gap: 16px;
+      }
+      .bento-card {
+        background: white; border: 1px solid var(--card-border);
+        border-radius: 24px; padding: 28px 24px;
+        transition: box-shadow 0.2s, transform 0.2s;
+      }
+      .bento-card:hover { box-shadow: 0 10px 40px rgba(0,0,0,0.08); transform: translateY(-3px); }
+      .bento-card.featured {
+        grid-column: span 2;
+        background: var(--ink);
+        border-color: transparent;
+        display: flex; gap: 28px; align-items: stretch;
+      }
+      .bento-icon {
+        width: 52px; height: 52px; border-radius: 16px;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 18px; font-size: 24px; flex-shrink: 0;
+      }
+      .bento-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+      .bento-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+      .bento-card.featured h3 { color: white; }
+      .bento-card.featured p { color: rgba(255,255,255,0.5); }
+
+      /* score preview inside featured card */
+      .score-preview { flex: 1; }
+      .score-visual {
+        flex: 0 0 180px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 16px; padding: 16px;
+        display: flex; flex-direction: column; justify-content: center;
+      }
+      .score-circle {
+        width: 80px; height: 80px; border-radius: 50%;
+        border: 3px solid #F97316;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        margin-bottom: 16px;
+      }
+      .score-circle-n { font-size: 28px; font-weight: 900; color: #F97316; line-height: 1; }
+      .score-circle-l { font-size: 7px; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.4); }
+      .score-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+      .score-bar-row:last-child { margin-bottom: 0; }
+      .score-bar-name { font-size: 9px; color: rgba(255,255,255,0.5); width: 52px; }
+      .score-bar-bg { flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+      .score-bar-fill { height: 100%; background: #F97316; border-radius: 2px; }
+      .score-bar-val { font-size: 9px; color: rgba(255,255,255,0.4); width: 16px; text-align: right; }
+
+      @media (max-width: 768px) {
+        .features-bento { grid-template-columns: 1fr; }
+        .bento-card.featured { grid-column: span 1; flex-direction: column; }
+        .score-visual { flex: none; }
+      }
+
+      /* ── PASSPORT SECTION ── */
+      .passport-section {
+        padding: 100px 24px;
+        background: var(--sidebar);
+        text-align: center;
+        position: relative; overflow: hidden;
+      }
+      .passport-section::before {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: url('/bg_home.png');
+        background-size: 480px auto;
+        background-repeat: repeat;
+        opacity: 0.035;
+        pointer-events: none;
+      }
+      .passport-section .section-label { color: var(--orange); }
+      .passport-section .section-title { color: white; }
+      .passport-section .section-sub { color: rgba(255,255,255,0.45); max-width: 440px; margin-left: auto; margin-right: auto; margin-bottom: 40px; }
+      .passport-preview {
+        max-width: 300px; margin: 0 auto;
+        background: white; border-radius: 20px;
+        overflow: hidden; box-shadow: 0 28px 80px rgba(0,0,0,0.45);
+        position: relative;
+      }
+      .pp-cover {
+        background: linear-gradient(160deg, #7C2D12, #EA580C);
+        padding: 22px 20px; text-align: center;
+      }
+      .pp-cover p { color: rgba(255,255,255,0.5); font-size: 9px; letter-spacing: 3px; text-transform: uppercase; }
+      .pp-cover h3 { color: white; font-size: 17px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; margin-top: 6px; }
+      .pp-body { padding: 14px 16px; }
+      .pp-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed #E5E7EB; }
+      .pp-row:last-child { border-bottom: none; }
+      .pp-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+      .pp-value { font-size: 12px; font-weight: 700; }
+
+      /* ── CTA SECTION ── */
+      .cta-section {
+        padding: 110px 24px; text-align: center;
+        background: white;
+        position: relative; overflow: hidden;
+      }
+      .cta-section::before {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: url('/bg_home.png');
+        background-size: 400px auto;
+        background-repeat: repeat;
+        opacity: 0.15;
+        pointer-events: none;
+      }
+      .cta-section h2 {
+        position: relative;
+        font-size: clamp(30px, 5vw, 52px); font-weight: 900;
+        letter-spacing: -2px; margin-bottom: 16px; line-height: 1.05;
+      }
+      .cta-section > p {
+        position: relative;
+        color: var(--muted); font-size: 17px; margin-bottom: 36px;
+        max-width: 400px; margin-left: auto; margin-right: auto; line-height: 1.6;
+      }
+      .cta-actions { position: relative; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+      /* ── PRIVACY ── */
+      .privacy-section {
+        padding: 60px 24px;
+        background: var(--canvas);
+        border-top: 1px solid var(--card-border);
+      }
+      .privacy-inner {
+        max-width: 720px; margin: 0 auto;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+      }
+      .privacy-card {
+        background: white; border: 1px solid var(--card-border);
+        border-radius: 20px; padding: 24px;
+      }
+      .privacy-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+      .privacy-card p { font-size: 13px; color: var(--muted); line-height: 1.65; }
+      .privacy-icon {
+        width: 40px; height: 40px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 14px;
+        background: rgba(249,115,22,0.08);
+      }
+      @media (max-width: 640px) {
+        .privacy-inner { grid-template-columns: 1fr; }
+      }
+
+      /* ── FOOTER ── */
+      footer {
+        background: var(--sidebar);
+        padding: 28px 32px;
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+      }
+      .footer-logo { display: flex; align-items: center; text-decoration: none; }
+      footer p { color: rgba(255,255,255,0.35); font-size: 13px; }
+      footer a { color: rgba(255,255,255,0.5); text-decoration: none; }
+      footer a:hover { color: var(--orange); }
+
+      @media (max-width: 640px) {
+        nav { padding: 0 16px; }
+        .hero { padding-left: 16px; padding-right: 16px; }
+        footer { justify-content: center; text-align: center; }
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- ── NAV ── -->
+    <nav>
+      <a href="/" class="nav-logo">
+        <img src="/Vivra.svg" alt="Vivra" style="height:72px;width:auto;" />
+      </a>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <a href="/login" style="font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">Entrar</a>
+        <a href="/register" class="nav-cta">Tengo invitacion</a>
+      </div>
+    </nav>
+
+    <!-- ── HERO ── -->
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-text">
+          <div class="hero-badge">🐾 Solo por invitacion</div>
+          <h1>Todo lo que necesita tu <span>mascota</span>, en un solo lugar</h1>
+          <p>Vacunas, peso, veterinario, actividad y pasaporte de viaje. Acceso exclusivo por invitacion de otro dueno de perro.</p>
+          <div class="hero-actions">
+            <a href="/register" class="btn-primary">Tengo invitacion</a>
+            <a href="#features" class="btn-secondary">Ver funciones</a>
+          </div>
+        </div>
+        <div class="hero-mockup">
+          <img src="/mockup-iphone.png" alt="Vivra en iPhone — dashboard de tu mascota" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FEATURES ── -->
+    <section class="features-section" id="features">
+      <div class="section-inner">
+        <span class="section-label">Un puntaje que lo tiene todo</span>
+        <h2 class="section-title">Dale seguimiento<br/>a lo que importa</h2>
+        <p class="section-sub">Cada función diseñada para que nunca pierdas de vista la salud y el bienestar de tu perro.</p>
+
+        <div class="features-bento">
+
+          <!-- Featured: Score de Bienestar -->
+          <div class="bento-card featured">
+            <div class="score-preview">
+              <div class="bento-icon" style="background:rgba(249,115,22,0.15);">🧡</div>
+              <h3>Indicador de Bienestar</h3>
+              <p>Un número del 0 al 100 que resume la salud de tu perro en 5 pilares: nutrición, vacunas, veterinario, peso y actividad.</p>
+            </div>
+            <div class="score-visual">
+              <div class="score-circle">
+                <span class="score-circle-n">82</span>
+                <span class="score-circle-l">Score</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-name">Nutrición</span>
+                <div class="score-bar-bg"><div class="score-bar-fill" style="width:90%"></div></div>
+                <span class="score-bar-val">18</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-name">Vacunas</span>
+                <div class="score-bar-bg"><div class="score-bar-fill" style="width:85%"></div></div>
+                <span class="score-bar-val">17</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-name">Veterinario</span>
+                <div class="score-bar-bg"><div class="score-bar-fill" style="width:75%"></div></div>
+                <span class="score-bar-val">15</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-name">Peso</span>
+                <div class="score-bar-bg"><div class="score-bar-fill" style="width:80%"></div></div>
+                <span class="score-bar-val">16</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-name">Actividad</span>
+                <div class="score-bar-bg"><div class="score-bar-fill" style="width:80%"></div></div>
+                <span class="score-bar-val">16</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Historial de Vacunas -->
+          <div class="bento-card">
+            <div class="bento-icon" style="background:rgba(249,115,22,0.10);">💉</div>
+            <h3>Historial de Vacunas</h3>
+            <p>Registra cada vacuna con insignias visuales. Nunca olvides la próxima dosis.</p>
+          </div>
+
+          <!-- Control de Peso -->
+          <div class="bento-card">
+            <div class="bento-icon" style="background:rgba(59,130,246,0.10);">⚖️</div>
+            <h3>Control de Peso</h3>
+            <p>Gráfica de evolución con tendencias. Detecta cambios importantes a tiempo.</p>
+          </div>
+
+          <!-- Historial Veterinario -->
+          <div class="bento-card">
+            <div class="bento-icon" style="background:rgba(99,102,241,0.10);">🏥</div>
+            <h3>Historial Veterinario</h3>
+            <p>Registro completo de cada visita con diagnósticos, tratamientos y costos.</p>
+          </div>
+
+          <!-- Alimentación -->
+          <div class="bento-card">
+            <div class="bento-icon" style="background:rgba(249,115,22,0.10);">🍖</div>
+            <h3>Alimentación</h3>
+            <p>Lleva control de la dieta e inventario de comida. Sabe cuándo se acaba la bolsa.</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PASSPORT ── -->
+    <section class="passport-section">
+      <div style="position:relative;">
+        <span class="section-label" style="display:block;text-align:center;">Guía de viajes oficial</span>
+        <h2 class="section-title" style="text-align:center;">Requisitos y pasaporte para viajes</h2>
+        <p class="section-sub">Ten siempre claro los documentos necesarios a la hora de viajar. Genera un pasaporte digital con toda la información de tu peludo.</p>
+        <div class="passport-preview">
+          <div class="pp-cover">
+            <p>🐾 Pet Passport</p>
+            <h3>Pasaporte</h3>
+          </div>
+          <div class="pp-body">
+            <div class="pp-row">
+              <span class="pp-label">Nombre</span>
+              <span class="pp-value">Luna</span>
+            </div>
+            <div class="pp-row">
+              <span class="pp-label">Raza</span>
+              <span class="pp-value">Golden Retriever</span>
+            </div>
+            <div class="pp-row">
+              <span class="pp-label">Microchip</span>
+              <span class="pp-value">985112345678</span>
+            </div>
+            <div class="pp-row">
+              <span class="pp-label">Vacunas</span>
+              <span class="pp-value">Rabia · Parvo · Moquillo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ── -->
+    <section class="cta-section">
+      <h2>Acceso solo<br/>por invitacion</h2>
+      <p>Pide tu codigo a alguien que ya use Vivra. Cada dueno de perro puede invitar a otros.</p>
+      <div class="cta-actions">
+        <a href="/register" class="btn-primary">Tengo una invitacion</a>
+        <a href="/login" class="btn-secondary">Ya tengo cuenta</a>
+      </div>
+    </section>
+
+    <!-- ── WHY VIVRA ── -->
+    <section class="privacy-section">
+      <div style="text-align:center;margin-bottom:36px;">
+        <span class="section-label" style="display:block;">Simple y confiable</span>
+        <h2 style="font-size:clamp(22px,3.5vw,32px);font-weight:900;letter-spacing:-1px;">Todo en un solo lugar</h2>
+      </div>
+      <div class="privacy-inner">
+        <div class="privacy-card">
+          <div class="privacy-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <h4>Siempre disponible</h4>
+          <p>Accede desde cualquier dispositivo. Tu info siempre actualizada y lista cuando la necesites.</p>
+        </div>
+        <div class="privacy-card">
+          <div class="privacy-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h4>Tu info es privada</h4>
+          <p>Solo tú accedes a los datos de tu mascota. Conexión segura y sin publicidad.</p>
+        </div>
+        <div class="privacy-card">
+          <div class="privacy-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h4>Fácil de usar</h4>
+          <p>Diseñado para ser rápido e intuitivo. Registra todo en segundos, sin complicaciones.</p>
+        </div>
+        <div class="privacy-card">
+          <div class="privacy-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h4>Comparte con el vet</h4>
+          <p>Lleva el historial completo a cada consulta. Tu veterinario va a agradecer tener todo organizado.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── FOOTER ── -->
+    <footer>
+      <a href="/" class="footer-logo">
+        <img src="/Vivra-white.svg" alt="Vivra" style="height:28px;width:auto;" />
+      </a>
+      <p>© 2026 Vivra · Hecho con ❤️ en Panamá · <a href="/privacy">Privacidad</a> · <a href="/terms">Términos</a> · <a href="/login">Iniciar sesión</a></p>
+    </footer>
+
+  </body>
+</html>

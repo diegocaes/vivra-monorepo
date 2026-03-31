@@ -1,0 +1,89 @@
+---
+// Toast notification system
+// Shows a floating toast when URL has ?saved=1, ?deleted=1, ?error=1
+// Usage: drop <Toast /> in any page — it reads the URL params automatically
+---
+
+<!-- Toast container — rendered empty, filled by JS -->
+<div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none" aria-live="polite"></div>
+
+<script>
+  type ToastType = 'success' | 'error' | 'info';
+
+  function showToast(message: string, type: ToastType = 'success', duration = 3000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const icons: Record<ToastType, string> = {
+      success: `<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+      error: `<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+      info: `<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>`,
+    };
+
+    const colors: Record<ToastType, string> = {
+      success: 'bg-accent text-white',
+      error: 'bg-red-500 text-white',
+      info: 'bg-sidebar text-white',
+    };
+
+    const toast = document.createElement('div');
+    toast.className = [
+      'pointer-events-auto flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm font-medium shadow-xl',
+      'transition-all duration-300 opacity-0 translate-y-2 scale-95',
+      colors[type],
+    ].join(' ');
+    const iconHtml = icons[type];
+    const span = document.createElement('span');
+    span.textContent = message;
+    toast.innerHTML = iconHtml;
+    toast.appendChild(span);
+
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        toast.classList.remove('opacity-0', 'translate-y-2', 'scale-95');
+        toast.classList.add('opacity-100', 'translate-y-0', 'scale-100');
+      });
+    });
+
+    // Animate out and remove
+    setTimeout(() => {
+      toast.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
+      toast.classList.add('opacity-0', 'translate-y-2', 'scale-95');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+
+  // Expose globally so pages can call window.showToast(...)
+  (window as any).showToast = showToast;
+
+  // Auto-detect URL params on page load (and after navigation)
+  function checkUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.has('saved')) {
+      showToast('Guardado correctamente', 'success');
+      // Clean URL without reloading
+      const url = new URL(window.location.href);
+      url.searchParams.delete('saved');
+      history.replaceState({}, '', url);
+    }
+    if (params.has('deleted')) {
+      showToast('Eliminado', 'info');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('deleted');
+      history.replaceState({}, '', url);
+    }
+    if (params.has('toast_error')) {
+      showToast(params.get('toast_error') || 'Ocurrió un error', 'error');
+      const url = new URL(window.location.href);
+      url.searchParams.delete('toast_error');
+      history.replaceState({}, '', url);
+    }
+  }
+
+  // astro:page-load fires on initial load AND after View Transitions navigation
+  document.addEventListener('astro:page-load', checkUrlParams);
+</script>

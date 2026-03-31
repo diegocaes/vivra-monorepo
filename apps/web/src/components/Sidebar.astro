@@ -1,0 +1,429 @@
+---
+import type { Pet } from '../types/supabase';
+
+interface Props {
+  activePet: Pet | null;
+  pets: Pet[];
+  unreadCount?: number;
+}
+
+const { activePet, pets, unreadCount = 0 } = Astro.props;
+const currentPath = Astro.url.pathname;
+
+const navItems = [
+  { href: '/dashboard',     match: '/dashboard',    label: 'Inicio',     icon: 'home' },
+  { href: '/salud',         match: '/salud',        label: 'Salud',      icon: 'heart' },
+  { href: '/alimentacion',  match: '/alimentacion', label: 'Comida',     icon: 'food' },
+  { href: '/actividad',     match: '/actividad',    label: 'Actividad',  icon: 'activity' },
+  { href: '/calendario',    match: '/calendario',   label: 'Calendario', icon: 'calendar' },
+];
+
+function isActive(match: string): boolean {
+  if (match === '/dashboard') return currentPath === '/dashboard';
+  return currentPath.startsWith(match);
+}
+
+// Avatar: first letter of pet name, or photo
+function petInitial(name: string) {
+  return name.charAt(0).toUpperCase();
+}
+---
+
+<!-- ─── PET SWITCHER SNIPPET (reused in desktop + mobile) ─────── -->
+<!-- Defined as a fragment rendered twice below -->
+
+<!-- ─── DESKTOP SIDEBAR ─────────────────────────────── -->
+<aside class="no-print hidden lg:flex flex-col fixed top-0 left-0 h-full w-55 bg-sidebar z-40">
+  <!-- Logo -->
+  <a href="/" class="flex items-center px-5 py-4 border-b border-white/5 hover:opacity-80 transition-opacity">
+    <img src="/Vivra-white.svg" alt="Vivra" style="height:80px;width:auto;" />
+  </a>
+
+  <!-- Pet switcher -->
+  {activePet && (
+    <div class="px-3 pt-3 pb-1">
+      <div class="relative" id="pet-switcher-desktop">
+        <!-- Trigger -->
+        <button
+          type="button"
+          id="pet-trigger-desktop"
+          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+          aria-expanded="false"
+        >
+          {activePet.photo_url ? (
+            <img src={activePet.photo_url} alt={activePet.name} class="h-7 w-7 rounded-full object-cover shrink-0" />
+          ) : (
+            <div class="h-7 w-7 rounded-full bg-accent/30 flex items-center justify-center shrink-0">
+              <span class="text-xs font-bold text-accent">{petInitial(activePet.name)}</span>
+            </div>
+          )}
+          <span class="flex-1 text-sm font-semibold text-white truncate">{activePet.name}</span>
+          <svg class="h-3.5 w-3.5 text-white/40 shrink-0 transition-transform" id="pet-chevron-desktop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+
+        <!-- Dropdown -->
+        <div id="pet-dropdown-desktop" class="hidden absolute top-full left-0 right-0 mt-1 rounded-xl bg-sidebar border border-white/10 shadow-xl overflow-hidden z-50">
+          {pets.map(p => (
+            <form method="POST" action="/api/pets/switch">
+              <input type="hidden" name="pet_id" value={p.id} />
+              <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors text-left">
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt={p.name} class="h-6 w-6 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div class="h-6 w-6 rounded-full bg-accent/30 flex items-center justify-center shrink-0">
+                    <span class="text-xs font-bold text-accent">{petInitial(p.name)}</span>
+                  </div>
+                )}
+                <span class="flex-1 text-sm text-white/80 truncate">{p.name}</span>
+                {p.id === activePet.id && (
+                  <svg class="h-3.5 w-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                )}
+              </button>
+            </form>
+          ))}
+          <div class="border-t border-white/5">
+            <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors">
+              <div class="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                <svg class="h-3.5 w-3.5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              </div>
+              <span class="text-sm text-white/50">Agregar mascota</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 py-3 space-y-0.5">
+    {navItems.map((item) => (
+      <a href={item.href} class:list={['sidebar-link', isActive(item.match) && 'active']} data-astro-prefetch="load">
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-icon={item.icon}>
+          <use href={`#sbi-${item.icon}`} />
+        </svg>
+        <span>{item.label}</span>
+      </a>
+    ))}
+  </nav>
+
+  <!-- Notification bell -->
+  <div class="px-3 pb-1">
+    <a href="/notificaciones" class:list={['sidebar-link', isActive('/notificaciones') && 'active']}>
+      <div class="relative">
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+        </svg>
+        {unreadCount > 0 && (
+          <span class="absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>
+        )}
+      </div>
+      <span>Notificaciones</span>
+    </a>
+  </div>
+
+  <!-- Bottom: profile + referidos + help -->
+  <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
+    <a href="/perfil" class:list={['sidebar-link', isActive('/perfil') && 'active']}>
+      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+      <span>Perfil</span>
+    </a>
+    <a href="/referidos" class:list={['sidebar-link', isActive('/referidos') && 'active']}>
+      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <use href="#sbi-gift" />
+      </svg>
+      <span>Referidos</span>
+    </a>
+    <a href="/faq" class:list={['sidebar-link', isActive('/faq') && 'active']}>
+      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
+      </svg>
+      <span>Ayuda</span>
+    </a>
+    <a href="/perfil#feedback" class="sidebar-link go-feedback">
+      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span>Sugerencias</span>
+    </a>
+  </div>
+</aside>
+
+<!-- ─── MOBILE TOP BAR ─────────────────────────────── -->
+<header class="no-print lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-sidebar border-b border-white/5">
+  <a href="/" class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+    <img src="/Vivra-white.svg" alt="Vivra" class="h-8 w-auto" />
+  </a>
+  <div class="flex items-center gap-1">
+    <a
+      href="/notificaciones"
+      class="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+      aria-label="Notificaciones"
+    >
+      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+      </svg>
+      {unreadCount > 0 && (
+        <span class="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>
+      )}
+    </a>
+  <button
+    id="mobile-menu-btn"
+    type="button"
+    class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-sidebar-hover hover:text-white transition-colors"
+    aria-label="Menú"
+  >
+    <svg id="menu-icon-open" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    <svg id="menu-icon-close" class="h-5 w-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  </div>
+</header>
+
+<!-- ─── MOBILE DRAWER ─────────────────────────────── -->
+<div id="mobile-overlay" class="lg:hidden fixed inset-0 z-50" style="display:none">
+  <!-- Backdrop -->
+  <div id="mobile-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+
+  <!-- Drawer -->
+  <aside class="absolute top-0 left-0 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 ease-out" id="mobile-drawer" style="transform:translateX(-100%)">
+    <!-- Logo -->
+    <div class="flex items-center justify-between px-5 py-5 border-b border-white/5">
+      <div class="flex items-center">
+        <img src="/Vivra-white.svg" alt="Vivra" style="height:80px;width:auto;" />
+      </div>
+    </div>
+
+    <!-- Pet switcher mobile -->
+    {activePet && (
+      <div class="px-3 pt-3 pb-1">
+        <div class="relative" id="pet-switcher-mobile">
+          <button
+            type="button"
+            id="pet-trigger-mobile"
+            class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+            aria-expanded="false"
+          >
+            {activePet.photo_url ? (
+              <img src={activePet.photo_url} alt={activePet.name} class="h-7 w-7 rounded-full object-cover shrink-0" />
+            ) : (
+              <div class="h-7 w-7 rounded-full bg-accent/30 flex items-center justify-center shrink-0">
+                <span class="text-xs font-bold text-accent">{petInitial(activePet.name)}</span>
+              </div>
+            )}
+            <span class="flex-1 text-sm font-semibold text-white truncate">{activePet.name}</span>
+            <svg class="h-3.5 w-3.5 text-white/40 shrink-0 transition-transform" id="pet-chevron-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+
+          <div id="pet-dropdown-mobile" class="hidden mt-1 rounded-xl bg-sidebar border border-white/10 overflow-hidden">
+            {pets.map(p => (
+              <form method="POST" action="/api/pets/switch">
+                <input type="hidden" name="pet_id" value={p.id} />
+                <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors text-left">
+                  {p.photo_url ? (
+                    <img src={p.photo_url} alt={p.name} class="h-6 w-6 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div class="h-6 w-6 rounded-full bg-accent/30 flex items-center justify-center shrink-0">
+                      <span class="text-xs font-bold text-accent">{petInitial(p.name)}</span>
+                    </div>
+                  )}
+                  <span class="flex-1 text-sm text-white/80 truncate">{p.name}</span>
+                  {p.id === activePet.id && (
+                    <svg class="h-3.5 w-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                  )}
+                </button>
+              </form>
+            ))}
+            <div class="border-t border-white/5">
+              <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors">
+                <div class="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                  <svg class="h-3.5 w-3.5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                </div>
+                <span class="text-sm text-white/50">Agregar mascota</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-3 space-y-0.5">
+      {navItems.map((item) => (
+        <a href={item.href} class:list={['sidebar-link', isActive(item.match) && 'active']}>
+          <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <use href={`#sbi-${item.icon}`} />
+          </svg>
+          <span>{item.label}</span>
+        </a>
+      ))}
+    </nav>
+
+    <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
+      <a href="/perfil" class:list={['sidebar-link', isActive('/perfil') && 'active']}>
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+        </svg>
+        <span>Perfil</span>
+      </a>
+      <a href="/referidos" class:list={['sidebar-link', isActive('/referidos') && 'active']}>
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <use href="#sbi-gift" />
+        </svg>
+        <span>Referidos</span>
+      </a>
+      <a href="/faq" class:list={['sidebar-link', isActive('/faq') && 'active']}>
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
+        </svg>
+        <span>Ayuda</span>
+      </a>
+      <a href="/perfil#feedback" class="sidebar-link go-feedback">
+        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Sugerencias</span>
+      </a>
+    </div>
+  </aside>
+</div>
+
+<!-- ─── SVG ICON SPRITES ─────────────────────────────── -->
+<svg class="hidden" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="sbi-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </symbol>
+  <symbol id="sbi-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19.5 12.572l-7.5 7.428l-7.5-7.428a5 5 0 1 1 7.5-6.566a5 5 0 1 1 7.5 6.572"/>
+    <path d="M3 12h4l2-3l4 6l2-3h4"/>
+  </symbol>
+  <symbol id="sbi-food" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3v7"/>
+  </symbol>
+  <symbol id="sbi-plane" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+  </symbol>
+  <symbol id="sbi-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+    <circle cx="12" cy="13" r="3"/>
+  </symbol>
+  <symbol id="sbi-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+    <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"/>
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"/>
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+  </symbol>
+  <symbol id="sbi-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>
+  </symbol>
+  <symbol id="sbi-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+  </symbol>
+  <symbol id="sbi-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/>
+    <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>
+  </symbol>
+</svg>
+
+<script>
+  function setupMobileMenu() {
+    const btn = document.getElementById('mobile-menu-btn');
+    const overlay = document.getElementById('mobile-overlay');
+    const drawer = document.getElementById('mobile-drawer');
+    const backdrop = document.getElementById('mobile-backdrop');
+    const iconOpen = document.getElementById('menu-icon-open');
+    const iconClose = document.getElementById('menu-icon-close');
+
+    if (!btn || !overlay || !drawer) return;
+
+    function open() {
+      overlay!.style.display = 'block';
+      requestAnimationFrame(() => {
+        drawer!.style.transform = 'translateX(0)';
+      });
+      iconOpen!.classList.add('hidden');
+      iconClose!.classList.remove('hidden');
+    }
+
+    function close() {
+      drawer!.style.transform = 'translateX(-100%)';
+      setTimeout(() => { overlay!.style.display = 'none'; }, 300);
+      iconOpen!.classList.remove('hidden');
+      iconClose!.classList.add('hidden');
+    }
+
+    btn.addEventListener('click', () => {
+      overlay!.style.display === 'none' ? open() : close();
+    });
+
+    backdrop?.addEventListener('click', close);
+
+    // Close on nav link click
+    overlay?.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', close);
+    });
+
+    // Special handling for feedback links with hash fragments
+    overlay?.querySelectorAll('.go-feedback').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        // Navigate without View Transitions for hash fragment support
+        window.location.href = '/perfil#feedback';
+      });
+    });
+  }
+
+  // Also handle desktop sidebar feedback links
+  document.querySelectorAll('aside.no-print .go-feedback').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.location.href = '/perfil#feedback';
+    });
+  });
+
+  function setupPetSwitcher(triggerId: string, dropdownId: string, chevronId: string, containerId: string) {
+    const trigger = document.getElementById(triggerId) as HTMLButtonElement | null;
+    const dropdown = document.getElementById(dropdownId);
+    const chevron = document.getElementById(chevronId);
+    const container = document.getElementById(containerId);
+    if (!trigger || !dropdown) return;
+
+    // Remove old listener by cloning the trigger node
+    const newTrigger = trigger.cloneNode(true) as HTMLButtonElement;
+    trigger.parentNode!.replaceChild(newTrigger, trigger);
+
+    function closeDropdown() {
+      dropdown!.classList.add('hidden');
+      chevron?.classList.remove('rotate-180');
+      newTrigger.setAttribute('aria-expanded', 'false');
+    }
+
+    newTrigger.addEventListener('click', () => {
+      const isOpen = !dropdown.classList.contains('hidden');
+      if (isOpen) {
+        closeDropdown();
+      } else {
+        dropdown.classList.remove('hidden');
+        chevron?.classList.add('rotate-180');
+        newTrigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    // Close when clicking outside the switcher container
+    document.addEventListener('click', (e) => {
+      if (container && !container.contains(e.target as Node)) {
+        closeDropdown();
+      }
+    }, { capture: false });
+  }
+
+  function setup() {
+    setupMobileMenu();
+    setupPetSwitcher('pet-trigger-desktop', 'pet-dropdown-desktop', 'pet-chevron-desktop', 'pet-switcher-desktop');
+    setupPetSwitcher('pet-trigger-mobile', 'pet-dropdown-mobile', 'pet-chevron-mobile', 'pet-switcher-mobile');
+  }
+
+  document.addEventListener('astro:page-load', setup);
+</script>

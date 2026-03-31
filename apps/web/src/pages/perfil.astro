@@ -1,0 +1,769 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import Card from '../components/ui/Card.astro';
+import Input from '../components/ui/Input.astro';
+import Button from '../components/ui/Button.astro';
+import SectionHeader from '../components/ui/SectionHeader.astro';
+import { DOG_BREEDS } from '@vivra/shared';
+import { createSupabaseAdminClient } from '../lib/supabase';
+import { getActivePet } from '../lib/pet';
+import { uploadPetPhoto } from '../lib/storage';
+
+const { supabase, user, activePetId } = Astro.locals;
+const isNew = Astro.url.searchParams.get('new') === '1';
+const savedParam = Astro.url.searchParams.get('saved');
+const errorParam = Astro.url.searchParams.get('error');
+// Google/OAuth users don't have a password — check identities
+const hasPasswordLogin = user.identities?.some((i: { provider: string }) => i.provider === 'email') ?? true;
+
+// Extract first name for personalized greeting
+const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
+const firstName = fullName.split(' ')[0] || user.email?.split('@')[0] || 'bienvenido';
+
+// Get existing pet + all pets (to decide delete behavior)
+const { pet, pets } = await getActivePet(supabase, user.id, activePetId);
+const hasMultiplePets = pets.length > 1;
+
+// Profile completion badge logic
+const profileFields = pet ? [
+  !!pet.name,
+  !!pet.breed,
+  !!pet.birth_date,
+  !!pet.gender,
+  !!pet.photo_url,
+  !!pet.weight_kg,
+  !!pet.chip_id,
+  !!pet.color,
+] : [];
+const completedFields = profileFields.filter(Boolean).length;
+const totalFields = profileFields.length;
+const isProfileComplete = pet && completedFields === totalFields;
+const completionPct = pet ? Math.round((completedFields / totalFields) * 100) : 0;
+
+// Owner profile
+const { data: ownerProfile } = await supabase
+  .from('owner_profiles')
+  .select('*')
+  .eq('user_id', user.id)
+  .maybeSingle();
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('_action') as string;
+
+  if (action === 'save_owner') {
+    const ownerData = {
+      user_id: user.id,
+      first_name: (formData.get('owner_first_name') as string)?.trim() || null,
+      last_name: (formData.get('owner_last_name') as string)?.trim() || null,
+      phone: (formData.get('owner_phone') as string)?.trim() || null,
+      birth_date: (formData.get('owner_birth_date') as string) || null,
+      gender: (formData.get('owner_gender') as string) || null,
+    };
+    if (ownerProfile) {
+      await supabase.from('owner_profiles').update(ownerData).eq('user_id', user.id);
+    } else {
+      await supabase.from('owner_profiles').insert(ownerData);
+    }
+    return Astro.redirect('/perfil?saved=owner');
+  }
+
+  if (action === 'logout') {
+    await supabase.auth.signOut();
+    return Astro.redirect('/login');
+  }
+
+  if (action === 'change_password') {
+    const newPassword = formData.get('new_password') as string;
+    const confirmPassword = formData.get('confirm_password') as string;
+    if (!newPassword || newPassword.length < 8) {
+      return Astro.redirect('/perfil?error=password_short');
+    }
+    if (newPassword !== confirmPassword) {
+      return Astro.redirect('/perfil?error=password_mismatch');
+    }
+    const { error: pwError } = await supabase.auth.updateUser({ password: newPassword });
+    if (pwError) {
+      return Astro.redirect('/perfil?error=password_failed');
+    }
+    return Astro.redirect('/perfil?saved=password');
+  }
+
+  if (action === 'delete_account') {
+    if (hasMultiplePets && pet) {
+      // Only delete this pet — keep the account and switch to another pet
+      await supabase.from('pets').delete().eq('id', pet.id);
+      const remaining = pets.filter(p => p.id !== pet.id);
+      const nextPet = remaining[0];
+      Astro.cookies.set('active_pet_id', nextPet.id, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 365,
+        secure: import.meta.env.PROD,
+      });
+      return Astro.redirect('/dashboard?deleted=1');
+    } else {
+      // Last pet — delete everything
+      if (pet) {
+        await supabase.from('pets').delete().eq('id', pet.id);
+      }
+      try {
+        const adminClient = createSupabaseAdminClient();
+        await adminClient.auth.admin.deleteUser(user.id);
+      } catch (_e) {
+        // If admin client unavailable, just sign out
+      }
+      await supabase.auth.signOut();
+      return Astro.redirect('/');
+    }
+  }
+
+  // Resolve breed: if "Other" is selected, use the text input
+  const breedSelect = formData.get('breed') as string;
+  const breedOther = formData.get('breed_other') as string;
+  const breed = breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null;
+
+  const newWeight = formData.get('weight_kg') ? Number(formData.get('weight_kg')) : null;
+
+  const rawName = (formData.get('name') as string)?.trim().slice(0, 100);
+  if (!rawName) {
+    return Astro.redirect('/perfil?error=name_required');
+  }
+
+  const petData = {
+    user_id: user.id,
+    name: rawName,
+    breed: breed?.slice(0, 100) || null,
+    birth_date: (formData.get('birth_date') as string) || null,
+    gender: (formData.get('gender') as string) || null,
+    weight_kg: newWeight,
+    chip_id: ((formData.get('chip_id') as string)?.trim().slice(0, 50)) || null,
+    color: ((formData.get('color') as string)?.trim().slice(0, 50)) || null,
+    theme_color: (formData.get('theme_color') as string) || 'orange',
+    birth_city: (formData.get('birth_city') as string)?.trim() || null,
+    birth_country: (formData.get('birth_country') as string)?.trim() || null,
+    support_type: (formData.get('support_type') as string) || null,
+  };
+
+  // Handle photo upload
+  const uploaded = await uploadPetPhoto(formData.get('photo') as File, user.id, supabase, 'pet-profile');
+  const photo_url = uploaded ?? pet?.photo_url ?? null;
+
+  let petId = pet?.id;
+
+  if (pet) {
+    await supabase.from('pets').update({ ...petData, photo_url }).eq('id', pet.id);
+  } else {
+    const { data: newPet } = await supabase.from('pets').insert({ ...petData, photo_url }).select('id').single();
+    petId = newPet?.id;
+  }
+
+  // Auto-log weight record if weight changed
+  if (newWeight && petId) {
+    const weightChanged = !pet || pet.weight_kg !== newWeight;
+    if (weightChanged) {
+      await supabase.from('weight_records').insert({
+        pet_id: petId,
+        weight_kg: newWeight,
+        date: new Date().toISOString().split('T')[0],
+      });
+    }
+  }
+
+  return Astro.redirect('/dashboard?saved=1');
+}
+
+// Check if current breed is in the list (for "Other" logic)
+const breedInList = pet?.breed ? DOG_BREEDS.includes(pet.breed as typeof DOG_BREEDS[number]) : false;
+const isOtherBreed = pet?.breed && !breedInList;
+---
+
+<MainLayout title={isNew ? 'Registra a tu mascota' : 'Perfil'}>
+  {isNew ? (
+    <div class="mb-6 animate-fade-up">
+      <!-- Hero welcome card -->
+      <div class="relative overflow-hidden rounded-3xl px-6 py-8 text-center text-white shadow-xl mb-4" style="background-color: var(--color-accent);">
+        <!-- Decorative circles -->
+        <div class="absolute -top-8 -right-8 h-32 w-32 rounded-full bg-white/5"></div>
+        <div class="absolute -bottom-6 -left-6 h-24 w-24 rounded-full bg-white/5"></div>
+
+        <div class="relative">
+          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl shadow-inner">
+            🐾
+          </div>
+          <p class="text-2xl font-bold tracking-tight">
+            ¡Hola, {firstName}!
+          </p>
+          <p class="mt-2 text-sm text-white/70 leading-relaxed max-w-xs mx-auto">
+            Vamos a registrar a tu mascota. Solo toma un minuto y tendrás su pasaporte digital listo.
+          </p>
+        </div>
+
+        <!-- Steps -->
+        <div class="relative mt-6 flex items-center justify-center gap-2 text-xs text-white/60">
+          <span class="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white font-bold text-xs">1</span>
+          <span>Datos</span>
+          <span class="h-px w-4 bg-white/20"></span>
+          <span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 font-bold text-xs">2</span>
+          <span>Foto</span>
+          <span class="h-px w-4 bg-white/20"></span>
+          <span class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 font-bold text-xs">3</span>
+          <span>Vacunas</span>
+        </div>
+      </div>
+    </div>
+  ) : (
+    <SectionHeader title="Perfil" subtitle="Datos de tu mascota" />
+  )}
+
+  <!-- Profile completion badge (top) -->
+  {pet && (
+    <div class="mb-4 animate-fade-up">
+      {isProfileComplete ? (
+        <div class="rounded-2xl border border-accent/30 bg-accent/5 px-5 py-4 flex items-center gap-4">
+          <img src="/badges/perfil-completo.png" alt="Perfil completo" class="h-14 w-14 shrink-0 object-contain" />
+          <div>
+            <p class="text-sm font-bold text-accent-dark">¡Perfil completo!</p>
+            <p class="text-xs text-muted mt-0.5">El pasaporte de {pet.name} tiene toda la información.</p>
+          </div>
+        </div>
+      ) : (
+        <div class="rounded-2xl border border-card-border bg-white px-5 py-4">
+          <div class="flex items-center gap-4 mb-3">
+            <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-canvas text-2xl">
+              🔒
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-bold text-ink">Perfil completo</p>
+              <p class="text-xs text-muted mt-0.5">{completedFields} de {totalFields} campos completados</p>
+              <div class="mt-2 h-1.5 w-full rounded-full bg-card-border overflow-hidden">
+                <div class="h-full bg-accent rounded-full transition-all duration-500" style={`width:${completionPct}%`}></div>
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-muted">Completa todos los datos del perfil para desbloquear esta insignia.</p>
+        </div>
+      )}
+    </div>
+  )}
+
+  <Card variant="elevated" class="animate-fade-up animate-fade-up-delay-1">
+    <form method="POST" enctype="multipart/form-data" class="space-y-6">
+      <!-- Photo -->
+      <div class="flex flex-col items-center gap-3">
+        <div class="relative">
+          <img
+            id="photo-preview"
+            src={pet?.photo_url || '/icons/default-pet.svg'}
+            alt="Foto de mascota"
+            class="h-28 w-28 rounded-3xl object-cover border-2 border-card-border shadow-md"
+          />
+          <label class="absolute -bottom-2 -right-2 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-accent text-white shadow-lg transition-all hover:bg-accent-dark active:scale-95">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            <input type="file" name="photo" accept="image/*" class="hidden" id="photo-input" />
+          </label>
+        </div>
+        <p class="text-xs text-gray-400">Toca para cambiar la foto</p>
+      </div>
+
+      <!-- Section: Datos Básicos -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+          Datos Básicos
+        </div>
+
+        <Input label="Nombre" name="name" value={pet?.name || ''} required placeholder="Ej: Luna" />
+
+        <!-- Breed Dropdown -->
+        <div>
+          <label class="block text-sm font-medium text-ink mb-1.5">Raza</label>
+          <select
+            name="breed"
+            id="breed-select"
+            class="field-input"
+          >
+            <option value="">Seleccionar raza</option>
+            {DOG_BREEDS.map((breed) => (
+              <option value={breed} selected={pet?.breed === breed || (isOtherBreed && breed === 'Other')}>
+                {breed}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            name="breed_other"
+            id="breed-other-input"
+            placeholder="Escribe la raza"
+            value={isOtherBreed ? pet?.breed : ''}
+            class:list={[
+              'mt-2 field-input',
+              { hidden: !isOtherBreed },
+            ]}
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Fecha de nacimiento" name="birth_date" type="date" value={pet?.birth_date || ''} />
+          <div>
+            <label class="block text-sm font-medium text-ink mb-1.5">Género</label>
+            <select
+              name="gender"
+              class="field-input"
+            >
+              <option value="">Seleccionar</option>
+              <option value="macho" selected={pet?.gender === 'macho'}>Macho ♂️</option>
+              <option value="hembra" selected={pet?.gender === 'hembra'}>Hembra ♀️</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Ciudad de nacimiento" name="birth_city" value={pet?.birth_city || ''} placeholder="Ej: Bogotá" />
+          <Input label="País de nacimiento" name="birth_country" value={pet?.birth_country || ''} placeholder="Ej: Colombia" />
+        </div>
+      </div>
+
+      <hr class="border-card-border/50" />
+
+      <!-- Section: Datos Médicos -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/></svg>
+          Datos Médicos
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Peso (kg)" name="weight_kg" type="number" step="0.1" value={pet?.weight_kg?.toString() || ''} placeholder="Ej: 12.5" />
+          <Input label="Nº Microchip" name="chip_id" value={pet?.chip_id || ''} placeholder="Ej: 123456789" />
+        </div>
+        <p class="text-xs text-gray-400 -mt-2">Al cambiar el peso se guarda automáticamente en el historial</p>
+        <Input label="Color de pelaje" name="color" value={pet?.color || ''} placeholder="Ej: Dorado, Negro, Blanco..." />
+
+        <div>
+          <label class="block text-sm font-medium text-ink mb-1.5">Tipo de asistencia</label>
+          <select name="support_type" class="field-input">
+            <option value="" selected={!pet?.support_type}>No aplica</option>
+            <option value="emotional_support" selected={pet?.support_type === 'emotional_support'}>Apoyo emocional (ESA)</option>
+            <option value="service" selected={pet?.support_type === 'service'}>Perro de servicio</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Se mostrará en el pasaporte si aplica</p>
+        </div>
+      </div>
+
+      <hr class="border-card-border/50" />
+
+      <!-- Section: Color del tema -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
+          Color del perfil
+        </div>
+        <p class="text-xs text-muted -mt-2">Este color se usa en el hero card y como acento en toda la app.</p>
+        <input type="hidden" name="theme_color" id="theme-color-input" value={pet?.theme_color || 'orange'} />
+        <div class="flex gap-3 flex-wrap">
+          {[
+            { name: 'orange', hex: '#F97316', label: 'Naranja' },
+            { name: 'rose', hex: '#E85D75', label: 'Rosa' },
+            { name: 'purple', hex: '#6B4C9A', label: 'Morado' },
+            { name: 'blue', hex: '#3B6FB5', label: 'Azul' },
+            { name: 'teal', hex: '#469387', label: 'Verde' },
+            { name: 'gold', hex: '#E69739', label: 'Dorado' },
+            { name: 'yellow', hex: '#EFC65D', label: 'Amarillo' },
+            { name: 'sky', hex: '#AAD3DC', label: 'Cielo' },
+          ].map(c => (
+            <button
+              type="button"
+              class:list={[
+                'theme-color-btn flex flex-col items-center gap-1.5 rounded-xl px-3 py-2.5 transition-all active:scale-95',
+                (pet?.theme_color || 'orange') === c.name ? 'ring-2 ring-offset-2 ring-ink bg-canvas' : 'hover:bg-canvas',
+              ]}
+              data-color={c.name}
+              title={c.label}
+            >
+              <span class="h-8 w-8 rounded-full shadow-md" style={`background:${c.hex}`}></span>
+              <span class="text-xs text-muted font-medium">{c.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Button type="submit" variant="primary" size="lg" class="w-full">
+        {pet ? 'Guardar cambios' : 'Crear perfil'}
+      </Button>
+    </form>
+  </Card>
+
+  <!-- Owner Profile -->
+  <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+    <form method="POST" class="space-y-4">
+      <input type="hidden" name="_action" value="save_owner" />
+
+      <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Datos del dueño
+      </div>
+      <p class="text-xs text-muted -mt-2">Tu información personal como responsable de {pet?.name ?? 'tu mascota'}.</p>
+
+      {savedParam === 'owner' && (
+        <div class="rounded-xl bg-accent/10 border border-accent/20 px-4 py-3 text-sm text-accent-dark font-medium">
+          Datos del dueño guardados.
+        </div>
+      )}
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Input label="Nombre" name="owner_first_name" value={ownerProfile?.first_name || ''} placeholder="Tu nombre" />
+        <Input label="Apellido" name="owner_last_name" value={ownerProfile?.last_name || ''} placeholder="Tu apellido" />
+      </div>
+
+      <Input label="Teléfono" name="owner_phone" type="tel" value={ownerProfile?.phone || ''} placeholder="Ej: +57 300 1234567" />
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Input label="Fecha de nacimiento" name="owner_birth_date" type="date" value={ownerProfile?.birth_date || ''} />
+        <div>
+          <label class="block text-sm font-medium text-ink mb-1.5">Sexo</label>
+          <select name="owner_gender" class="field-input">
+            <option value="" selected={!ownerProfile?.gender}>Seleccionar</option>
+            <option value="masculino" selected={ownerProfile?.gender === 'masculino'}>Masculino</option>
+            <option value="femenino" selected={ownerProfile?.gender === 'femenino'}>Femenino</option>
+            <option value="otro" selected={ownerProfile?.gender === 'otro'}>Otro</option>
+          </select>
+        </div>
+      </div>
+
+      <Button type="submit" variant="primary" size="lg" class="w-full">
+        Guardar datos del dueño
+      </Button>
+    </form>
+  </Card>
+
+  <!-- Logout & Account Info -->
+  <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-ink">Cuenta</p>
+        <p class="text-xs text-gray-400 truncate max-w-50">{user.email}</p>
+      </div>
+      <form method="POST">
+        <input type="hidden" name="_action" value="logout" />
+        <Button type="submit" variant="danger" size="sm">
+          Cerrar sesión
+        </Button>
+      </form>
+    </div>
+
+    <hr class="border-card-border/50 my-4" />
+
+    <!-- Change password -->
+    {hasPasswordLogin && (
+      <>
+        {savedParam === 'password' && (
+          <div class="mb-3 rounded-xl bg-accent/10 border border-accent/20 px-4 py-3 text-sm text-accent-dark font-medium">
+            Contraseña actualizada correctamente.
+          </div>
+        )}
+        {errorParam === 'password_mismatch' && (
+          <div class="mb-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            Las contraseñas no coinciden.
+          </div>
+        )}
+        {errorParam === 'password_short' && (
+          <div class="mb-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            La contraseña debe tener al menos 8 caracteres.
+          </div>
+        )}
+        {errorParam === 'password_failed' && (
+          <div class="mb-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            No se pudo actualizar la contraseña. Intenta de nuevo.
+          </div>
+        )}
+
+        <div>
+          <button
+            type="button"
+            id="btn-toggle-password"
+            class="flex w-full items-center justify-between text-left"
+          >
+            <div>
+              <p class="text-sm font-medium text-ink">Cambiar contraseña</p>
+              <p class="text-xs text-gray-400 mt-0.5">Actualiza tu contraseña de acceso</p>
+            </div>
+            <svg id="icon-password-toggle" class="h-4 w-4 text-muted transition-transform shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+
+          <div id="password-form-body" class="hidden mt-4">
+            <form method="POST" class="space-y-3" id="password-form">
+              <input type="hidden" name="_action" value="change_password" />
+              <div>
+                <label class="block text-sm font-medium text-ink mb-1.5">Nueva contraseña</label>
+                <input
+                  type="password"
+                  name="new_password"
+                  required
+                  minlength="8"
+                  placeholder="Mínimo 8 caracteres"
+                  class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-ink mb-1.5">Confirmar contraseña</label>
+                <input
+                  type="password"
+                  name="confirm_password"
+                  required
+                  minlength="8"
+                  placeholder="Repite la nueva contraseña"
+                  class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </div>
+              <button
+                type="submit"
+                id="btn-save-password"
+                class="w-full rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95"
+              >
+                Guardar contraseña
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <hr class="border-card-border/50 my-4" />
+      </>
+    )}
+
+    <!-- Delete account -->
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-red-500">{hasMultiplePets ? `Eliminar a ${pet?.name}` : 'Eliminar cuenta'}</p>
+        <p class="text-xs text-gray-400 mt-0.5">{hasMultiplePets ? 'Borra esta mascota y todos sus datos' : 'Borra todos tus datos permanentemente'}</p>
+      </div>
+      <button
+        type="button"
+        id="btn-delete-account"
+        class="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-all hover:bg-red-100 active:scale-95"
+      >
+        Eliminar
+      </button>
+    </div>
+  </Card>
+
+  <!-- Delete account confirmation modal -->
+  <div id="delete-modal" class="fixed inset-0 z-50 items-end justify-center p-4 bg-black/40 backdrop-blur-sm hidden">
+    <div class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-in">
+      <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 mx-auto text-2xl">
+        ⚠️
+      </div>
+      <h3 class="text-center text-base font-bold text-ink mb-2">
+        {hasMultiplePets ? `¿Eliminar a ${pet?.name}?` : '¿Eliminar cuenta?'}
+      </h3>
+      <p class="text-center text-sm text-muted mb-6 leading-relaxed">
+        {hasMultiplePets
+          ? <>Se borrarán el perfil de <strong class="text-ink">{pet?.name}</strong>, sus vacunas, registros y todos sus datos. <strong class="text-ink">Esta acción no se puede deshacer.</strong></>
+          : <>Se borrarán tu cuenta, tu mascota, vacunas, registros y todos tus datos. <strong class="text-ink">Esta acción no se puede deshacer.</strong></>
+        }
+      </p>
+      <form method="POST" id="delete-account-form">
+        <input type="hidden" name="_action" value="delete_account" />
+        <button
+          type="submit"
+          id="btn-confirm-delete"
+          class="w-full rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-red-600 active:scale-95 mb-3"
+        >
+          {hasMultiplePets ? `Sí, eliminar a ${pet?.name}` : 'Sí, eliminar todo'}
+        </button>
+      </form>
+      <button
+        type="button"
+        id="btn-cancel-delete"
+        class="w-full rounded-xl border border-card-border px-6 py-3 text-sm font-semibold text-muted transition-all hover:bg-canvas active:scale-95"
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- Feedback / Sugerencias -->
+  <div id="feedback" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+    <button
+      type="button"
+      id="btn-open-feedback"
+      class="w-full rounded-2xl border border-card-border bg-white px-5 py-4 flex items-center gap-4 hover:border-accent/30 transition-all active:scale-[0.98]"
+    >
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10">
+        <svg class="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div class="text-left">
+        <p class="text-sm font-semibold text-ink">Enviar sugerencias</p>
+        <p class="text-xs text-muted">Ayúdanos a mejorar Vivra</p>
+      </div>
+      <svg class="h-4 w-4 text-muted/40 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+  </div>
+
+  <!-- Feedback modal -->
+  <div id="feedback-modal" class="fixed inset-0 z-50 items-end justify-center p-4 bg-black/40 backdrop-blur-sm hidden">
+    <div class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-in">
+      <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10 mx-auto">
+        <svg class="h-7 w-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <h3 class="text-center text-base font-bold text-ink mb-1">Enviar sugerencias</h3>
+      <p class="text-center text-xs text-muted mb-5 leading-relaxed">
+        Estamos lanzando la aplicación y cualquier aporte o reporte nos ayuda a crear una mejor experiencia. ¡Gracias!
+      </p>
+      <form id="feedback-form" class="space-y-3">
+        <div>
+          <select id="feedback-type" class="w-full rounded-xl border border-card-border bg-canvas px-4 py-2.5 text-sm text-ink focus:border-accent focus:outline-none transition-colors">
+            <option value="sugerencia">Sugerencia</option>
+            <option value="bug">Reportar error</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <textarea
+            id="feedback-message"
+            rows="4"
+            required
+            placeholder="Cuéntanos tu idea, reporte o comentario..."
+            class="w-full rounded-xl border border-card-border bg-canvas px-4 py-3 text-sm text-ink placeholder-muted focus:border-accent focus:outline-none transition-colors resize-none"
+          ></textarea>
+        </div>
+        <button
+          type="button"
+          id="feedback-send-btn"
+          class="w-full rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white text-center transition-all hover:bg-accent-dark active:scale-95"
+        >
+          Enviar por email
+        </button>
+      </form>
+      <button
+        type="button"
+        id="btn-cancel-feedback"
+        class="w-full rounded-xl border border-card-border px-6 py-3 text-sm font-semibold text-muted transition-all hover:bg-canvas active:scale-95 mt-3"
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="mt-8 pb-4 text-center">
+    <p class="text-xs text-muted/50">Vivra © 2026</p>
+    <div class="mt-1 flex items-center justify-center gap-3">
+      <a href="mailto:admin@vivrapet.com" class="text-xs text-muted/40 hover:text-muted transition-colors">Contactar soporte</a>
+      <span class="text-muted/30">·</span>
+      <a href="/" class="text-xs text-muted/40 hover:text-muted transition-colors">Inicio</a>
+    </div>
+  </div>
+
+  <script is:inline>
+    document.addEventListener('astro:page-load', function() {
+      // Photo preview
+      var input = document.getElementById('photo-input');
+      var preview = document.getElementById('photo-preview');
+      if (input) {
+        input.addEventListener('change', function() {
+          var file = input.files && input.files[0];
+          if (file && preview) {
+            var reader = new FileReader();
+            reader.onload = function(e) { preview.src = e.target.result; };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
+
+      // Theme color picker
+      var themeInput = document.getElementById('theme-color-input');
+      document.querySelectorAll('.theme-color-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var color = btn.dataset.color;
+          if (themeInput) themeInput.value = color;
+          document.querySelectorAll('.theme-color-btn').forEach(function(b) {
+            var isSelected = b.dataset.color === color;
+            b.classList.toggle('ring-2', isSelected);
+            b.classList.toggle('ring-offset-2', isSelected);
+            b.classList.toggle('ring-ink', isSelected);
+            b.classList.toggle('bg-canvas', isSelected);
+          });
+          document.body.setAttribute('data-pet-theme', color);
+        });
+      });
+
+      // Breed "Other" toggle
+      var select = document.getElementById('breed-select');
+      var otherInput = document.getElementById('breed-other-input');
+      function toggleOther() {
+        if (otherInput) {
+          otherInput.classList.toggle('hidden', select.value !== 'Other');
+          if (select.value !== 'Other') otherInput.value = '';
+        }
+      }
+      if (select) select.addEventListener('change', toggleOther);
+
+      // Change password toggle
+      var btnTogglePassword = document.getElementById('btn-toggle-password');
+      var passwordFormBody = document.getElementById('password-form-body');
+      var iconPasswordToggle = document.getElementById('icon-password-toggle');
+      if (btnTogglePassword) {
+        btnTogglePassword.addEventListener('click', function() {
+          var isHidden = passwordFormBody && passwordFormBody.classList.toggle('hidden');
+          if (iconPasswordToggle) iconPasswordToggle.classList.toggle('rotate-180', !isHidden);
+        });
+      }
+      var passwordForm = document.getElementById('password-form');
+      if (passwordForm) {
+        passwordForm.addEventListener('submit', function() {
+          var btn = document.getElementById('btn-save-password');
+          if (btn) { btn.textContent = 'Guardando...'; btn.disabled = true; }
+        });
+      }
+
+      // Delete account modal
+      var modal = document.getElementById('delete-modal');
+      var btnOpen = document.getElementById('btn-delete-account');
+      var btnCancel = document.getElementById('btn-cancel-delete');
+      var btnConfirm = document.getElementById('btn-confirm-delete');
+
+      function openDeleteModal() { if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); } }
+      function closeDeleteModal() { if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); } }
+
+      if (btnOpen) btnOpen.addEventListener('click', openDeleteModal);
+      if (btnCancel) btnCancel.addEventListener('click', closeDeleteModal);
+      if (modal) modal.addEventListener('click', function(e) { if (e.target === modal) closeDeleteModal(); });
+      var deleteForm = document.getElementById('delete-account-form');
+      if (deleteForm) {
+        deleteForm.addEventListener('submit', function() {
+          if (btnConfirm) { btnConfirm.textContent = 'Eliminando...'; btnConfirm.setAttribute('disabled', ''); }
+        });
+      }
+
+      // Feedback modal
+      var feedbackModal = document.getElementById('feedback-modal');
+      var btnOpenFeedback = document.getElementById('btn-open-feedback');
+      var btnCancelFeedback = document.getElementById('btn-cancel-feedback');
+
+      function openFeedbackModal() { if (feedbackModal) { feedbackModal.classList.remove('hidden'); feedbackModal.classList.add('flex'); } }
+      function closeFeedbackModal() { if (feedbackModal) { feedbackModal.classList.add('hidden'); feedbackModal.classList.remove('flex'); } }
+
+      if (btnOpenFeedback) btnOpenFeedback.addEventListener('click', openFeedbackModal);
+      if (btnCancelFeedback) btnCancelFeedback.addEventListener('click', closeFeedbackModal);
+      if (feedbackModal) feedbackModal.addEventListener('click', function(e) { if (e.target === feedbackModal) closeFeedbackModal(); });
+
+      // Feedback send button
+      var feedbackType = document.getElementById('feedback-type');
+      var feedbackMessage = document.getElementById('feedback-message');
+      var feedbackSendBtn = document.getElementById('feedback-send-btn');
+
+      if (feedbackSendBtn) {
+        feedbackSendBtn.addEventListener('click', function() {
+          var type = (feedbackType && feedbackType.value) || 'sugerencia';
+          var msg = (feedbackMessage && feedbackMessage.value) || '';
+          var subject = encodeURIComponent('[Vivra] ' + type.charAt(0).toUpperCase() + type.slice(1));
+          var body = encodeURIComponent(msg);
+          window.location.href = 'mailto:admin@vivrapet.com?subject=' + subject + '&body=' + body;
+        });
+      }
+    });
+  </script>
+</MainLayout>

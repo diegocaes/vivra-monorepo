@@ -1,0 +1,237 @@
+---
+import '../styles/global.css';
+import { createSupabaseClient } from '../lib/supabase';
+
+const supabase = createSupabaseClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
+
+if (user) {
+  return Astro.redirect('/dashboard');
+}
+
+const error = Astro.url.searchParams.get('error');
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const action = formData.get('action') as string;
+
+  if (action === 'google') {
+    const origin = new URL(Astro.request.url).origin;
+    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${origin}/api/auth/callback` },
+    });
+    if (oauthError || !data.url) {
+      return Astro.redirect('/login?error=auth_failed');
+    }
+    return Astro.redirect(data.url);
+  }
+
+  if (action === 'login') {
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+      email: email?.trim().toLowerCase(),
+      password: password?.trim(),
+    });
+    if (loginError) {
+      const msg = loginError.message?.toLowerCase() ?? '';
+      const errorCode = (msg.includes('email not confirmed') || msg.includes('not confirmed'))
+        ? 'email_not_confirmed'
+        : 'invalid_credentials';
+      return Astro.redirect(`/login?error=${errorCode}`);
+    }
+    // Route to onboarding if user has no pet yet
+    if (loginData.user) {
+      const { data: pets } = await supabase
+        .from('pets')
+        .select('id')
+        .eq('user_id', loginData.user.id)
+        .limit(1);
+      const pet = pets?.[0] ?? null;
+      if (!pet) {
+        return Astro.redirect('/onboarding');
+      }
+    }
+    return Astro.redirect('/dashboard');
+  }
+
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F97316" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Entrar | Vivra</title>
+  </head>
+  <body class="flex min-h-screen bg-canvas">
+    <!-- Left panel (hidden on mobile) -->
+    <div class="hidden lg:flex lg:flex-col lg:w-105 lg:shrink-0 bg-sidebar text-white p-10 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-10">
+        <div class="absolute top-20 -left-20 h-64 w-64 rounded-full bg-accent blur-3xl"></div>
+        <div class="absolute bottom-20 right-10 h-48 w-48 rounded-full bg-amber blur-3xl"></div>
+      </div>
+      <div class="relative">
+        <a href="/" class="flex items-center mb-12 hover:opacity-80 transition-opacity">
+          <img src="/Vivra-white.svg" alt="Vivra" style="height:64px;width:auto;" />
+        </a>
+        <h2 class="text-3xl font-bold leading-tight mb-4">El diario digital<br/>de tu mascota</h2>
+        <p class="text-white/60 text-sm leading-relaxed">Registra vacunas, visitas al veterinario, peso, actividad y vuelos en un solo lugar.</p>
+      </div>
+      <div class="relative mt-auto">
+        <p class="text-xs text-white/30">Hecho con ❤️ para los amantes de sus mascotas</p>
+      </div>
+    </div>
+
+    <!-- Right panel (form) -->
+    <div class="flex flex-1 items-center justify-center p-6">
+      <div class="w-full max-w-sm">
+        <!-- Mobile logo -->
+        <div class="mb-8 text-center lg:hidden animate-fade-up">
+          <a href="/" class="inline-flex items-center hover:opacity-80 transition-opacity">
+            <img src="/Vivra.svg" alt="Vivra" style="height:56px;width:auto;" />
+          </a>
+          <p class="text-sm text-muted mt-1">El diario digital de tu mascota</p>
+        </div>
+
+        <div class="animate-fade-up lg:animate-none">
+          <h2 class="text-xl font-bold text-ink mb-1">Bienvenido</h2>
+          <p class="text-sm text-muted mb-6">Inicia sesión o crea tu cuenta para continuar</p>
+
+          <!-- Messages -->
+          {error && (
+            <div class="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {error === 'invalid_credentials' && 'Email o contraseña incorrectos.'}
+              {error === 'email_not_confirmed' && 'Confirma tu correo antes de entrar. Revisa tu bandeja de entrada.'}
+              {error === 'auth_failed' && 'Error de autenticación. Intenta de nuevo.'}
+              {error === 'no_code' && 'Código de autenticación no encontrado.'}
+              {error === 'link_expired' && 'El enlace ha expirado. Solicita uno nuevo.'}
+            </div>
+          )}
+          <!-- Google OAuth -->
+          <form method="POST" id="google-form">
+            <button
+              type="submit"
+              name="action"
+              value="google"
+              id="btn-google"
+              class="flex w-full items-center justify-center gap-3 rounded-xl border border-card-border bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition-all duration-200 hover:bg-gray-50 hover:border-gray-300 active:scale-95"
+            >
+              <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.698H24.48v8.886h12.988c-.56 3.016-2.26 5.572-4.816 7.284v6.05h7.796c4.56-4.198 7.084-10.38 7.084-17.522z" fill="#4285F4"/>
+                <path d="M24.48 48c6.516 0 11.98-2.16 15.972-5.86l-7.796-6.05c-2.16 1.448-4.924 2.304-8.176 2.304-6.288 0-11.612-4.246-13.516-9.952H2.9v6.246C6.876 42.852 15.068 48 24.48 48z" fill="#34A853"/>
+                <path d="M10.964 28.442A14.46 14.46 0 0 1 10.2 24c0-1.54.264-3.036.764-4.442v-6.246H2.9A23.964 23.964 0 0 0 .48 24c0 3.87.928 7.532 2.42 10.688l8.064-6.246z" fill="#FBBC05"/>
+                <path d="M24.48 9.558c3.54 0 6.716 1.216 9.216 3.604l6.908-6.908C36.456 2.392 30.996 0 24.48 0 15.068 0 6.876 5.148 2.9 13.312l8.064 6.246c1.904-5.706 7.228-9.952 13.516-9.952z" fill="#EA4335"/>
+              </svg>
+              Continuar con Google
+            </button>
+          </form>
+
+          <div class="flex items-center gap-3 my-4">
+            <div class="flex-1 h-px bg-card-border"></div>
+            <span class="text-xs text-muted font-medium">o con email</span>
+            <div class="flex-1 h-px bg-card-border"></div>
+          </div>
+
+          <!-- Login Form -->
+          <form method="POST" class="space-y-4" id="login-form">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Email</label>
+              <input
+                type="email"
+                name="email"
+                required
+                placeholder="tu@email.com"
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-sm font-medium text-ink">Contraseña</label>
+                <a href="/forgot-password" class="text-xs text-muted hover:text-accent transition-colors">¿Olvidaste tu contraseña?</a>
+              </div>
+              <input
+                type="password"
+                name="password"
+                required
+                minlength="8"
+                placeholder="Mínimo 8 caracteres"
+                class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+
+            <div class="flex gap-3 pt-1">
+              <button
+                type="submit"
+                name="action"
+                value="login"
+                class="flex-1 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent-dark active:scale-95"
+              >
+                Entrar
+              </button>
+              <a
+                href="/register"
+                class="flex-1 rounded-xl bg-amber px-6 py-2.5 text-sm font-semibold text-gray-900 transition-all duration-200 hover:bg-amber-dark active:scale-95 text-center"
+              >
+                Crear cuenta
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Google form loading state
+      // Must inject hidden input BEFORE disabling the button,
+      // because a disabled submit button does not send its name/value.
+      const googleForm = document.getElementById('google-form') as HTMLFormElement;
+      const btnGoogle = document.getElementById('btn-google') as HTMLButtonElement;
+      googleForm?.addEventListener('submit', () => {
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'action';
+        hidden.value = 'google';
+        googleForm.appendChild(hidden);
+        btnGoogle.classList.add('btn-loading');
+        btnGoogle.setAttribute('disabled', '');
+      });
+
+      // Email/password form loading state — preserve action value before disabling buttons
+      const form = document.getElementById('login-form') as HTMLFormElement;
+      let clickedAction = '';
+
+      form?.querySelectorAll<HTMLButtonElement>('button[type="submit"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          clickedAction = btn.value;
+        });
+      });
+
+      form?.addEventListener('submit', () => {
+        // Inject the action as a hidden input so it survives button disable
+        if (clickedAction) {
+          const hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.name = 'action';
+          hidden.value = clickedAction;
+          form.appendChild(hidden);
+        }
+        // Now safe to disable buttons
+        form.querySelectorAll<HTMLButtonElement>('button[type="submit"]').forEach(btn => {
+          btn.classList.add('btn-loading');
+          btn.setAttribute('disabled', '');
+        });
+      });
+    </script>
+  </body>
+</html>

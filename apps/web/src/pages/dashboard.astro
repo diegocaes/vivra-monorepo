@@ -1,0 +1,728 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import { isBirthday, calculateAge, formatDate } from '@vivra/shared';
+import { getActivePet } from '../lib/pet';
+import { calculateVitalityScore } from '@vivra/shared';
+import type { ScoreInput } from '@vivra/shared';
+
+import { evaluateBadges } from '@vivra/shared';
+import type { BadgeCounts } from '@vivra/shared';
+import { BREED_FACTS } from '@vivra/shared';
+import type { DogBreed } from '@vivra/shared';
+
+const { supabase, user, activePetId } = Astro.locals;
+const isNewlyOnboarded = Astro.url.searchParams.get('onboarded') === '1';
+
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+
+if (!pet) {
+  return Astro.redirect('/onboarding');
+}
+
+const [
+  { data: allGroomings },
+  { data: allVaccines },
+  { data: allVetVisits },
+  { data: weightRecords },
+  { data: foods },
+  { data: lastAntipulgas },
+  { data: lastDesparasitante },
+  { count: weightCount },
+  { count: flightCount },
+  { data: activityLogs },
+  { data: adventures },
+] = await Promise.all([
+  supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
+  supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'antipulgas').order('date_given', { ascending: false }).limit(1),
+  supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'desparasitante').order('date_given', { ascending: false }).limit(1),
+  supabase.from('weight_records').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
+  supabase.from('flights').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
+  supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
+  supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
+]);
+
+// Blood tests (may not exist yet)
+let bloodTests: { date: string }[] = [];
+try {
+  const { data } = await supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false });
+  bloodTests = data ?? [];
+} catch { /* table may not exist yet */ }
+
+// Derived counts and recent items from full queries
+const vaccineCount = allVaccines?.length ?? 0;
+const visitCount = allVetVisits?.length ?? 0;
+const groomingCount = allGroomings?.length ?? 0;
+const allVaccineNames = allVaccines ?? [];
+
+// Food insights
+function bagToGrams(size: number, unit: string): number {
+  if (unit === 'kg') return size * 1000;
+  if (unit === 'lb') return size * 453.592;
+  return size;
+}
+
+const activeFoods = (foods ?? []).filter(f => f.daily_grams && f.bag_size);
+const currentFood = activeFoods[0] ?? null;
+
+const totalDays = currentFood
+  ? Math.floor(bagToGrams(currentFood.bag_size, currentFood.bag_unit ?? 'kg') / currentFood.daily_grams)
+  : null;
+
+// Days elapsed since bag was opened (use start_date if set, else created_at)
+const bagStartStr = currentFood?.start_date || currentFood?.created_at || null;
+const daysElapsed = bagStartStr
+  ? Math.floor((Date.now() - new Date(bagStartStr).getTime()) / (1000 * 60 * 60 * 24))
+  : null;
+const daysLeft = totalDays !== null && daysElapsed !== null
+  ? Math.max(0, totalDays - daysElapsed)
+  : null;
+
+
+// Vitality Score — same full data as /salud for consistent results
+const vitalityInput: ScoreInput = {
+  pet: {
+    breed: pet.breed ?? null,
+    birth_date: pet.birth_date ?? null,
+    weight_kg: pet.weight_kg ?? null,
+    gender: pet.gender ?? null,
+    is_neutered: pet.is_neutered ?? null,
+  },
+  weightRecords: weightRecords ?? [],
+  vaccines: allVaccines ?? [],
+  vetVisits: allVetVisits ?? [],
+  groomings: (allGroomings ?? []).map(g => ({ date: g.date })),
+  activityLogs: activityLogs ?? [],
+  adventures: (adventures ?? []).map((a: any) => ({ date: a.date })),
+  foods: activeFoods,
+  bloodTests,
+};
+const dashScore = calculateVitalityScore(vitalityInput);
+
+// Short pillar names for the compact bar display
+const SHORT_PILLAR: Record<string, string> = {
+  'Peso': 'Peso',
+  'Cuidado preventivo': 'Preventivo',
+  'Raza y edad': 'Raza',
+  'Actividad': 'Actividad',
+  'Nutrición': 'Nutrición',
+};
+
+// Preventive treatment reminders (30-day cycle)
+function daysUntilNext(lastDateStr: string | null | undefined): { daysLeft: number; overdue: boolean; lastDate: string | null } {
+  if (!lastDateStr) return { daysLeft: 0, overdue: true, lastDate: null };
+  const last = new Date(lastDateStr);
+  const next = new Date(last);
+  next.setDate(next.getDate() + 30);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  next.setHours(0, 0, 0, 0);
+  const daysLeft = Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return { daysLeft, overdue: daysLeft < 0, lastDate: lastDateStr };
+}
+
+const antipulgasInfo = daysUntilNext(lastAntipulgas?.[0]?.date_given);
+const desparasitanteInfo = daysUntilNext(lastDesparasitante?.[0]?.date_given);
+
+const birthday = pet.birth_date ? isBirthday(pet.birth_date) : false;
+const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
+const photoUrl = pet.photo_url || '/icons/default-pet.svg';
+
+// "Qué hacer hoy" — priority actions
+type DashAction = { href: string; icon: string; iconBg: string; iconColor: string; label: string; detail: string; urgent: boolean };
+const todoActions: DashAction[] = [];
+
+// Breed fact — rotates daily based on day-of-year, fallback to generic facts
+const breedFacts = pet.breed ? BREED_FACTS[pet.breed as DogBreed] : BREED_FACTS['Other'];
+const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+const dailyFact = breedFacts?.length
+  ? breedFacts[dayOfYear % breedFacts.length]
+  : null;
+
+// Weight trend
+const latestWeight = weightRecords?.[0]?.weight_kg ?? pet.weight_kg;
+const prevWeight = weightRecords?.[1]?.weight_kg;
+const weightDiff = latestWeight && prevWeight ? +(latestWeight - prevWeight).toFixed(1) : null;
+
+// Badges
+const profileComplete = !!(pet.photo_url && pet.chip_id && pet.color);
+const badgeCounts: BadgeCounts = {
+  profileComplete,
+  vaccineCount: vaccineCount ?? 0,
+  visitCount: visitCount ?? 0,
+  weightCount: weightCount ?? 0,
+  adventureCount: 0,
+  flightCount: flightCount ?? 0,
+  groomingCount: groomingCount ?? 0,
+  foodCount: (foods ?? []).length,
+  hasAntipulgas: (lastAntipulgas?.length ?? 0) > 0,
+  hasDesparasitante: (lastDesparasitante?.length ?? 0) > 0,
+  vaccineNames: (allVaccineNames ?? []).map((v: { name: string }) => v.name),
+};
+const badgeResult = evaluateBadges(badgeCounts);
+const earnedBadges = [
+  ...badgeResult.engagement.filter(b => b.earned),
+  ...badgeResult.vaccines.filter(v => v.earned),
+];
+
+// Checklist
+const checklistItems = [
+  { done: (vaccineCount ?? 0) > 0,   href: '/salud/vacunas?new=1', label: 'Agregar vacuna',           sub: 'Rabia, Parvovirus, Moquillo u otras',           iconColor: 'bg-accent/10', iconStroke: 'text-accent',    icon: '<path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/>' },
+  { done: (visitCount ?? 0) > 0,     href: '/salud/historial',    label: 'Agregar cita veterinaria', sub: 'Registra visitas al vet y próximas citas',       iconColor: 'bg-blue-50',   iconStroke: 'text-blue-500',  icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>' },
+  { done: (weightRecords?.length ?? 0) > 0, href: '/salud/peso?new=1', label: 'Registrar peso',      sub: 'Lleva el historial de peso desde hoy',          iconColor: 'bg-sky-50',    iconStroke: 'text-sky-500',   icon: '<circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 0 1 8 0"/><line x1="12" y1="12" x2="12" y2="8"/>' },
+  { done: profileComplete,            href: '/perfil',              label: 'Completar perfil',          sub: 'Foto, microchip, color de pelaje',               iconColor: 'bg-amber/10',  iconStroke: 'text-amber-dark',icon: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>' },
+].filter(item => !item.done);
+
+// ── Notification generation (deduplicated against DB) ──
+try {
+  // Fetch existing notification messages for this pet to avoid duplicates
+  const { data: existingNotifs } = await supabase
+    .from('notifications')
+    .select('type, message')
+    .eq('user_id', user.id)
+    .eq('pet_id', pet.id);
+  const existingSet = new Set((existingNotifs ?? []).map(n => `${n.type}::${n.message}`));
+
+  const rawSnapshot = Astro.cookies.get('pet_snapshot')?.value;
+  const snapshot = rawSnapshot ? JSON.parse(rawSnapshot) as { badgeCount?: number; score?: number; petId?: string; foodNotified?: boolean; antipulgasNotified?: boolean; desparasitanteNotified?: boolean } : null;
+  const isSamePet = snapshot?.petId === pet.id;
+  const prevScore = (isSamePet ? snapshot?.score : null) ?? 0;
+
+  const newNotifications: Array<{ type: string; title: string; message: string; icon: string; href: string }> = [];
+
+  // New badges earned — only notify if not already in DB
+  for (const badge of earnedBadges) {
+    const msg = `Ganaste "${badge.name}"`;
+    const key = `badge_earned::${msg}`;
+    if (!existingSet.has(key)) {
+      newNotifications.push({ type: 'badge_earned', title: '¡Nueva insignia!', message: msg, icon: '🏆', href: '/badges' });
+      existingSet.add(key);
+    }
+  }
+
+  // Score improved by 5+ points (only if we had a previous score to compare)
+  if (dashScore.showScore && prevScore > 0 && dashScore.total >= prevScore + 5) {
+    const msg = `El bienestar de ${pet.name} subió a ${dashScore.total}/100`;
+    const key = `score_improved::${msg}`;
+    if (!existingSet.has(key)) {
+      newNotifications.push({ type: 'score_improved', title: '¡Score mejoró!', message: msg, icon: '📈', href: '/salud' });
+    }
+  }
+
+  // Food running out (≤5 days left, notify once per cycle)
+  if (daysLeft !== null && daysLeft <= 5 && !(isSamePet && snapshot?.foodNotified)) {
+    const msg = daysLeft === 0
+      ? `La bolsa de ${currentFood?.brand || 'alimento'} ya debería haberse acabado`
+      : `Quedan ~${daysLeft} día${daysLeft !== 1 ? 's' : ''} de ${currentFood?.brand || 'alimento'}`;
+    const key = `food_low::${msg}`;
+    if (!existingSet.has(key)) {
+      newNotifications.push({ type: 'food_low', title: '🍖 Comida por acabarse', message: msg, icon: '🍖', href: '/alimentacion' });
+    }
+  }
+
+  // Antipulgas due (≤3 days left or overdue, notify once per cycle)
+  if (antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3 && !(isSamePet && snapshot?.antipulgasNotified)) {
+    const msg = antipulgasInfo.overdue
+      ? `El antipulgas de ${pet.name} ya venció. Aplícalo cuanto antes.`
+      : `Faltan ${antipulgasInfo.daysLeft} día${antipulgasInfo.daysLeft !== 1 ? 's' : ''} para el antipulgas de ${pet.name}`;
+    const key = `preventive_due::${msg}`;
+    if (!existingSet.has(key)) {
+      newNotifications.push({ type: 'preventive_due', title: antipulgasInfo.overdue ? '⚠️ Antipulgas vencido' : '🐛 Antipulgas próximo', message: msg, icon: '🐛', href: '/dashboard' });
+    }
+  }
+
+  // Desparasitante due (≤3 days left or overdue, notify once per cycle)
+  if (desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 3 && !(isSamePet && snapshot?.desparasitanteNotified)) {
+    const msg = desparasitanteInfo.overdue
+      ? `El desparasitante de ${pet.name} ya venció. Aplícalo cuanto antes.`
+      : `Faltan ${desparasitanteInfo.daysLeft} día${desparasitanteInfo.daysLeft !== 1 ? 's' : ''} para el desparasitante de ${pet.name}`;
+    const key = `preventive_due::${msg}`;
+    if (!existingSet.has(key)) {
+      newNotifications.push({ type: 'preventive_due', title: desparasitanteInfo.overdue ? '⚠️ Desparasitante vencido' : '💊 Desparasitante próximo', message: msg, icon: '💊', href: '/dashboard' });
+    }
+  }
+
+  // ── Smart reminders (non-invasive, once per trigger) ──
+
+  // Grooming reminder: no bath/grooming in 60+ days
+  const lastGroomDate = allGroomings?.[0]?.date;
+  if (lastGroomDate) {
+    const daysSinceGroom = Math.floor((Date.now() - new Date(lastGroomDate + 'T00:00:00').getTime()) / 86400000);
+    if (daysSinceGroom >= 60) {
+      const msg = `${pet.name} lleva ${daysSinceGroom} días sin un baño o grooming`;
+      const key = `grooming_reminder::${msg}`;
+      if (!existingSet.has(key)) {
+        newNotifications.push({ type: 'grooming_reminder', title: '✂️ Hora de un baño', message: msg, icon: '✂️', href: '/salud/grooming' });
+      }
+    }
+  }
+
+  // Activity reminder: no walks logged in 7+ days
+  const lastActivityDate = activityLogs?.[0]?.date;
+  if (lastActivityDate) {
+    const daysSinceActivity = Math.floor((Date.now() - new Date(lastActivityDate + 'T00:00:00').getTime()) / 86400000);
+    if (daysSinceActivity >= 7) {
+      const msg = `Llevas ${daysSinceActivity} días sin registrar paseos de ${pet.name}`;
+      const key = `activity_reminder::${msg}`;
+      if (!existingSet.has(key)) {
+        newNotifications.push({ type: 'activity_reminder', title: '🐕 ¿Pasearon hoy?', message: msg, icon: '🐕', href: '/actividad' });
+      }
+    }
+  }
+
+  // Vaccine booster due in ≤2 days
+  const { data: vaccinesNextDue } = await supabase
+    .from('vaccines')
+    .select('name, next_due')
+    .eq('pet_id', pet.id)
+    .not('next_due', 'is', null);
+  const nowMs = new Date().setHours(0, 0, 0, 0);
+  for (const v of vaccinesNextDue ?? []) {
+    const daysUntilVac = Math.ceil((new Date(v.next_due + 'T00:00:00').getTime() - nowMs) / 86400000);
+    if (daysUntilVac >= 0 && daysUntilVac <= 2) {
+      const msg = daysUntilVac === 0
+        ? `Hoy toca el refuerzo de ${v.name} de ${pet.name}`
+        : `Faltan ${daysUntilVac} día${daysUntilVac !== 1 ? 's' : ''} para el refuerzo de ${v.name}`;
+      const key = `vaccine_due::${msg}`;
+      if (!existingSet.has(key)) {
+        newNotifications.push({ type: 'vaccine_due', title: '💉 Vacuna próxima', message: msg, icon: '💉', href: '/salud/vacunas' });
+      }
+    }
+  }
+
+  // Weight check reminder: no weight recorded in 90+ days
+  const lastWeightDate = weightRecords?.[0]?.date;
+  if (lastWeightDate) {
+    const daysSinceWeight = Math.floor((Date.now() - new Date(lastWeightDate + 'T00:00:00').getTime()) / 86400000);
+    if (daysSinceWeight >= 90) {
+      const msg = `Llevas ${daysSinceWeight} días sin pesar a ${pet.name}`;
+      const key = `weight_reminder::${msg}`;
+      if (!existingSet.has(key)) {
+        newNotifications.push({ type: 'weight_reminder', title: '⚖️ Hora de pesar', message: msg, icon: '⚖️', href: '/salud/peso' });
+      }
+    }
+  }
+
+  // Insert only truly new notifications
+  if (newNotifications.length > 0) {
+    await supabase.from('notifications').insert(
+      newNotifications.map(n => ({ ...n, user_id: user.id, pet_id: pet.id, dismissed: false }))
+    );
+  }
+
+  // Update snapshot cookie
+  Astro.cookies.set('pet_snapshot', JSON.stringify({
+    badgeCount: badgeResult.earnedCount,
+    score: dashScore.total,
+    petId: pet.id,
+    foodNotified: daysLeft !== null && daysLeft <= 5,
+    antipulgasNotified: antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3,
+    desparasitanteNotified: desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 3,
+  }), { path: '/', httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, secure: import.meta.env.PROD });
+} catch (_) {
+  // Silently ignore if notifications table doesn't exist yet
+}
+
+// Build "Qué hacer hoy" actions
+if (antipulgasInfo.lastDate && (antipulgasInfo.overdue || antipulgasInfo.daysLeft <= 3)) {
+  todoActions.push({
+    href: '/salud/preventivos',
+    icon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    iconBg: antipulgasInfo.overdue ? 'bg-red-50' : 'bg-amber/10',
+    iconColor: antipulgasInfo.overdue ? 'text-red-500' : 'text-amber-600',
+    label: antipulgasInfo.overdue ? 'Antipulgas vencido' : `Antipulgas en ${antipulgasInfo.daysLeft}d`,
+    detail: 'Aplicar tratamiento',
+    urgent: antipulgasInfo.overdue,
+  });
+} else if (!antipulgasInfo.lastDate) {
+  todoActions.push({
+    href: '/salud/preventivos',
+    icon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    iconBg: 'bg-accent-light', iconColor: 'text-accent',
+    label: 'Registrar antipulgas', detail: 'Primera aplicacion', urgent: false,
+  });
+}
+
+if (desparasitanteInfo.lastDate && (desparasitanteInfo.overdue || desparasitanteInfo.daysLeft <= 3)) {
+  todoActions.push({
+    href: '/salud/preventivos',
+    icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    iconBg: desparasitanteInfo.overdue ? 'bg-red-50' : 'bg-amber/10',
+    iconColor: desparasitanteInfo.overdue ? 'text-red-500' : 'text-amber-600',
+    label: desparasitanteInfo.overdue ? 'Desparasitante vencido' : `Desparasitante en ${desparasitanteInfo.daysLeft}d`,
+    detail: 'Aplicar tratamiento',
+    urgent: desparasitanteInfo.overdue,
+  });
+} else if (!desparasitanteInfo.lastDate) {
+  todoActions.push({
+    href: '/salud/preventivos',
+    icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    iconBg: 'bg-accent-light', iconColor: 'text-accent',
+    label: 'Registrar desparasitante', detail: 'Primera aplicacion', urgent: false,
+  });
+}
+
+if (daysLeft !== null && daysLeft <= 5) {
+  todoActions.push({
+    href: '/alimentacion',
+    icon: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3v7"/>',
+    iconBg: daysLeft <= 2 ? 'bg-red-50' : 'bg-amber/10',
+    iconColor: daysLeft <= 2 ? 'text-red-500' : 'text-amber-600',
+    label: daysLeft === 0 ? 'Comida agotada' : `${daysLeft}d de comida restante`,
+    detail: currentFood?.brand || 'Comprar alimento',
+    urgent: daysLeft <= 2,
+  });
+}
+
+if (!latestWeight) {
+  todoActions.push({
+    href: '/salud/peso?new=1',
+    icon: '<circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 0 1 8 0"/><line x1="12" y1="12" x2="12" y2="8"/>',
+    iconBg: 'bg-sky-50', iconColor: 'text-sky-500',
+    label: 'Registrar peso', detail: 'Primer registro', urgent: false,
+  });
+}
+
+if (vaccineCount === 0) {
+  todoActions.push({
+    href: '/salud/vacunas?new=1',
+    icon: '<path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/>',
+    iconBg: 'bg-accent/10', iconColor: 'text-accent',
+    label: 'Agregar vacuna', detail: 'Rabia, Parvovirus, etc.', urgent: false,
+  });
+}
+
+todoActions.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
+const topActions = todoActions.slice(0, 4);
+---
+
+<MainLayout title="Inicio">
+
+  {/* ── QUICK START CHECKLIST (new users) ── */}
+  {checklistItems.length > 0 && (
+    <div class="mb-5 animate-fade-up" id="onboarding-checklist">
+      <div class="rounded-t-2xl border border-b-0 border-accent/30 bg-accent/10 px-5 py-4">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">🚀</span>
+          <div>
+            <p class="text-sm font-bold text-accent-dark">Primeros pasos con {pet.name}</p>
+            <p class="text-xs text-muted mt-0.5">{checklistItems.length} {checklistItems.length === 1 ? 'paso pendiente' : 'pasos pendientes'}</p>
+          </div>
+        </div>
+      </div>
+      {isNewlyOnboarded && age && !age.includes('mes') && !age.startsWith('0') && (
+        <div class="border-x border-accent/30 bg-amber/5 px-5 py-3">
+          <div class="flex items-start gap-2">
+            <span class="text-base shrink-0 mt-0.5">💡</span>
+            <p class="text-xs text-amber-dark leading-relaxed">
+              No importa si {pet.name} es mayor — Vivra te ayuda a llevar su historial desde hoy.
+            </p>
+          </div>
+        </div>
+      )}
+      <div class="rounded-b-2xl border border-t-0 border-accent/30 bg-white divide-y divide-card-border">
+        {checklistItems.map(item => (
+          <a href={item.href} class="flex items-center gap-3 px-5 py-3.5 hover:bg-canvas transition-colors active:scale-95">
+            <div class:list={['flex h-8 w-8 shrink-0 items-center justify-center rounded-full', item.iconColor]}>
+              <svg class:list={['h-4 w-4', item.iconStroke]} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" set:html={item.icon} />
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-semibold text-ink">{item.label}</p>
+              <p class="text-xs text-muted">{item.sub}</p>
+            </div>
+            <svg class="h-4 w-4 text-muted/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </a>
+        ))}
+      </div>
+      <button type="button" id="btn-dismiss-checklist" class="mt-2 w-full text-xs text-muted hover:text-ink transition-colors py-1">
+        Ya lo sé, no mostrar de nuevo →
+      </button>
+    </div>
+  )}
+
+  <script is:inline>
+    (function() {
+      if (localStorage.getItem('vivra_checklist_hidden') === '1') {
+        var el = document.getElementById('onboarding-checklist');
+        if (el) el.style.display = 'none';
+      }
+    })();
+  </script>
+  <script is:inline>
+    document.addEventListener('astro:page-load', function() {
+      var btn = document.getElementById('btn-dismiss-checklist');
+      if (btn) {
+        btn.addEventListener('click', function() {
+          localStorage.setItem('vivra_checklist_hidden', '1');
+          var el = document.getElementById('onboarding-checklist');
+          if (el) el.style.display = 'none';
+        });
+      }
+    });
+  </script>
+
+  {/* ── CONFETTI ── */}
+  {isNewlyOnboarded && (
+    <script is:inline>
+      (function() {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+        script.onload = function() {
+          setTimeout(function() {
+            window.confetti({ particleCount: 140, spread: 90, origin: { y: 0.55 },
+              colors: ['#F97316','#EA580C','#ffffff','#F59E0B','#FFF7ED'] });
+          }, 300);
+        };
+        document.head.appendChild(script);
+      })();
+    </script>
+  )}
+
+  {/* ── BIRTHDAY BANNER ── */}
+  {birthday && (
+    <div class="mb-5 rounded-2xl border border-amber/30 bg-amber/10 px-4 py-3 text-center animate-fade-up">
+      <p class="text-sm font-semibold text-amber-dark">🎂 ¡Hoy es el cumpleaños de {pet.name}! 🎉</p>
+    </div>
+  )}
+
+  {/* ── HERO: Pet + Score ── */}
+  <div class="mb-6 animate-fade-up">
+    <div class="relative rounded-3xl overflow-hidden" style="background-color: var(--color-accent);">
+      <div class="absolute inset-0 bg-linear-to-br from-white/5 to-transparent pointer-events-none"></div>
+      <div class="relative flex items-center gap-4 p-5">
+        <a href="/perfil" class="relative shrink-0 h-16 w-16">
+          <img
+            src={photoUrl}
+            alt={pet.name}
+            class:list={[
+              'h-16 w-16 rounded-2xl object-cover',
+              birthday ? 'ring-2 ring-amber ring-offset-1 ring-offset-transparent' : 'ring-1 ring-white/10',
+            ]}
+          />
+          {birthday && <span class="absolute -top-1 -right-1 text-base animate-bounce">🎂</span>}
+        </a>
+        <div class="flex-1 min-w-0">
+          <h1 class="text-xl font-bold text-white tracking-tight truncate">{pet.name}</h1>
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+            {pet.breed && <span class="text-xs text-white/60">{pet.breed}</span>}
+            {age && <Fragment><span class="text-white/30 text-xs">·</span><span class="text-xs text-white/60">{age}</span></Fragment>}
+          </div>
+        </div>
+        {/* Inline Score circle */}
+        <a href="/salud" class="shrink-0">
+          {dashScore.showScore ? (
+            <div class="relative h-14 w-14" aria-label={`Score: ${dashScore.total}`}>
+              <svg viewBox="0 0 36 36" class="h-14 w-14 -rotate-90" aria-hidden="true">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="3"/>
+                <circle
+                  cx="18" cy="18" r="15.5"
+                  fill="none"
+                  stroke="white"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  stroke-dasharray={`${(dashScore.total / 100) * 97.4} 97.4`}
+                />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <span class="text-lg font-black text-white leading-none">{dashScore.total}</span>
+                <span class="text-[7px] font-semibold text-white/60 uppercase tracking-widest">Score</span>
+              </div>
+            </div>
+          ) : (
+            <div class="h-14 w-14 rounded-full flex items-center justify-center border-2 border-dashed border-white/20">
+              <span class="text-lg">🐾</span>
+            </div>
+          )}
+        </a>
+      </div>
+      {/* Score headline */}
+      <div class="relative px-5 pb-4 flex items-center justify-between">
+        <p class="text-xs font-medium text-white/60">{dashScore.headline}</p>
+        {latestWeight && (
+          <span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/70">
+            {latestWeight} kg
+            {weightDiff !== null && (
+              <span class={weightDiff > 0 ? 'text-amber-200' : 'text-green-200'}>
+                {weightDiff > 0 ? '+' : ''}{weightDiff}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+    </div>
+  </div>
+
+  {/* ── QUE HACER HOY ── */}
+  {topActions.length > 0 && (
+    <div class="mb-6 animate-fade-up animate-fade-up-delay-1">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Que hacer hoy</p>
+      <div class="rounded-2xl bg-card border border-card-border overflow-hidden divide-y divide-card-border">
+        {topActions.map(action => (
+          <a href={action.href} class="flex items-center gap-3 px-4 py-3.5 hover:bg-canvas transition-colors active:scale-95">
+            <div class:list={['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', action.iconBg]}>
+              <svg class:list={['h-4 w-4', action.iconColor]} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" set:html={action.icon} />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class:list={['text-sm font-semibold truncate', action.urgent ? 'text-red-600' : 'text-ink']}>{action.label}</p>
+              <p class="text-[11px] text-muted truncate">{action.detail}</p>
+            </div>
+            <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </a>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {/* ── SCORE BREAKDOWN (pillar bars) ── */}
+  <a href="/salud" class="block mb-6 animate-fade-up animate-fade-up-delay-1">
+    <div class="rounded-2xl border border-card-border bg-card p-4 transition-all hover:shadow-sm active:scale-95">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold text-ink">Score de Bienestar</p>
+        <svg class="h-4 w-4 text-muted/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      <div class="flex flex-col gap-2">
+        {dashScore.pillars.map(pillar => (
+          <div class="flex items-center gap-2">
+            <p class="text-[10px] shrink-0 w-14 truncate text-muted">
+              {SHORT_PILLAR[pillar.name] ?? pillar.name}
+            </p>
+            <div class="flex-1 rounded-full h-1.5 overflow-hidden bg-canvas">
+              <div
+                class="h-1.5 rounded-full"
+                style={`width: ${dashScore.showScore ? pillar.pct : 0}%; background-color: var(--color-accent); transition: width 0.6s ease;`}
+              />
+            </div>
+            <p class={`text-[10px] w-4 text-right font-semibold shrink-0 ${dashScore.showScore ? 'text-ink' : 'text-muted/30'}`}>
+              {pillar.score}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p class="text-[11px] font-medium mt-3" style={`color: ${dashScore.color};`}>
+        {dashScore.headline} →
+      </p>
+    </div>
+  </a>
+
+  {/* ── RESUMEN RAPIDO: Peso + Comida ── */}
+  <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
+    <a href="/salud/peso" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+      <p class="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Peso</p>
+      {latestWeight ? (
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-2xl font-black text-ink leading-none">{latestWeight}</span>
+          <span class="text-xs text-muted">kg</span>
+        </div>
+      ) : (
+        <p class="text-sm font-semibold text-muted">—</p>
+      )}
+      {weightDiff !== null && (
+        <p class={`text-xs mt-1 ${weightDiff > 0 ? 'text-amber-600' : 'text-accent'}`}>
+          {weightDiff > 0 ? '+' : ''}{weightDiff} kg
+        </p>
+      )}
+    </a>
+    <a href="/alimentacion" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+      <p class="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Comida</p>
+      {currentFood ? (
+        <>
+          <p class="text-sm font-bold text-ink truncate">{currentFood.brand}</p>
+          {daysLeft !== null && totalDays !== null && (
+            <div class="mt-1.5">
+              <p class="text-[11px] text-muted mb-1">{daysLeft}d restantes</p>
+              <div class="h-1.5 rounded-full bg-card-border overflow-hidden">
+                <div
+                  class="h-1.5 rounded-full transition-all"
+                  style={`width: ${totalDays > 0 ? Math.round((daysLeft / totalDays) * 100) : 0}%; background-color: ${daysLeft <= 5 ? '#EF4444' : daysLeft <= 10 ? '#F59E0B' : '#22C55E'};`}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <p class="text-sm text-muted">—</p>
+      )}
+    </a>
+  </div>
+
+  {/* ── PREVENTIVOS: Antipulgas + Desparasitante ── */}
+  <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
+    <a href="/salud/preventivos" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-base">🐛</span>
+        <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Antipulgas</p>
+      </div>
+      {antipulgasInfo.lastDate ? (
+        <>
+          <div class="flex items-baseline gap-1.5">
+            <span class:list={[
+              'text-2xl font-black leading-none',
+              antipulgasInfo.overdue ? 'text-red-500' : antipulgasInfo.daysLeft <= 5 ? 'text-amber-500' : 'text-ink'
+            ]}>
+              {antipulgasInfo.overdue ? '!' : `${antipulgasInfo.daysLeft}d`}
+            </span>
+            {!antipulgasInfo.overdue && <span class="text-xs text-muted">restantes</span>}
+          </div>
+          <p class:list={[
+            'text-[11px] mt-1',
+            antipulgasInfo.overdue ? 'text-red-500 font-semibold' : 'text-muted'
+          ]}>
+            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
+          </p>
+        </>
+      ) : (
+        <>
+          <p class="text-sm font-semibold text-muted">—</p>
+          <p class="text-[11px] text-accent mt-1">Registrar primera dosis</p>
+        </>
+      )}
+    </a>
+    <a href="/salud/preventivos" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-base">💊</span>
+        <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Desparasitante</p>
+      </div>
+      {desparasitanteInfo.lastDate ? (
+        <>
+          <div class="flex items-baseline gap-1.5">
+            <span class:list={[
+              'text-2xl font-black leading-none',
+              desparasitanteInfo.overdue ? 'text-red-500' : desparasitanteInfo.daysLeft <= 5 ? 'text-amber-500' : 'text-ink'
+            ]}>
+              {desparasitanteInfo.overdue ? '!' : `${desparasitanteInfo.daysLeft}d`}
+            </span>
+            {!desparasitanteInfo.overdue && <span class="text-xs text-muted">restantes</span>}
+          </div>
+          <p class:list={[
+            'text-[11px] mt-1',
+            desparasitanteInfo.overdue ? 'text-red-500 font-semibold' : 'text-muted'
+          ]}>
+            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
+          </p>
+        </>
+      ) : (
+        <>
+          <p class="text-sm font-semibold text-muted">—</p>
+          <p class="text-[11px] text-accent mt-1">Registrar primera dosis</p>
+        </>
+      )}
+    </a>
+  </div>
+
+  {/* ── BREED FACT ── */}
+  {dailyFact && (
+    <div class="mb-5 animate-fade-up animate-fade-up-delay-2">
+      <div class="flex items-start gap-3 rounded-2xl border border-accent/15 bg-accent/5 px-4 py-3">
+        <svg class="h-5 w-5 shrink-0 mt-0.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="4" r="2"/><path d="M6 9a4 4 0 0 1 4-1h2a4 4 0 0 1 4 1l1 5-3-1v5H8v-5l-3 1z"/></svg>
+        <div>
+          <p class="text-xs font-bold text-accent-dark mb-0.5">¿Sabías que...?</p>
+          <p class="text-xs text-ink/70 leading-relaxed">{dailyFact.fact}</p>
+        </div>
+      </div>
+    </div>
+  )}
+
+</MainLayout>

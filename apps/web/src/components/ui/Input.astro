@@ -1,0 +1,39 @@
+---
+interface Props {
+  label: string;
+  name: string;
+  type?: astroHTML.JSX.HTMLInputTypeAttribute;
+  value?: string | number;
+  placeholder?: string;
+  required?: boolean;
+  class?: string;
+  step?: string;
+}
+
+const {
+  label,
+  name,
+  type = 'text',
+  value = '',
+  placeholder = '',
+  required = false,
+  class: className = '',
+  step,
+} = Astro.props;
+---
+
+<label class={`block ${className}`}>
+  <span class="text-sm font-medium text-ink mb-1.5 block">
+    {label}
+    {required && <span class="text-red-500 ml-0.5">*</span>}
+  </span>
+  <input
+    type={type}
+    name={name}
+    value={value}
+    placeholder={placeholder}
+    required={required}
+    step={step}
+    class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+  />
+</label>
