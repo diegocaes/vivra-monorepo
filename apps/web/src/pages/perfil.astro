@@ -8,6 +8,7 @@ import { DOG_BREEDS } from '@vivra/shared';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
+import { getPremiumStatus } from '../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const isNew = Astro.url.searchParams.get('new') === '1';
@@ -178,6 +179,27 @@ if (Astro.request.method === 'POST') {
 // Check if current breed is in the list (for "Other" logic)
 const breedInList = pet?.breed ? DOG_BREEDS.includes(pet.breed as typeof DOG_BREEDS[number]) : false;
 const isOtherBreed = pet?.breed && !breedInList;
+
+// Premium + Spending data
+const premium = await getPremiumStatus(supabase, user.id);
+const isPremium = premium.isPremium;
+
+let spending = { vet: 0, grooming: 0, vuelos: 0, snacks: 0, preventivos: 0, total: 0 };
+if (isPremium && pet) {
+  const [vetRes, groomRes, flightRes, treatRes, prevRes] = await Promise.all([
+    supabase.from('vet_visits').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    supabase.from('groomings').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    supabase.from('flights').select('ticket_price').eq('pet_id', pet.id).not('ticket_price', 'is', null),
+    supabase.from('treats').select('price').eq('pet_id', pet.id).not('price', 'is', null),
+    supabase.from('preventive_treatments').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+  ]);
+  spending.vet = (vetRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
+  spending.grooming = (groomRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
+  spending.vuelos = (flightRes.data ?? []).reduce((s: number, r: any) => s + (r.ticket_price ?? 0), 0);
+  spending.snacks = (treatRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
+  spending.preventivos = (prevRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
+  spending.total = spending.vet + spending.grooming + spending.vuelos + spending.snacks + spending.preventivos;
+}
 ---
 
 <MainLayout title={isNew ? 'Registra a tu mascota' : 'Perfil'}>
@@ -438,6 +460,88 @@ const isOtherBreed = pet?.breed && !breedInList;
       </Button>
     </form>
   </Card>
+
+  <!-- Spending summary -->
+  {pet && (
+    <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+      <p class="text-sm font-semibold text-ink mb-3">💰 Resumen de gastos</p>
+      {isPremium ? (
+        spending.total > 0 ? (
+          <div class="space-y-2">
+            {spending.vet > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">🩺 Veterinario</span>
+                <span class="font-semibold text-ink">${spending.vet}</span>
+              </div>
+            )}
+            {spending.grooming > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">✂️ Grooming</span>
+                <span class="font-semibold text-ink">${spending.grooming}</span>
+              </div>
+            )}
+            {spending.vuelos > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">✈️ Vuelos</span>
+                <span class="font-semibold text-ink">${spending.vuelos}</span>
+              </div>
+            )}
+            {spending.snacks > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">🦴 Snacks</span>
+                <span class="font-semibold text-ink">${spending.snacks}</span>
+              </div>
+            )}
+            {spending.preventivos > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">💊 Preventivos</span>
+                <span class="font-semibold text-ink">${spending.preventivos}</span>
+              </div>
+            )}
+            <hr class="border-card-border/50 my-2" />
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-semibold text-ink">Total</span>
+              <span class="font-bold text-accent text-base">${spending.total}</span>
+            </div>
+          </div>
+        ) : (
+          <p class="text-sm text-muted">Sin gastos registrados aún. Los gastos de veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
+        )
+      ) : (
+        <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+          <span class="text-lg">🔒</span>
+          <div>
+            <p class="text-sm font-semibold text-ink">Resumen total de gastos</p>
+            <p class="text-xs text-muted">Disponible con Premium</p>
+          </div>
+        </a>
+      )}
+    </Card>
+  )}
+
+  <!-- Export passport -->
+  {pet && (
+    <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+      {isPremium ? (
+        <a href="/print" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+          <span class="text-lg">📄</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-ink">Exportar pasaporte</p>
+            <p class="text-xs text-muted">Genera el pasaporte de viaje de {pet.name}</p>
+          </div>
+          <svg class="h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
+      ) : (
+        <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+          <span class="text-lg">🔒</span>
+          <div>
+            <p class="text-sm font-semibold text-ink">Exportar pasaporte</p>
+            <p class="text-xs text-muted">Disponible con Premium</p>
+          </div>
+        </a>
+      )}
+    </Card>
+  )}
 
   <!-- Logout & Account Info -->
   <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">

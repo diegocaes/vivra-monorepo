@@ -52,7 +52,7 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
       <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
       <Ionicons name={config.icon} size={22} color={config.iconColor} />
       <View style={styles.statusInfo}>
-        <Text style={styles.statusLabel}>{config.label}</Text>
+        <Text style={styles.statusLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{config.label}</Text>
         <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
       </View>
       <Ionicons name="add-circle-outline" size={24} color={Colors.accent} />

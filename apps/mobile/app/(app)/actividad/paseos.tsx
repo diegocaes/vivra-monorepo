@@ -125,6 +125,28 @@ export default function PaseosScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
+        {/* Stats cards */}
+        {logs.length > 0 && (
+          <View style={styles.statsRow}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{logs.reduce((s, l) => s + l.walks, 0)}</Text>
+              <Text style={styles.statLabel}>Total paseos</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{logs.length}</Text>
+              <Text style={styles.statLabel}>Registros</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>
+                {logs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0) > 0
+                  ? `${logs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0)}m`
+                  : '—'}
+              </Text>
+              <Text style={styles.statLabel}>Minutos</Text>
+            </View>
+          </View>
+        )}
+
         {logs.length === 0 ? (
           <Card>
             <View style={styles.emptyCard}>
@@ -199,6 +221,14 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
   scroll: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
+  // Stats
+  statsRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs },
+  statBox: {
+    flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.cardBorder, padding: Spacing.md, alignItems: 'center',
+  },
+  statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
+  statLabel: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
   // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },

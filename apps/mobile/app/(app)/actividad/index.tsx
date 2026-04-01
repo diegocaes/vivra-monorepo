@@ -32,9 +32,20 @@ export default function ActividadScreen() {
 
   const weekStart = getWeekStartISO();
   const weekLogs = petData.activityLogs.filter(l => l.date >= weekStart);
-  const daysActive = weekLogs.filter(l => l.walks > 0).length;
   const totalWalks = weekLogs.reduce((s, l) => s + l.walks, 0);
   const totalMinutes = weekLogs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0);
+
+  // Global activity count for the week (paseos + grooming + vuelos)
+  const weekGroomings = petData.groomings.filter(g => g.date >= weekStart).length;
+  const weekFlights = petData.adventures.filter(a => a.date && a.date >= weekStart).length;
+  const totalActivities = totalWalks + weekGroomings + weekFlights;
+
+  // Days with ANY activity this week
+  const walkDates = new Set(weekLogs.filter(l => l.walks > 0).map(l => l.date));
+  const groomDates = new Set(petData.groomings.filter(g => g.date >= weekStart).map(g => g.date));
+  const flightDates = new Set(petData.adventures.filter(a => a.date && a.date >= weekStart).map(a => a.date));
+  const allActiveDates = new Set([...walkDates, ...groomDates, ...flightDates]);
+  const daysActive = allActiveDates.size;
 
   const badgeCounts = {
     profileComplete: !!(petData.pet?.name && petData.pet?.breed && petData.pet?.birth_date),
@@ -76,8 +87,8 @@ export default function ActividadScreen() {
             <Text style={styles.statLabel}>Días activos</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{totalWalks}</Text>
-            <Text style={styles.statLabel}>Paseos</Text>
+            <Text style={styles.statValue}>{totalActivities}</Text>
+            <Text style={styles.statLabel}>Actividades</Text>
           </View>
           <View style={styles.statBox}>
             {isPremium ? (
@@ -126,7 +137,9 @@ export default function ActividadScreen() {
                 <Text style={styles.cardCta}>¿Cuándo fue el último baño?</Text>
               ) : (
                 <Text style={styles.cardSub}>
-                  Último hace {groomingDaysAgo} día{groomingDaysAgo !== 1 ? 's' : ''}
+                  {groomingDaysAgo === 0
+                    ? 'Último baño hoy'
+                    : `Último hace ${groomingDaysAgo} día${groomingDaysAgo !== 1 ? 's' : ''}`}
                   {groomingDaysAgo > 28 ? ' · Recomendado: cada 4 semanas' : ''}
                 </Text>
               )}
