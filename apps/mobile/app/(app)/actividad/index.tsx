@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { usePetContext } from '../../../contexts/PetContext';
@@ -47,20 +47,22 @@ export default function ActividadScreen() {
   const allActiveDates = new Set([...walkDates, ...groomDates, ...flightDates]);
   const daysActive = allActiveDates.size;
 
-  const badgeCounts = {
-    profileComplete: !!(petData.pet?.name && petData.pet?.breed && petData.pet?.birth_date),
-    vaccineCount: petData.vaccines.length,
-    visitCount: petData.vetVisits.length,
-    weightCount: petData.weightRecords.length,
-    adventureCount: petData.adventures.length,
-    flightCount: 0,
-    groomingCount: petData.groomings.length,
-    foodCount: petData.foods.length,
-    hasAntipulgas: !!petData.lastAntipulgas,
-    hasDesparasitante: !!petData.lastDesparasitante,
-    vaccineNames: petData.vaccines.map(v => v.name),
-  };
-  const { earnedCount, totalCount } = evaluateBadges(badgeCounts);
+  const { earnedCount, totalCount } = useMemo(() => {
+    const badgeCounts = {
+      profileComplete: !!(petData.pet?.name && petData.pet?.breed && petData.pet?.birth_date),
+      vaccineCount: petData.vaccines.length,
+      visitCount: petData.vetVisits.length,
+      weightCount: petData.weightRecords.length,
+      adventureCount: petData.adventures.length,
+      flightCount: 0,
+      groomingCount: petData.groomings.length,
+      foodCount: petData.foods.length,
+      hasAntipulgas: !!petData.lastAntipulgas,
+      hasDesparasitante: !!petData.lastDesparasitante,
+      vaccineNames: petData.vaccines.map(v => v.name),
+    };
+    return evaluateBadges(badgeCounts);
+  }, [petData.pet?.name, petData.pet?.breed, petData.pet?.birth_date, petData.vaccines, petData.vetVisits.length, petData.weightRecords.length, petData.adventures.length, petData.groomings.length, petData.foods.length, petData.lastAntipulgas, petData.lastDesparasitante]);
 
   const lastGrooming = petData.groomings[0];
   const groomingDaysAgo = lastGrooming

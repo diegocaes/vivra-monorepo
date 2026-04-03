@@ -22,6 +22,7 @@ export const FREE_LIMITS = {
 
 // Premium features list (for paywall display)
 export const PREMIUM_FEATURES = [
+  { icon: 'people' as const, title: 'Compartir con tu pareja', description: 'Ambos dueños pueden ver y registrar todo' },
   { icon: 'paw' as const, title: 'Mascotas ilimitadas', description: 'Agrega hasta 5 mascotas en tu cuenta' },
   { icon: 'stats-chart' as const, title: 'Estadísticas avanzadas', description: 'Gráficos de peso, tendencias y análisis detallado' },
   { icon: 'document-text' as const, title: 'Exportar PDF', description: 'Exporta el historial médico y pasaporte' },

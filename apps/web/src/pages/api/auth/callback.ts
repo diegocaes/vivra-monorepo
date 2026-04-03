@@ -75,18 +75,78 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
       cookies.delete('pending_referral', { path: '/' });
     }
 
-    const { data: pets } = await supabase
-      .from('pets')
-      .select('id')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
+    // Process pending share invite (from /invite/[token] page)
+    const pendingShareInvite = cookies.get('pending_share_invite')?.value;
+    if (pendingShareInvite) {
+      try {
+        const admin = createSupabaseAdminClient();
+        const { data: invite } = await admin
+          .from('pet_share_invites')
+          .select('id, pet_id, inviter_id, status, expires_at')
+          .eq('token', pendingShareInvite)
+          .eq('status', 'pending')
+          .maybeSingle();
 
-    if (!pets?.length) {
+        if (invite && invite.inviter_id !== user.id && new Date(invite.expires_at) > new Date()) {
+          // Check not already shared
+          const { data: existingShare } = await admin
+            .from('pet_shares')
+            .select('id')
+            .eq('pet_id', invite.pet_id)
+            .eq('shared_with', user.id)
+            .maybeSingle();
+
+          if (!existingShare) {
+            // Get the pet's owner
+            const { data: pet } = await admin
+              .from('pets')
+              .select('user_id')
+              .eq('id', invite.pet_id)
+              .single();
+
+            if (pet) {
+              await admin.from('pet_shares').insert({
+                pet_id: invite.pet_id,
+                owner_id: pet.user_id,
+                shared_with: user.id,
+              });
+              await admin
+                .from('pet_share_invites')
+                .update({ status: 'accepted', accepted_by: user.id })
+                .eq('id', invite.id);
+
+              // Set the shared pet as active
+              cookies.set('active_pet_id', invite.pet_id, {
+                path: '/',
+                httpOnly: true,
+                sameSite: 'lax',
+                maxAge: 60 * 60 * 24 * 365,
+                secure: import.meta.env.PROD,
+              });
+            }
+          }
+        }
+      } catch {
+        // Silently ignore share invite errors
+      }
+      cookies.delete('pending_share_invite', { path: '/' });
+    }
+
+    // Check owned + shared pets
+    const [petsRes, sharesRes] = await Promise.all([
+      supabase.from('pets').select('id').eq('user_id', user.id).order('created_at', { ascending: true }),
+      supabase.from('pet_shares').select('pet_id').eq('shared_with', user.id).limit(1),
+    ]);
+
+    const pets = petsRes.data;
+    const hasShared = (sharesRes.data?.length ?? 0) > 0;
+
+    if (!pets?.length && !hasShared) {
       return redirect('/onboarding');
     }
 
     // Set the first pet as active if no cookie exists yet
-    if (!cookies.get('active_pet_id')?.value) {
+    if (!cookies.get('active_pet_id')?.value && pets?.[0]) {
       cookies.set('active_pet_id', pets[0].id, {
         path: '/',
         httpOnly: true,

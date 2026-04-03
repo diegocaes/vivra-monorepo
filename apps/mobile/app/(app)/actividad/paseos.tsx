@@ -78,6 +78,9 @@ export default function PaseosScreen() {
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
       Alert.alert('Error', 'Usa el formato YYYY-MM-DD para la fecha'); return;
     }
+    if (duration && parseInt(duration, 10) <= 0) {
+      Alert.alert('Error', 'La duración debe ser mayor a 0 minutos'); return;
+    }
     setSaving(true);
     const { error } = await supabase.from('activity_logs').insert({
       pet_id: pet.id,
@@ -100,7 +103,7 @@ export default function PaseosScreen() {
       {
         text: 'Eliminar', style: 'destructive',
         onPress: async () => {
-          await supabase.from('activity_logs').delete().eq('id', id);
+          await supabase.from('activity_logs').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
           refreshPetData();
         },

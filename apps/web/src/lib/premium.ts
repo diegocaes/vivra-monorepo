@@ -56,6 +56,7 @@ export const FEATURE_GATES = {
   // Social
   referrals: false,           // Sistema de referidos: FREE (es el growth engine)
   badges: false,              // Insignias: FREE (engagement)
+  coOwnerSharing: true,       // Compartir mascota con co-dueno
 
   // Data
   dataExport: true,           // Exportar todos los datos

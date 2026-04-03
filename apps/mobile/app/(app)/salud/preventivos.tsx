@@ -133,7 +133,7 @@ export default function PreventivosScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('preventive_treatments').delete().eq('id', id);
+          await supabase.from('preventive_treatments').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
         },
       },

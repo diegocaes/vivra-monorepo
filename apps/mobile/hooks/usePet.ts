@@ -5,9 +5,16 @@ import { useSubscription } from './useSubscription';
 import { scheduleVaccineReminder, scheduleGroomingReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food } from '../types/supabase';
 
+export interface CoOwner {
+  id: string;
+  shared_with: string;
+}
+
 export interface PetData {
   pet: Pet | null;
   pets: Pet[];
+  isOwner: boolean;
+  coOwners: CoOwner[];
   vaccines: Pick<Vaccine, 'name' | 'date_given'>[];
   weightRecords: Pick<WeightRecord, 'weight_kg' | 'date'>[];
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'start_date' | 'created_at'>[];
@@ -28,6 +35,7 @@ export function usePet(): PetData {
   const { isPremium } = useSubscription();
   const [pets, setPets] = useState<Pet[]>([]);
   const [activePetId, setActivePetId] = useState<string | null>(null);
+  const [coOwners, setCoOwners] = useState<CoOwner[]>([]);
   const [vaccines, setVaccines] = useState<PetData['vaccines']>([]);
   const [weightRecords, setWeightRecords] = useState<PetData['weightRecords']>([]);
   const [foods, setFoods] = useState<PetData['foods']>([]);
@@ -41,22 +49,39 @@ export function usePet(): PetData {
   const [error, setError] = useState<string | null>(null);
 
   const pet = pets.find(p => p.id === activePetId) ?? pets[0] ?? null;
+  const isOwner = !!(pet && user && pet.user_id === user.id);
 
   const fetchPets = useCallback(async () => {
     if (!user) return;
-    const { data, error: err } = await supabase
-      .from('pets')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
 
-    if (err) {
-      setError(err.message);
+    // Fetch owned pets + shared pets in parallel
+    const [ownedRes, sharedRes] = await Promise.all([
+      supabase
+        .from('pets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('pet_shares')
+        .select('pet_id, pets(*)')
+        .eq('shared_with', user.id),
+    ]);
+
+    if (ownedRes.error) {
+      setError(ownedRes.error.message);
       return;
     }
-    setPets((data as Pet[]) ?? []);
-    if (data && data.length > 0) {
-      setActivePetId(prev => prev ?? data[0].id);
+
+    const ownedPets = (ownedRes.data as Pet[]) ?? [];
+    const sharedPets = (sharedRes.data ?? [])
+      .map((s: any) => s.pets)
+      .filter(Boolean) as Pet[];
+
+    const allPets = [...ownedPets, ...sharedPets];
+    setPets(allPets);
+
+    if (allPets.length > 0) {
+      setActivePetId(prev => prev ?? allPets[0].id);
     }
   }, [user]);
 
@@ -96,6 +121,17 @@ export function usePet(): PetData {
       setAdventures(adventuresRes.data ?? []);
       setLastAntipulgas(antipulgasRes.data?.[0] ?? null);
       setLastDesparasitante(desparasitanteRes.data?.[0] ?? null);
+
+      // Fetch co-owners if user is the owner
+      if (user && pet.user_id === user.id) {
+        const { data: shares } = await supabase
+          .from('pet_shares')
+          .select('id, shared_with')
+          .eq('pet_id', pet.id);
+        setCoOwners((shares as CoOwner[]) ?? []);
+      } else {
+        setCoOwners([]);
+      }
 
       // Schedule premium-only notifications
       if (isPremium && pet) {
@@ -144,6 +180,8 @@ export function usePet(): PetData {
   return {
     pet,
     pets,
+    isOwner,
+    coOwners,
     vaccines,
     weightRecords,
     foods,

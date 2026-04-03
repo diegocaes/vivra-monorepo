@@ -103,7 +103,7 @@ export const BREED_DATA: Record<string, BreedProfile> = {
   german_shepherd: {
     displayName: 'Pastor Alemán',
     idealWeightKgMin: 22,
-    idealWeightKgMax: 40,
+    idealWeightKgMax: 36,
     sizeCategory: 'large',
     lifespanYears: 11,
     risks: ['hip_dysplasia', 'elbow_dysplasia', 'degenerative_myelopathy', 'bloat'],
@@ -175,7 +175,7 @@ export const BREED_DATA: Record<string, BreedProfile> = {
   beagle: {
     displayName: 'Beagle',
     idealWeightKgMin: 9,
-    idealWeightKgMax: 14,
+    idealWeightKgMax: 12,
     sizeCategory: 'small',
     lifespanYears: 13,
     risks: ['obesity', 'epilepsy', 'hypothyroidism', 'eye_disease'],
@@ -186,7 +186,7 @@ export const BREED_DATA: Record<string, BreedProfile> = {
   },
   rottweiler: {
     displayName: 'Rottweiler',
-    idealWeightKgMin: 35,
+    idealWeightKgMin: 32,
     idealWeightKgMax: 60,
     sizeCategory: 'large',
     lifespanYears: 9,
@@ -222,7 +222,7 @@ export const BREED_DATA: Record<string, BreedProfile> = {
   },
   boxer: {
     displayName: 'Boxer',
-    idealWeightKgMin: 22,
+    idealWeightKgMin: 25,
     idealWeightKgMax: 32,
     sizeCategory: 'large',
     lifespanYears: 10,
@@ -246,7 +246,7 @@ export const BREED_DATA: Record<string, BreedProfile> = {
   },
   great_dane: {
     displayName: 'Gran Danés',
-    idealWeightKgMin: 45,
+    idealWeightKgMin: 50,
     idealWeightKgMax: 90,
     sizeCategory: 'giant',
     lifespanYears: 8,

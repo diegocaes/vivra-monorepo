@@ -13,6 +13,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 
 interface BottomSheetProps {
@@ -50,6 +51,7 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
         <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => { Keyboard.dismiss(); onClose(); }} />
         <Animated.View style={[styles.sheet, { transform: [{ translateY }], paddingBottom: Math.max(insets.bottom, Spacing.lg), maxHeight: screenHeight * 0.85 }]}>
           <View style={styles.handle} />
@@ -79,7 +81,6 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.overlay,
   },
   sheet: {
     backgroundColor: Colors.card,

@@ -85,7 +85,7 @@ export default function HistorialScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('vet_visits').delete().eq('id', id);
+          await supabase.from('vet_visits').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
         },
       },

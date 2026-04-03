@@ -206,3 +206,23 @@ export interface ActivityLog {
   notes: string | null;
   created_at: string;
 }
+
+export interface PetShare {
+  id: string;
+  pet_id: string;
+  owner_id: string;
+  shared_with: string;
+  role: 'co_owner';
+  created_at: string;
+}
+
+export interface PetShareInvite {
+  id: string;
+  pet_id: string;
+  inviter_id: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  accepted_by: string | null;
+  expires_at: string;
+  created_at: string;
+}

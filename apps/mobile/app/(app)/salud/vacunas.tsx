@@ -106,7 +106,7 @@ export default function VacunasScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('vaccines').delete().eq('id', id);
+          await supabase.from('vaccines').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
         },
       },

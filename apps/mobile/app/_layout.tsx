@@ -8,8 +8,12 @@ import { useNotifications } from '../hooks/useNotifications';
 import { scheduleDailyActivityReminder } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
+import { OfflineBanner } from '../components/shared/OfflineBanner';
+import { initSentry, setSentryUser, clearSentryUser } from '../lib/sentry';
+import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
 
-export { ErrorBoundary } from 'expo-router';
+// Initialize Sentry before anything else
+initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,6 +24,15 @@ export default function RootLayout() {
   const [hasPets, setHasPets] = useState<boolean | null>(null);
   useNotifications();
 
+  // Track user in Sentry
+  useEffect(() => {
+    if (user) {
+      setSentryUser(user.id, user.email ?? undefined);
+    } else {
+      clearSentryUser();
+    }
+  }, [user?.id]);
+
   // Check if user has pets & schedule daily activity reminder
   useEffect(() => {
     if (!user) {
@@ -27,17 +40,25 @@ export default function RootLayout() {
       return;
     }
 
-    supabase
-      .from('pets')
-      .select('id, name', { count: 'exact' })
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .then(({ data, count }) => {
-        const has = (count ?? 0) > 0;
+    // Check owned + shared pets
+    Promise.all([
+      supabase
+        .from('pets')
+        .select('id, name', { count: 'exact' })
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1),
+      supabase
+        .from('pet_shares')
+        .select('id', { count: 'exact' })
+        .eq('shared_with', user.id)
+        .limit(1),
+    ])
+      .then(([ownedRes, sharedRes]) => {
+        const has = ((ownedRes.count ?? 0) + (sharedRes.count ?? 0)) > 0;
         setHasPets(has);
-        if (has && data?.[0]?.name) {
-          scheduleDailyActivityReminder({ petName: data[0].name });
+        if (ownedRes.data?.[0]?.name) {
+          scheduleDailyActivityReminder({ petName: ownedRes.data[0].name });
         }
       })
       .then(undefined, () => {
@@ -69,15 +90,17 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <AppErrorBoundary>
       <StatusBar style="dark" />
+      <OfflineBanner />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>
-    </>
+    </AppErrorBoundary>
   );
 }

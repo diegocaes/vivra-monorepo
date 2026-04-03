@@ -180,7 +180,7 @@ export default function PesoScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('weight_records').delete().eq('id', id);
+          await supabase.from('weight_records').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
         },
       },

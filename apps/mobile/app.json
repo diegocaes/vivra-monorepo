@@ -36,6 +36,12 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/98388b6d-9ee9-4e13-a857-30095db844d7"
+    },
     "plugins": [
       "expo-router",
       [
@@ -44,6 +50,13 @@
           "icon": "./assets/images/icon.png",
           "color": "#F97316",
           "sounds": []
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "vivra",
+          "project": "vivra-mobile"
         }
       ]
     ],

@@ -7,6 +7,7 @@ const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
 const features = [
+  { icon: '👥', name: 'Compartir con tu pareja', desc: 'Ambos dueños pueden ver y registrar toda la info de su mascota', free: 'No', premium: 'Co-dueño ilimitado' },
   { icon: '🐾', name: 'Mascotas ilimitadas', desc: 'Registra todos tus perros en una sola cuenta', free: '1 mascota', premium: 'Hasta 10' },
   { icon: '📊', name: 'Grafica de peso', desc: 'Visualiza la evolucion del peso con graficas detalladas', free: 'Ultimo peso', premium: 'Historial completo' },
   { icon: '🧡', name: 'Score detallado', desc: 'Desglose por pilar, flags y recomendaciones personalizadas', free: 'Score general', premium: 'Detalle completo' },

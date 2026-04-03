@@ -131,7 +131,7 @@ export default function VuelosScreen() {
   const handleDelete = (id: string) => {
     Alert.alert('Eliminar vuelo', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: async () => { await supabase.from('flights').delete().eq('id', id); fetchData(); } },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => { await supabase.from('flights').delete().eq('id', id).eq('pet_id', pet!.id); fetchData(); } },
     ]);
   };
 

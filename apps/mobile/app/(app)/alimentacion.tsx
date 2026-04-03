@@ -148,6 +148,8 @@ export default function AlimentacionScreen() {
       supabase.from('treats').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }),
     ]);
 
+    if (foodsRes.error) console.warn('[Alimentacion] foods error:', foodsRes.error.message);
+    if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
     setFoods(((foodsRes.data as Food[]) ?? []).map(enrichFood));
     setTreats((treatsRes.data as Treat[]) ?? []);
     setLoading(false);

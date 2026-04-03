@@ -345,7 +345,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
 
     vaccineScore = Math.max(3, Math.round((coveredCore / coreNames.length) * 8));
 
-    const anyRecent = vaccines.some(v => daysBetween(v.date_given) < 548);
+    const anyRecent = vaccines.some(v => daysBetween(v.date_given) < 365);
     if (anyRecent) {
       vaccineScore = Math.min(10, vaccineScore + 2);
     } else {
@@ -362,7 +362,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     const daysSince = daysBetween(vetVisits[0].date);
     if (daysSince <= 365) {
       vetScore = 10;
-    } else if (daysSince <= 548) {
+    } else if (daysSince <= 365 * 1.5) {
       vetScore = 7;
     } else if (daysSince <= 730) {
       vetScore = 4;
@@ -835,22 +835,22 @@ const SCORE_CATEGORIES: Array<{
     sublines: ['Todo apunta a un estado de salud muy bueno', 'Sigue así, lo estás haciendo genial'],
   },
   {
-    min: 70, category: 'good', color: '#22C55E',
+    min: 70, category: 'good', color: '#22c55e',
     headline: 'Muy buen estado',
     sublines: ['Hay pequeñas oportunidades de mejora', 'Un par de ajustes y llegamos al máximo'],
   },
   {
-    min: 55, category: 'fair', color: '#F59E0B',
+    min: 55, category: 'fair', color: '#f59e0b',
     headline: 'Buen comienzo',
     sublines: ['Completa más registros para un análisis más preciso', 'Cada dato que agregas mejora el score'],
   },
   {
-    min: 40, category: 'fair', color: '#F97316',
+    min: 40, category: 'fair', color: '#f97316',
     headline: 'Perfil en construcción',
     sublines: ['Aún faltan datos para un análisis completo', 'Empieza por registrar el peso y las vacunas'],
   },
   {
-    min: 0, category: 'building', color: '#94A3B8',
+    min: 0, category: 'building', color: '#94a3b8',
     headline: 'Comenzando el historial',
     sublines: ['Agrega más datos para ver el Vitality Score completo', 'Cuantos más registros, más preciso el análisis'],
   },
@@ -925,7 +925,7 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
   if (!showScore) {
     headline = 'Completando el perfil';
     subline = 'Agrega unos datos más para ver el estado de salud de ' + (pet.breed?.split(' ')[0] ?? 'tu perro');
-    color = '#94A3B8';
+    color = '#94a3b8';
   } else if (sufficiency === 'building') {
     headline = cat.headline;
     subline = missingDataCount === 1

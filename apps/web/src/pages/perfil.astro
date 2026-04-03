@@ -9,6 +9,7 @@ import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
 import { getPremiumStatus } from '../lib/premium';
+import { randomBytes } from 'node:crypto';
 
 const { supabase, user, activePetId } = Astro.locals;
 const isNew = Astro.url.searchParams.get('new') === '1';
@@ -22,7 +23,7 @@ const fullName = user.user_metadata?.full_name || user.user_metadata?.name || ''
 const firstName = fullName.split(' ')[0] || user.email?.split('@')[0] || 'bienvenido';
 
 // Get existing pet + all pets (to decide delete behavior)
-const { pet, pets } = await getActivePet(supabase, user.id, activePetId);
+const { pet, pets, isOwner } = await getActivePet(supabase, user.id, activePetId);
 const hasMultiplePets = pets.length > 1;
 
 // Profile completion badge logic
@@ -68,6 +69,52 @@ if (Astro.request.method === 'POST') {
       await supabase.from('owner_profiles').insert(ownerData);
     }
     return Astro.redirect('/perfil?saved=owner');
+  }
+
+  if (action === 'generate_invite' && pet && isOwner) {
+    const admin = createSupabaseAdminClient();
+    // Revoke any existing pending invite
+    await admin.from('pet_share_invites')
+      .update({ status: 'revoked' })
+      .eq('pet_id', pet.id)
+      .eq('inviter_id', user.id)
+      .eq('status', 'pending');
+    // Create new invite
+    const token = randomBytes(16).toString('hex');
+    await admin.from('pet_share_invites').insert({
+      pet_id: pet.id,
+      inviter_id: user.id,
+      token,
+    });
+    return Astro.redirect(`/perfil?invite_token=${token}`);
+  }
+
+  if (action === 'revoke_share' && pet && isOwner) {
+    const shareId = formData.get('share_id') as string;
+    if (shareId) {
+      const admin = createSupabaseAdminClient();
+      await admin.from('pet_shares').delete().eq('id', shareId).eq('pet_id', pet.id);
+    }
+    return Astro.redirect('/perfil?saved=revoked');
+  }
+
+  if (action === 'leave_pet' && pet && !isOwner) {
+    const admin = createSupabaseAdminClient();
+    await admin.from('pet_shares').delete().eq('pet_id', pet.id).eq('shared_with', user.id);
+    // Switch to another pet
+    const remaining = pets.filter(p => p.id !== pet.id);
+    if (remaining.length > 0) {
+      Astro.cookies.set('active_pet_id', remaining[0].id, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 365,
+        secure: import.meta.env.PROD,
+      });
+    } else {
+      Astro.cookies.delete('active_pet_id', { path: '/' });
+    }
+    return Astro.redirect('/dashboard');
   }
 
   if (action === 'logout') {
@@ -200,6 +247,60 @@ if (isPremium && pet) {
   spending.preventivos = (prevRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
   spending.total = spending.vet + spending.grooming + spending.vuelos + spending.snacks + spending.preventivos;
 }
+
+// Co-owner data
+let coOwners: { id: string; shared_with: string; email: string }[] = [];
+let pendingInvite: { token: string; expires_at: string } | null = null;
+const inviteTokenParam = Astro.url.searchParams.get('invite_token');
+
+if (pet && isOwner) {
+  const admin = createSupabaseAdminClient();
+  const { data: shares } = await admin
+    .from('pet_shares')
+    .select('id, shared_with')
+    .eq('pet_id', pet.id);
+
+  if (shares && shares.length > 0) {
+    // Fetch emails for co-owners
+    for (const share of shares) {
+      const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
+      coOwners.push({
+        id: share.id,
+        shared_with: share.shared_with,
+        email: sharedUser?.email ?? 'Usuario',
+      });
+    }
+  }
+
+  // Get pending invite (or use newly generated token)
+  if (inviteTokenParam) {
+    const { data: inv } = await admin.from('pet_share_invites')
+      .select('token, expires_at')
+      .eq('token', inviteTokenParam)
+      .maybeSingle();
+    pendingInvite = inv;
+  } else {
+    const { data: inv } = await admin.from('pet_share_invites')
+      .select('token, expires_at')
+      .eq('pet_id', pet.id)
+      .eq('inviter_id', user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    pendingInvite = inv;
+  }
+}
+
+// Owner email for co-owners viewing the pet
+let ownerEmail = '';
+if (pet && !isOwner) {
+  const admin = createSupabaseAdminClient();
+  const { data: { user: ownerUser } } = await admin.auth.admin.getUserById(pet.user_id);
+  ownerEmail = ownerUser?.email ?? '';
+}
+
+const origin = new URL(Astro.request.url).origin;
 ---
 
 <MainLayout title={isNew ? 'Registra a tu mascota' : 'Perfil'}>
@@ -461,6 +562,107 @@ if (isPremium && pet) {
     </form>
   </Card>
 
+  <!-- Co-owner section -->
+  {pet && isOwner && (
+    <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+      <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest mb-3">
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Co-dueño
+      </div>
+
+      {isPremium ? (
+        <>
+          {coOwners.length > 0 ? (
+            <div class="space-y-3">
+              {coOwners.map((co) => (
+                <div class="flex items-center justify-between rounded-xl bg-canvas border border-card-border px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent font-bold text-sm">
+                      {co.email[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-ink">{co.email}</p>
+                      <p class="text-xs text-muted">Co-dueño</p>
+                    </div>
+                  </div>
+                  <form method="POST">
+                    <input type="hidden" name="_action" value="revoke_share" />
+                    <input type="hidden" name="share_id" value={co.id} />
+                    <button type="submit" class="text-xs text-red-500 font-medium hover:text-red-600 transition-colors">
+                      Revocar
+                    </button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p class="text-sm text-muted mb-3">Comparte a {pet.name} con tu pareja o familiar para que ambos puedan registrar su información.</p>
+          )}
+
+          {pendingInvite ? (
+            <div class="mt-3 space-y-2">
+              <div class="flex items-center gap-2 rounded-xl bg-accent/5 border border-accent/15 px-4 py-3">
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-muted mb-1">Enlace de invitación activo</p>
+                  <p class="text-sm text-ink font-mono truncate" id="invite-link">{origin}/invite/{pendingInvite.token}</p>
+                </div>
+                <button type="button" id="btn-copy-invite" class="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95">
+                  Copiar
+                </button>
+              </div>
+              <p class="text-xs text-muted">Expira el {new Date(pendingInvite.expires_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+              <form method="POST">
+                <input type="hidden" name="_action" value="generate_invite" />
+                <button type="submit" class="text-xs text-accent font-medium hover:text-accent-dark transition-colors">
+                  Regenerar enlace
+                </button>
+              </form>
+            </div>
+          ) : (
+            <form method="POST" class="mt-3">
+              <input type="hidden" name="_action" value="generate_invite" />
+              <button type="submit" class="w-full rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-white hover:bg-accent-dark transition-all active:scale-95 flex items-center justify-center gap-2">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                Invitar co-dueño de {pet.name}
+              </button>
+            </form>
+          )}
+
+          {savedParam === 'revoked' && (
+            <div class="mt-3 rounded-xl bg-accent/10 border border-accent/20 px-4 py-3 text-sm text-accent-dark font-medium">
+              Acceso revocado correctamente.
+            </div>
+          )}
+        </>
+      ) : (
+        <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+          <span class="text-lg">👥</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-ink">Agrega al otro dueño de {pet.name}</p>
+            <p class="text-xs text-muted">Disponible con Premium — 7 días gratis</p>
+          </div>
+          <svg class="h-4 w-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      )}
+    </Card>
+  )}
+
+  {/* Co-owner viewing: show owner info */}
+  {pet && !isOwner && (
+    <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
+      <div class="flex items-center gap-3 rounded-xl bg-accent/5 border border-accent/15 px-4 py-3">
+        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-accent font-bold text-sm">
+          {ownerEmail[0]?.toUpperCase() || '?'}
+        </div>
+        <div class="flex-1">
+          <p class="text-xs text-muted">Dueño principal</p>
+          <p class="text-sm font-medium text-ink">{ownerEmail}</p>
+        </div>
+        <span class="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Compartida contigo</span>
+      </div>
+    </Card>
+  )}
+
   <!-- Spending summary -->
   {pet && (
     <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
@@ -637,20 +839,38 @@ if (isPremium && pet) {
       </>
     )}
 
-    <!-- Delete account -->
-    <div class="flex items-center justify-between">
-      <div>
-        <p class="text-sm font-medium text-red-500">{hasMultiplePets ? `Eliminar a ${pet?.name}` : 'Eliminar cuenta'}</p>
-        <p class="text-xs text-gray-400 mt-0.5">{hasMultiplePets ? 'Borra esta mascota y todos sus datos' : 'Borra todos tus datos permanentemente'}</p>
+    <!-- Delete account / Leave pet -->
+    {!isOwner && pet ? (
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-red-500">Dejar de seguir a {pet.name}</p>
+          <p class="text-xs text-gray-400 mt-0.5">{pet.name} desaparecerá de tu lista de mascotas</p>
+        </div>
+        <form method="POST">
+          <input type="hidden" name="_action" value="leave_pet" />
+          <button
+            type="submit"
+            class="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-all hover:bg-red-100 active:scale-95"
+          >
+            Dejar
+          </button>
+        </form>
       </div>
-      <button
-        type="button"
-        id="btn-delete-account"
-        class="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-all hover:bg-red-100 active:scale-95"
-      >
-        Eliminar
-      </button>
-    </div>
+    ) : (
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium text-red-500">{hasMultiplePets ? `Eliminar a ${pet?.name}` : 'Eliminar cuenta'}</p>
+          <p class="text-xs text-gray-400 mt-0.5">{hasMultiplePets ? 'Borra esta mascota y todos sus datos' : 'Borra todos tus datos permanentemente'}</p>
+        </div>
+        <button
+          type="button"
+          id="btn-delete-account"
+          class="rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 transition-all hover:bg-red-100 active:scale-95"
+        >
+          Eliminar
+        </button>
+      </div>
+    )}
   </Card>
 
   <!-- Delete account confirmation modal -->
@@ -763,6 +983,18 @@ if (isPremium && pet) {
 
   <script is:inline>
     document.addEventListener('astro:page-load', function() {
+      // Copy invite link
+      var copyBtn = document.getElementById('btn-copy-invite');
+      var inviteLink = document.getElementById('invite-link');
+      if (copyBtn && inviteLink) {
+        copyBtn.addEventListener('click', function() {
+          navigator.clipboard.writeText(inviteLink.textContent.trim()).then(function() {
+            copyBtn.textContent = '¡Copiado!';
+            setTimeout(function() { copyBtn.textContent = 'Copiar'; }, 2000);
+          });
+        });
+      }
+
       // Photo preview
       var input = document.getElementById('photo-input');
       var preview = document.getElementById('photo-preview');

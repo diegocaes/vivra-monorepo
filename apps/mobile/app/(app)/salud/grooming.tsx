@@ -84,7 +84,7 @@ export default function GroomingScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('groomings').delete().eq('id', id);
+          await supabase.from('groomings').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
         },
       },

@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 let ImagePicker: typeof import('expo-image-picker') | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
+let ImageManipulator: typeof import('expo-image-manipulator') | null = null;
+try { ImageManipulator = require('expo-image-manipulator'); } catch {}
 import { Colors, PetThemeColors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -19,6 +21,7 @@ import { useSubscription } from '../../hooks/useSubscription';
 import { PremiumGate } from '../../components/ui/PremiumGate';
 import { FREE_LIMITS } from '../../constants/revenueCat';
 import { SpendingSummary } from '../../components/pet/SpendingSummary';
+import { SharePetSheet } from '../../components/pet/SharePetSheet';
 import * as Linking from 'expo-linking';
 
 const THEME_COLORS = Object.entries(PetThemeColors).map(([key, hex]) => ({ key, hex }));
@@ -61,13 +64,15 @@ export default function PerfilScreen() {
   const { user, signOut } = useAuth();
   const { isPremium } = useSubscription();
   const router = useRouter();
-  const { pet, pets, setActivePetId, refresh } = usePetContext();
+  const petData = usePetContext();
+  const { pet, pets, isOwner, coOwners, setActivePetId, refresh } = petData;
   const [refreshing, setRefreshing] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   // Edit form
   const [showEdit, setShowEdit] = useState(false);
+  const [showShareSheet, setShowShareSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [breed, setBreed] = useState('');
@@ -205,12 +210,33 @@ export default function PerfilScreen() {
 
     if (result.canceled || !pet || !user) return;
 
-    const uri = result.assets[0].uri;
-    const ext = uri.split('.').pop() ?? 'jpg';
+    let uri = result.assets[0].uri;
+
+    // Resize to max 1080px and compress to JPEG for consistent uploads
+    if (ImageManipulator) {
+      try {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1080 } }],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+        );
+        uri = manipulated.uri;
+      } catch {
+        // Fall back to original if manipulation fails
+      }
+    }
+
+    const ext = 'jpg';
     const fileName = `${user.id}/${pet.id}.${ext}`;
 
     const response = await fetch(uri);
     const blob = await response.blob();
+
+    if (blob.size > 5 * 1024 * 1024) {
+      Alert.alert('Imagen muy grande', 'La foto debe ser menor a 5 MB. Intenta con otra imagen.');
+      return;
+    }
+
     const arrayBuffer = await new Response(blob).arrayBuffer();
 
     const { error: uploadError } = await supabase.storage
@@ -314,17 +340,19 @@ export default function PerfilScreen() {
               </Text>
             </View>
 
-            {/* Completion */}
-            <Card>
-              <View style={styles.completionRow}>
-                <Text style={styles.completionLabel}>Perfil completo</Text>
-                <Text style={styles.completionPct}>{completionPct}%</Text>
-              </View>
-              <View style={styles.completionBg}>
-                <View style={[styles.completionFill, { width: `${completionPct}%`, backgroundColor: completionPct === 100 ? Colors.good : Colors.accent }]} />
-              </View>
-              <Text style={styles.completionHint}>{completed}/8 campos completados</Text>
-            </Card>
+            {/* Completion — hide when 100% */}
+            {completionPct < 100 && (
+              <Card>
+                <View style={styles.completionRow}>
+                  <Text style={styles.completionLabel}>Perfil completo</Text>
+                  <Text style={styles.completionPct}>{completionPct}%</Text>
+                </View>
+                <View style={styles.completionBg}>
+                  <View style={[styles.completionFill, { width: `${completionPct}%`, backgroundColor: Colors.accent }]} />
+                </View>
+                <Text style={styles.completionHint}>{completed}/8 campos completados</Text>
+              </Card>
+            )}
 
             {/* Info cards */}
             <Card>
@@ -415,6 +443,32 @@ export default function PerfilScreen() {
               <Text style={styles.sectionTitle}>Cuenta</Text>
               <InfoRow label="Email" value={user?.email ?? null} />
               {isPremium && <InfoRow label="Plan" value="Premium" />}
+
+              {/* Co-owner row */}
+              {pet && isOwner && (
+                <TouchableOpacity
+                  style={styles.coOwnerRow}
+                  onPress={() => {
+                    if (isPremium) setShowShareSheet(true);
+                    else router.push('/premium' as any);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="people-outline" size={20} color={Colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.coOwnerLabel}>
+                      {coOwners.length > 0 ? `Co-dueño (${coOwners.length})` : 'Agregar co-dueño'}
+                    </Text>
+                    <Text style={styles.coOwnerSub}>
+                      {coOwners.length > 0
+                        ? 'Administrar acceso compartido'
+                        : isPremium ? `Comparte a ${pet.name}` : 'Disponible con Premium'}
+                    </Text>
+                  </View>
+                  <Ionicons name={coOwners.length > 0 ? 'chevron-forward' : 'add-circle-outline'} size={20} color={Colors.accent} />
+                </TouchableOpacity>
+              )}
+
               <Button title="Cerrar sesión" onPress={signOut} variant="outline" style={{ marginTop: Spacing.md }} />
             </Card>
 
@@ -451,10 +505,31 @@ export default function PerfilScreen() {
             {/* Danger zone */}
             <Card>
               <Text style={[styles.sectionTitle, { color: Colors.bad }]}>Zona de peligro</Text>
-              <TouchableOpacity style={styles.dangerBtn} onPress={handleDeletePet}>
-                <Ionicons name="trash-outline" size={16} color={Colors.bad} />
-                <Text style={styles.dangerText}>Eliminar a {pet.name}</Text>
-              </TouchableOpacity>
+              {petData.isOwner ? (
+                <TouchableOpacity style={styles.dangerBtn} onPress={handleDeletePet}>
+                  <Ionicons name="trash-outline" size={16} color={Colors.bad} />
+                  <Text style={styles.dangerText}>Eliminar a {pet.name}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.dangerBtn} onPress={() => {
+                  Alert.alert(
+                    'Dejar de seguir',
+                    `¿Seguro que quieres dejar de seguir a ${pet.name}? Perderás el acceso a su información.`,
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Dejar de seguir', style: 'destructive', onPress: async () => {
+                          await supabase.from('pet_shares').delete().eq('pet_id', pet.id).eq('shared_with', user!.id);
+                          petData.refresh();
+                        },
+                      },
+                    ],
+                  );
+                }}>
+                  <Ionicons name="log-out-outline" size={16} color={Colors.bad} />
+                  <Text style={styles.dangerText}>Dejar de seguir a {pet.name}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.dangerBtn} onPress={handleDeleteAccount}>
                 <Ionicons name="warning-outline" size={16} color={Colors.bad} />
                 <Text style={styles.dangerText}>Eliminar mi cuenta</Text>
@@ -509,6 +584,8 @@ export default function PerfilScreen() {
         <SelectField label="Tipo de soporte" value={supportType} options={SUPPORT_OPTIONS} onSelect={setSupportType} />
         <Button title="Guardar" onPress={handleSave} loading={saving} style={{ marginTop: Spacing.sm }} />
       </BottomSheet>
+
+      <SharePetSheet visible={showShareSheet} onClose={() => setShowShareSheet(false)} />
     </SafeAreaView>
   );
 }
@@ -570,6 +647,10 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: FontSize.sm, color: Colors.muted, flexShrink: 0 },
   infoValue: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, color: Colors.ink, flexShrink: 1, textAlign: 'right' as const },
   infoEmpty: { color: Colors.cardBorder },
+  // Co-owner
+  coOwnerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.cardBorder, marginTop: Spacing.sm },
+  coOwnerLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  coOwnerSub: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
   // Colors
   colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
   colorCircle: { width: 36, height: 36, borderRadius: 18 },
