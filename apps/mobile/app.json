@@ -51,13 +51,6 @@
           "color": "#F97316",
           "sounds": []
         }
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "vivra",
-          "project": "vivra-mobile"
-        }
       ]
     ],
     "experiments": {

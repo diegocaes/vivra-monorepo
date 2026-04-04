@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
-import { captureError } from '../../lib/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -27,9 +26,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    captureError(error, {
-      component: errorInfo.componentStack?.slice(0, 200) ?? 'unknown',
-    });
+    console.error('[AppErrorBoundary]', error, errorInfo.componentStack);
   }
 
   handleRetry = () => {

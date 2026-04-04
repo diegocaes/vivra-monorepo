@@ -9,11 +9,7 @@ import { scheduleDailyActivityReminder } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
-import { initSentry, setSentryUser, clearSentryUser } from '../lib/sentry';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
-
-// Initialize Sentry before anything else
-initSentry();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -23,15 +19,6 @@ export default function RootLayout() {
   const router = useRouter();
   const [hasPets, setHasPets] = useState<boolean | null>(null);
   useNotifications();
-
-  // Track user in Sentry
-  useEffect(() => {
-    if (user) {
-      setSentryUser(user.id, user.email ?? undefined);
-    } else {
-      clearSentryUser();
-    }
-  }, [user?.id]);
 
   // Check if user has pets & schedule daily activity reminder
   useEffect(() => {
