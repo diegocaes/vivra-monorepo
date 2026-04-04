@@ -87,9 +87,6 @@ if (Astro.request.method === 'POST' && user && state === 'ready' && invite && pe
 }
 
 // If not logged in and invite is valid, save to cookie and redirect to register
-const needsAuth = !user && (state === 'ready');
-
-const origin = new URL(Astro.request.url).origin;
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
 ---
 

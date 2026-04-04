@@ -58,8 +58,6 @@ const antipulgasStatus = daysUntilNext(antipulgasList[0]?.date_given);
 const desparasitanteStatus = daysUntilNext(desparasitanteList[0]?.date_given);
 
 const openForm = Astro.url.searchParams.get('new');
-const savedOk  = Astro.url.searchParams.get('saved') === '1';
-const deleted  = Astro.url.searchParams.get('deleted') === '1';
 ---
 
 <MainLayout title="Preventivos">

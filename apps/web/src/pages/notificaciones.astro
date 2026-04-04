@@ -43,7 +43,6 @@ if (activePet) fetchQuery = fetchQuery.eq('pet_id', activePet.id);
 const { data: notifications } = await fetchQuery;
 
 const items = notifications ?? [];
-const cleared = Astro.url.searchParams.has('cleared');
 ---
 
 <MainLayout title="Notificaciones">

@@ -18,7 +18,7 @@
     document.querySelectorAll('form[method="POST"]').forEach(function(form) {
       if (form._feSubmit) return;
       form._feSubmit = true;
-      form.addEventListener('submit', function(e) {
+      form.addEventListener('submit', function() {
         var actionEl = form.querySelector('input[name="_action"]');
         var action = actionEl ? actionEl.value : '';
 

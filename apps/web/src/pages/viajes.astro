@@ -787,7 +787,6 @@ function checklistItems(flight: any) {
       });
       document.querySelectorAll('.cancel-edit').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          var id = btn.dataset.id;
           var editForm = btn.closest('.item-edit');
           if (editForm) editForm.classList.add('hidden');
           var content = editForm.previousElementSibling || editForm.closest('.flight-details').querySelector('.space-y-3');
