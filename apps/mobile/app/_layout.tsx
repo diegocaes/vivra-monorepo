@@ -85,6 +85,7 @@ export default function RootLayout() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
       </Stack>

@@ -1,100 +1,21 @@
 ---
-import { createSupabaseClient, createSupabaseAdminClient } from '../../lib/supabase';
-
 const { token } = Astro.params;
-const supabase = createSupabaseClient(Astro.request, Astro.cookies);
-const { data: { user } } = await supabase.auth.getUser();
-
-// Fetch invite using admin client (invite page is public)
-const admin = createSupabaseAdminClient();
-const { data: invite } = await admin
-  .from('pet_share_invites')
-  .select('id, pet_id, inviter_id, status, expires_at')
-  .eq('token', token)
-  .maybeSingle();
-
-// Determine invite state
-let state: 'invalid' | 'expired' | 'accepted_already' | 'self' | 'already_shared' | 'ready' | 'accepted' = 'invalid';
-let pet: { name: string; photo_url: string | null; breed: string | null; user_id: string } | null = null;
-let errorMessage = 'Esta invitación no es válida.';
-
-if (invite) {
-  if (invite.status !== 'pending') {
-    state = 'accepted_already';
-    errorMessage = 'Esta invitación ya fue utilizada.';
-  } else if (new Date(invite.expires_at) < new Date()) {
-    state = 'expired';
-    errorMessage = 'Esta invitación ha expirado. Pide al dueño que te envíe una nueva.';
-  } else {
-    // Fetch pet info
-    const { data: petData } = await admin
-      .from('pets')
-      .select('name, photo_url, breed, user_id')
-      .eq('id', invite.pet_id)
-      .single();
-    pet = petData;
-
-    if (!pet) {
-      state = 'invalid';
-    } else if (user && invite.inviter_id === user.id) {
-      state = 'self';
-      errorMessage = 'No puedes aceptar una invitación de tu propia mascota.';
-    } else if (user) {
-      // Check if already shared
-      const { data: existing } = await admin
-        .from('pet_shares')
-        .select('id')
-        .eq('pet_id', invite.pet_id)
-        .eq('shared_with', user.id)
-        .maybeSingle();
-
-      if (existing) {
-        state = 'already_shared';
-      } else {
-        state = 'ready';
-      }
-    } else {
-      state = 'ready';
-    }
-  }
-}
-
-// Handle POST: accept the invite
-if (Astro.request.method === 'POST' && user && state === 'ready' && invite && pet) {
-  const { error: shareError } = await admin.from('pet_shares').insert({
-    pet_id: invite.pet_id,
-    owner_id: pet.user_id,
-    shared_with: user.id,
-  });
-
-  if (!shareError) {
-    await admin
-      .from('pet_share_invites')
-      .update({ status: 'accepted', accepted_by: user.id })
-      .eq('id', invite.id);
-
-    // Set active pet cookie
-    Astro.cookies.set('active_pet_id', invite.pet_id, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 365,
-      secure: import.meta.env.PROD,
-    });
-
-    state = 'accepted';
-  }
-}
-
-// If not logged in and invite is valid, save to cookie and redirect to register
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
+const appStoreUrl = 'https://apps.apple.com/app/vivra/id6744145107';
 ---
 
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{pet ? `Únete a cuidar a ${pet.name}` : 'Invitación'} — Vivra</title>
+  <title>Te invitaron a compartir una mascota — Vivra</title>
+
+  <!-- Open Graph / link preview -->
+  <meta property="og:title" content="Te invitaron a compartir una mascota en Vivra" />
+  <meta property="og:description" content="Descarga Vivra para aceptar la invitación y cuidar juntos a tu mascota." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={`https://vivrapet.com/invite/${token}`} />
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -118,16 +39,15 @@ const appDeepLink = `com.vivrapet.app://invite/${token}`;
       text-align: center;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
     }
-    .pet-photo {
-      width: 96px;
-      height: 96px;
-      border-radius: 50%;
-      object-fit: cover;
-      margin: 0 auto 24px;
-      display: block;
-      border: 3px solid rgba(249, 115, 22, 0.2);
+    .logo {
+      font-size: 14px;
+      color: #6B7280;
+      margin-bottom: 24px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-weight: 600;
     }
-    .pet-photo-placeholder {
+    .pet-icon {
       width: 96px;
       height: 96px;
       border-radius: 50%;
@@ -138,9 +58,18 @@ const appDeepLink = `com.vivrapet.app://invite/${token}`;
       justify-content: center;
       font-size: 40px;
     }
-    h1 { font-size: 22px; color: #0F1117; font-weight: 700; margin-bottom: 8px; }
-    .breed { font-size: 14px; color: #6B7280; margin-bottom: 16px; }
-    .desc { font-size: 14px; color: #6B7280; line-height: 1.5; margin-bottom: 24px; }
+    h1 {
+      font-size: 22px;
+      color: #0F1117;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .desc {
+      font-size: 14px;
+      color: #6B7280;
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
     .btn {
       display: block;
       width: 100%;
@@ -156,100 +85,21 @@ const appDeepLink = `com.vivrapet.app://invite/${token}`;
     }
     .btn:hover { opacity: 0.9; }
     .btn-primary { background: #F97316; color: white; }
-    .btn-secondary { background: transparent; color: #F97316; margin-top: 8px; }
     .btn-outline { background: transparent; color: #0F1117; border: 1.5px solid #EAECF0; margin-top: 12px; }
-    .success-circle {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
-      background: #22C55E;
-      margin: 0 auto 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 32px;
-    }
-    .error-icon { font-size: 48px; margin-bottom: 16px; }
     .divider { height: 1px; background: #EAECF0; margin: 20px 0; }
     .app-hint { font-size: 12px; color: #6B7280; margin-top: 16px; }
-    .logo { font-size: 14px; color: #6B7280; margin-bottom: 24px; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="logo">Vivra</div>
-
-    {state === 'accepted' && (
-      <>
-        <div class="success-circle">&#10003;</div>
-        <h1>&#161;Listo!</h1>
-        <p class="desc">{pet?.name} ahora aparece en tu lista de mascotas.</p>
-        <a href="/dashboard" class="btn btn-primary">Ir al dashboard</a>
-      </>
-    )}
-
-    {state === 'ready' && pet && user && (
-      <>
-        {pet.photo_url
-          ? <img src={pet.photo_url} alt={pet.name} class="pet-photo" />
-          : <div class="pet-photo-placeholder">&#128062;</div>
-        }
-        <h1>Te invitan a cuidar a {pet.name}</h1>
-        {pet.breed && <p class="breed">{pet.breed}</p>}
-        <p class="desc">
-          Tendras acceso completo para ver y registrar vacunas, peso, paseos y toda la informacion de salud.
-        </p>
-        <form method="POST">
-          <button type="submit" class="btn btn-primary">Aceptar invitacion</button>
-        </form>
-        <a href="/dashboard" class="btn btn-secondary">Cancelar</a>
-        <div class="divider"></div>
-        <a href={appDeepLink} class="btn btn-outline">Abrir en la app</a>
-        <p class="app-hint">Si tienes Vivra instalada, abrela directamente</p>
-      </>
-    )}
-
-    {state === 'ready' && pet && !user && (
-      <>
-        {pet.photo_url
-          ? <img src={pet.photo_url} alt={pet.name} class="pet-photo" />
-          : <div class="pet-photo-placeholder">&#128062;</div>
-        }
-        <h1>Te invitan a cuidar a {pet.name}</h1>
-        {pet.breed && <p class="breed">{pet.breed}</p>}
-        <p class="desc">
-          Crea tu cuenta en Vivra para aceptar la invitacion y tener acceso completo a la informacion de {pet.name}.
-        </p>
-        <a href={`/register?share_invite=${token}`} class="btn btn-primary" onclick={`document.cookie='pending_share_invite=${token};path=/;max-age=604800;samesite=lax'`}>
-          Crear cuenta
-        </a>
-        <a href={`/login?share_invite=${token}`} class="btn btn-outline" onclick={`document.cookie='pending_share_invite=${token};path=/;max-age=604800;samesite=lax'`}>
-          Ya tengo cuenta
-        </a>
-        <div class="divider"></div>
-        <a href={appDeepLink} class="btn btn-outline">Abrir en la app</a>
-        <p class="app-hint">Si tienes Vivra instalada, abrela directamente</p>
-      </>
-    )}
-
-    {state === 'already_shared' && (
-      <>
-        <div class="error-icon">&#9989;</div>
-        <h1>Ya tienes acceso</h1>
-        <p class="desc">Esta mascota ya esta en tu lista.</p>
-        <a href="/dashboard" class="btn btn-primary">Ir al dashboard</a>
-      </>
-    )}
-
-    {(state === 'expired' || state === 'accepted_already' || state === 'self' || state === 'invalid') && (
-      <>
-        <div class="error-icon">{state === 'expired' ? '\u23F0' : '\u26A0\uFE0F'}</div>
-        <h1>{state === 'expired' ? 'Invitacion expirada' : state === 'self' ? 'Esta es tu mascota' : state === 'accepted_already' ? 'Invitacion utilizada' : 'Invitacion no valida'}</h1>
-        <p class="desc">{errorMessage}</p>
-        <a href="/" class="btn btn-outline">Ir al inicio</a>
-      </>
-    )}
+    <div class="pet-icon">&#128062;</div>
+    <h1>Te invitaron a compartir una mascota en Vivra</h1>
+    <p class="desc">Descarga la app para aceptar la invitacion y cuidar juntos a tu mascota.</p>
+    <a href={appStoreUrl} class="btn btn-primary">Descargar en App Store</a>
+    <div class="divider"></div>
+    <a href={appDeepLink} class="btn btn-outline">Abrir en la app</a>
+    <p class="app-hint">Si ya tienes Vivra instalada, abrela directamente</p>
   </div>
 </body>
 </html>

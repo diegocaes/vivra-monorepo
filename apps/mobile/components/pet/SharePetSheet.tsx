@@ -80,7 +80,7 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
     const url = `https://vivrapet.com/invite/${inviteToken}`;
     try {
       await Share.share({
-        message: `¡Únete a Vivra para cuidar juntos a ${pet.name}! Acepta la invitación aquí: ${url}`,
+        message: `¡Hola! Te invito a cuidar juntos a ${pet.name} en Vivra 🐾\n\n${url}`,
         url,
       });
     } catch {

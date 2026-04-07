@@ -469,6 +469,20 @@ export default function PerfilScreen() {
                 </TouchableOpacity>
               )}
 
+              {/* Invite friends row */}
+              <TouchableOpacity
+                style={styles.coOwnerRow}
+                onPress={() => router.push('/referidos' as any)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="gift-outline" size={20} color={Colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.coOwnerLabel}>Invitar amigos</Text>
+                  <Text style={styles.coOwnerSub}>Gana recompensas por cada referido</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
+              </TouchableOpacity>
+
               <Button title="Cerrar sesión" onPress={signOut} variant="outline" style={{ marginTop: Spacing.md }} />
             </Card>
 

@@ -251,53 +251,55 @@ if (isPremium && pet) {
 // Co-owner data
 let coOwners: { id: string; shared_with: string; email: string }[] = [];
 let pendingInvite: { token: string; expires_at: string } | null = null;
+let ownerEmail = '';
 const inviteTokenParam = Astro.url.searchParams.get('invite_token');
 
-if (pet && isOwner) {
-  const admin = createSupabaseAdminClient();
-  const { data: shares } = await admin
-    .from('pet_shares')
-    .select('id, shared_with')
-    .eq('pet_id', pet.id);
+try {
+  if (pet && isOwner) {
+    const admin = createSupabaseAdminClient();
+    const { data: shares } = await admin
+      .from('pet_shares')
+      .select('id, shared_with')
+      .eq('pet_id', pet.id);
 
-  if (shares && shares.length > 0) {
-    // Fetch emails for co-owners
-    for (const share of shares) {
-      const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
-      coOwners.push({
-        id: share.id,
-        shared_with: share.shared_with,
-        email: sharedUser?.email ?? 'Usuario',
-      });
+    if (shares && shares.length > 0) {
+      for (const share of shares) {
+        const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
+        coOwners.push({
+          id: share.id,
+          shared_with: share.shared_with,
+          email: sharedUser?.email ?? 'Usuario',
+        });
+      }
+    }
+
+    if (inviteTokenParam) {
+      const { data: inv } = await admin.from('pet_share_invites')
+        .select('token, expires_at')
+        .eq('token', inviteTokenParam)
+        .maybeSingle();
+      pendingInvite = inv;
+    } else {
+      const { data: inv } = await admin.from('pet_share_invites')
+        .select('token, expires_at')
+        .eq('pet_id', pet.id)
+        .eq('inviter_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      pendingInvite = inv;
     }
   }
 
-  // Get pending invite (or use newly generated token)
-  if (inviteTokenParam) {
-    const { data: inv } = await admin.from('pet_share_invites')
-      .select('token, expires_at')
-      .eq('token', inviteTokenParam)
-      .maybeSingle();
-    pendingInvite = inv;
-  } else {
-    const { data: inv } = await admin.from('pet_share_invites')
-      .select('token, expires_at')
-      .eq('pet_id', pet.id)
-      .eq('inviter_id', user.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    pendingInvite = inv;
+  // Owner email for co-owners viewing the pet
+  if (pet && !isOwner) {
+    const admin = createSupabaseAdminClient();
+    const { data: { user: ownerUser } } = await admin.auth.admin.getUserById(pet.user_id);
+    ownerEmail = ownerUser?.email ?? '';
   }
-}
-
-// Owner email for co-owners viewing the pet
-let ownerEmail = '';
-if (pet && !isOwner) {
-  const admin = createSupabaseAdminClient();
-  const { data: { user: ownerUser } } = await admin.auth.admin.getUserById(pet.user_id);
-  ownerEmail = ownerUser?.email ?? '';
+} catch (_e) {
+  // Admin client unavailable — co-owner section won't show, page still works
 }
 
 const origin = new URL(Astro.request.url).origin;
