@@ -47,6 +47,19 @@ export default function ActividadScreen() {
   const allActiveDates = new Set([...walkDates, ...groomDates, ...flightDates]);
   const daysActive = allActiveDates.size;
 
+  // All-time totals
+  const allTimeWalks = petData.activityLogs.reduce((s, l) => s + l.walks, 0);
+  const allTimeMinutes = petData.activityLogs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0);
+  const allTimeActivities = allTimeWalks + petData.groomings.length + petData.adventures.length;
+
+  // Show weekly or all-time depending on whether the week has activity
+  const hasWeekData = daysActive > 0;
+  const showWalks = hasWeekData ? totalWalks : allTimeWalks;
+  const showMinutes = hasWeekData ? totalMinutes : allTimeMinutes;
+  const showActivities = hasWeekData ? totalActivities : allTimeActivities;
+  const showDays = hasWeekData ? daysActive : new Set(petData.activityLogs.filter(l => l.walks > 0).map(l => l.date)).size;
+  const statsLabel = hasWeekData ? 'Esta semana' : 'Historico';
+
   const { earnedCount, totalCount } = useMemo(() => {
     const badgeCounts = {
       profileComplete: !!(petData.pet?.name && petData.pet?.breed && petData.pet?.birth_date),
@@ -82,20 +95,28 @@ export default function ActividadScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Weekly stats */}
+        {/* Stats header */}
+        <View style={styles.statsHeader}>
+          <Text style={styles.statsHeaderLabel}>{statsLabel}</Text>
+          {!hasWeekData && allTimeActivities > 0 && (
+            <Text style={styles.statsHeaderHint}>Sin actividad esta semana</Text>
+          )}
+        </View>
+
+        {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{daysActive}</Text>
+            <Text style={styles.statValue}>{showDays}</Text>
             <Text style={styles.statLabel}>Días activos</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{totalActivities}</Text>
+            <Text style={styles.statValue}>{showActivities}</Text>
             <Text style={styles.statLabel}>Actividades</Text>
           </View>
           <View style={styles.statBox}>
             {isPremium ? (
               <>
-                <Text style={styles.statValue}>{totalMinutes}</Text>
+                <Text style={styles.statValue}>{showMinutes}</Text>
                 <Text style={styles.statLabel}>Minutos</Text>
               </>
             ) : (
@@ -117,9 +138,13 @@ export default function ActividadScreen() {
               <Text style={styles.cardTitle}>Paseos</Text>
               {petData.activityLogs.length === 0 ? (
                 <Text style={styles.cardCta}>Registra el primer paseo de {petName}</Text>
-              ) : (
+              ) : totalWalks > 0 ? (
                 <Text style={styles.cardSub}>
                   {totalWalks} paseo{totalWalks !== 1 ? 's' : ''} esta semana
+                </Text>
+              ) : (
+                <Text style={styles.cardSub}>
+                  {allTimeWalks} paseo{allTimeWalks !== 1 ? 's' : ''} registrado{allTimeWalks !== 1 ? 's' : ''}
                 </Text>
               )}
             </View>
@@ -212,6 +237,17 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
   // Stats
+  statsHeader: {
+    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
+  statsHeaderLabel: {
+    fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.muted,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  statsHeaderHint: {
+    fontSize: FontSize.xs, color: Colors.accent, fontStyle: 'italic',
+  },
   statsRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs },
   statBox: {
     flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg,

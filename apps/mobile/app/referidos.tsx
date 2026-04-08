@@ -89,7 +89,7 @@ export default function ReferidosScreen() {
     if (!shareLink) return;
     try {
       await Share.share({
-        message: `Registra a tu mascota en Vivra y recibe 30 dias gratis de Premium. Usa mi link: ${shareLink}`,
+        message: `Registra a tu mascota en Vivra y lleva el control de su salud 🐾 Disponible en web y en iPhone.\n\n${shareLink}`,
       });
     } catch {
       // User cancelled share

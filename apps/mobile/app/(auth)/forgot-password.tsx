@@ -26,7 +26,7 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: 'https://vivrapet.com/api/auth/callback?next=update-password',
+      redirectTo: 'https://vivrapet.com/auth/confirm?next=update-password',
     });
     setLoading(false);
 

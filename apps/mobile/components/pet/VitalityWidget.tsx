@@ -18,7 +18,7 @@ interface VitalityWidgetProps {
   compact?: boolean;
 }
 
-function PillarBar({ name, pct, isEstimated }: { name: string; pct: number; isEstimated: boolean }) {
+function PillarBar({ name, pct, isEstimated, status }: { name: string; pct: number; isEstimated: boolean; status?: string }) {
   // pct comes as 0-100 integer from vitality-score.ts
   const barColor = isEstimated
     ? Colors.cardBorder
@@ -33,9 +33,13 @@ function PillarBar({ name, pct, isEstimated }: { name: string; pct: number; isEs
       <Ionicons name={PILLAR_ICONS[name] ?? 'ellipse-outline'} size={16} color={barColor} />
       <View style={styles.pillarInfo}>
         <Text style={styles.pillarName}>{name}</Text>
-        <View style={styles.barBg}>
-          <View style={[styles.barFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }]} />
-        </View>
+        {isEstimated && status ? (
+          <Text style={styles.pillarHint}>{status}</Text>
+        ) : (
+          <View style={styles.barBg}>
+            <View style={[styles.barFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: barColor }]} />
+          </View>
+        )}
       </View>
       <Text style={[styles.pillarPct, { color: barColor }]}>
         {isEstimated ? '—' : `${Math.round(pct)}%`}
@@ -90,6 +94,7 @@ export function VitalityWidget({ vitality, compact }: VitalityWidgetProps) {
               name={p.name}
               pct={p.pct}
               isEstimated={p.isEstimated}
+              status={p.isEstimated ? p.status : undefined}
             />
           ))}
         </View>
@@ -137,6 +142,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.ink,
     marginBottom: 2,
+  },
+  pillarHint: {
+    fontSize: 10,
+    color: Colors.muted,
+    fontStyle: 'italic',
   },
   barBg: {
     height: 6,

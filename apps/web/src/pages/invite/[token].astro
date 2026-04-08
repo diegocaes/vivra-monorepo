@@ -1,7 +1,15 @@
 ---
 const { token } = Astro.params;
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
-const appStoreUrl = 'https://apps.apple.com/app/vivra/id6744145107';
+
+// Save invite token as cookie so the auth callback can process it after registration
+Astro.cookies.set('pending_share_invite', token!, {
+  path: '/',
+  httpOnly: true,
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 7,
+  secure: import.meta.env.PROD,
+});
 ---
 
 <html lang="es">
@@ -10,96 +18,240 @@ const appStoreUrl = 'https://apps.apple.com/app/vivra/id6744145107';
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Te invitaron a compartir una mascota — Vivra</title>
 
-  <!-- Open Graph / link preview -->
   <meta property="og:title" content="Te invitaron a compartir una mascota en Vivra" />
-  <meta property="og:description" content="Descarga Vivra para aceptar la invitación y cuidar juntos a tu mascota." />
+  <meta property="og:description" content="Acepta la invitacion para cuidar juntos a tu mascota en Vivra. Disponible en web y en iPhone." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content={`https://vivrapet.com/invite/${token}`} />
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --orange: #F97316;
+      --orange-dark: #EA6C0A;
+      --ink: #0F1117;
+      --muted: #6B7280;
+      --card-border: #EAECF0;
+      --canvas: #F7F8FA;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #F7F8FA;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--canvas);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 24px;
     }
+    .wrapper { max-width: 420px; width: 100%; }
+
+    /* Hero card */
     .card {
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.5);
+      background: white;
+      border: 1px solid var(--card-border);
       border-radius: 24px;
-      padding: 40px 32px;
-      max-width: 400px;
-      width: 100%;
+      padding: 36px 28px 32px;
       text-align: center;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
     }
-    .logo {
-      font-size: 14px;
-      color: #6B7280;
-      margin-bottom: 24px;
-      letter-spacing: 1px;
+    .beta-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(249,115,22,0.1); color: var(--orange-dark);
+      border: 1px solid rgba(249,115,22,0.25);
+      padding: 5px 14px; border-radius: 50px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
       text-transform: uppercase;
-      font-weight: 600;
+      margin-bottom: 20px;
     }
     .pet-icon {
-      width: 96px;
-      height: 96px;
-      border-radius: 50%;
+      width: 80px; height: 80px; border-radius: 50%;
       background: #FFF7ED;
-      margin: 0 auto 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
+      margin: 0 auto 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
     }
-    h1 {
-      font-size: 22px;
-      color: #0F1117;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .desc {
-      font-size: 14px;
-      color: #6B7280;
-      line-height: 1.5;
-      margin-bottom: 24px;
-    }
+    h1 { font-size: 20px; color: var(--ink); font-weight: 800; margin-bottom: 8px; line-height: 1.25; }
+    .desc { font-size: 14px; color: var(--muted); line-height: 1.55; margin-bottom: 24px; }
+
+    /* Buttons */
     .btn {
-      display: block;
-      width: 100%;
-      padding: 14px;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      text-decoration: none;
-      text-align: center;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 14px;
+      border: none; border-radius: 14px;
+      font-size: 15px; font-weight: 600;
+      cursor: pointer; text-decoration: none; text-align: center;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.92; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--orange); color: white; box-shadow: 0 4px 14px rgba(249,115,22,0.3); }
+    .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--card-border); margin-top: 10px; }
+    .btn-ghost { background: transparent; color: var(--muted); font-size: 13px; margin-top: 10px; }
+    .btn-ghost:hover { color: var(--orange); }
+
+    .divider {
+      display: flex; align-items: center; gap: 12px;
+      margin: 20px 0; color: var(--muted); font-size: 12px; font-weight: 500;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--card-border);
+    }
+
+    /* TestFlight section */
+    .tf-section {
+      background: white;
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-top: 14px;
+      text-align: left;
+    }
+    .tf-title {
+      font-size: 14px; font-weight: 700; color: var(--ink);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px;
+    }
+    .tf-steps { list-style: none; padding: 0; margin: 0 0 16px; }
+    .tf-steps li {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 0;
+      font-size: 13px; color: var(--ink); line-height: 1.45;
+    }
+    .tf-steps li + li { border-top: 1px solid #F3F4F6; }
+    .step-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--orange); color: white;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .step-link { color: var(--orange); font-weight: 600; text-decoration: none; }
+    .step-link:hover { text-decoration: underline; }
+
+    /* Email form */
+    .tf-form {
+      display: flex; gap: 8px;
+    }
+    .tf-input {
+      flex: 1; padding: 11px 14px;
+      border: 1.5px solid var(--card-border);
+      border-radius: 10px; font-size: 14px;
+      color: var(--ink); outline: none;
+      transition: border-color 0.2s;
+    }
+    .tf-input:focus { border-color: var(--orange); }
+    .tf-input::placeholder { color: #9CA3AF; }
+    .tf-submit {
+      padding: 11px 18px;
+      background: var(--ink); color: white;
+      border: none; border-radius: 10px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
       transition: opacity 0.15s;
     }
-    .btn:hover { opacity: 0.9; }
-    .btn-primary { background: #F97316; color: white; }
-    .btn-outline { background: transparent; color: #0F1117; border: 1.5px solid #EAECF0; margin-top: 12px; }
-    .divider { height: 1px; background: #EAECF0; margin: 20px 0; }
-    .app-hint { font-size: 12px; color: #6B7280; margin-top: 16px; }
+    .tf-submit:hover { opacity: 0.85; }
+    .tf-success {
+      display: none;
+      color: var(--orange); font-size: 13px; font-weight: 600;
+      padding: 10px 0 2px;
+    }
+    .tf-note {
+      font-size: 11px; color: var(--muted);
+      margin-top: 10px; line-height: 1.45;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">Vivra</div>
-    <div class="pet-icon">&#128062;</div>
-    <h1>Te invitaron a compartir una mascota en Vivra</h1>
-    <p class="desc">Descarga la app para aceptar la invitacion y cuidar juntos a tu mascota.</p>
-    <a href={appStoreUrl} class="btn btn-primary">Descargar en App Store</a>
-    <div class="divider"></div>
-    <a href={appDeepLink} class="btn btn-outline">Abrir en la app</a>
-    <p class="app-hint">Si ya tienes Vivra instalada, abrela directamente</p>
+  <div class="wrapper">
+    <!-- Main invite card -->
+    <div class="card">
+      <div class="beta-badge">🐾 Beta</div>
+      <div class="pet-icon">🐶</div>
+      <h1>Te invitaron a compartir una mascota en Vivra</h1>
+      <p class="desc">Vivra es el diario digital de tu mascota. Acepta la invitacion para cuidar juntos desde la web o la app.</p>
+
+      <a href="/register" class="btn btn-primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+        Crear cuenta y aceptar
+      </a>
+
+      <a href="/login" class="btn btn-outline">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Ya tengo cuenta — Entrar
+      </a>
+
+      <div class="divider">o si ya tienes la app</div>
+
+      <a href={appDeepLink} class="btn btn-ghost">
+        Abrir en la app de Vivra →
+      </a>
+    </div>
+
+    <!-- TestFlight section -->
+    <div class="tf-section">
+      <div class="tf-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--orange)"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+        Tambien en iPhone
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+        Estamos en beta. Para probar la app en tu iPhone:
+      </p>
+      <ol class="tf-steps">
+        <li>
+          <span class="step-num">1</span>
+          <span>Descarga <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener" class="step-link">TestFlight</a> de la App Store</span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span>Deja tu email aqui abajo y te enviaremos la invitacion para instalar Vivra</span>
+        </li>
+      </ol>
+      <form class="tf-form" id="tf-form" onsubmit="return false;">
+        <input type="email" class="tf-input" id="tf-email" placeholder="tu@email.com" required />
+        <button type="submit" class="tf-submit" id="tf-btn">Enviar</button>
+      </form>
+      <p class="tf-success" id="tf-success">🎉 Listo! Te enviaremos la invitacion pronto.</p>
+      <p class="tf-note">Tambien puedes usar Vivra desde el navegador de tu telefono en <strong>vivrapet.com</strong></p>
+    </div>
   </div>
+
+  <script is:inline>
+    (function() {
+      var form = document.getElementById('tf-form');
+      var input = document.getElementById('tf-email');
+      var btn = document.getElementById('tf-btn');
+      var success = document.getElementById('tf-success');
+      if (!form) return;
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var email = input.value.trim();
+        if (!email || !email.includes('@')) return;
+
+        btn.textContent = '...';
+        btn.disabled = true;
+
+        var supabaseUrl = 'https://upjiewrirkzhjeciwugg.supabase.co';
+        var anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwamlld3Jpcmt6aGplY2l3dWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyODA2MTksImV4cCI6MjA4Njg1NjYxOX0.1BP3UOebHR8SIvSBefyhhiQlv-y3DGGtGM-Xsw2bGEw';
+
+        fetch(supabaseUrl + '/rest/v1/ios_waitlist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': anonKey,
+            'Authorization': 'Bearer ' + anonKey,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ email: email })
+        }).catch(function() {}).finally(function() {
+          form.style.display = 'none';
+          success.style.display = 'block';
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

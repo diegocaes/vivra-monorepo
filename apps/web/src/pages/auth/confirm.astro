@@ -1,0 +1,104 @@
+---
+/**
+ * Auth confirmation page — handles Supabase redirects after email verification.
+ *
+ * Supabase sends auth tokens in two ways:
+ * 1. PKCE flow: ?code=XXX as query params (server can read)
+ * 2. Implicit flow: #access_token=XXX&type=recovery as hash fragment (client-only)
+ *
+ * This page handles BOTH cases and forwards to the API callback.
+ */
+import '../styles/global.css';
+import { createSupabaseClient } from '../../lib/supabase';
+
+// Handle PKCE flow (query params) server-side
+const url = Astro.url;
+const code = url.searchParams.get('code');
+const tokenHash = url.searchParams.get('token_hash');
+const type = url.searchParams.get('type');
+const next = url.searchParams.get('next');
+
+if (code || tokenHash) {
+  // Forward to API callback with all params
+  const params = new URLSearchParams();
+  if (code) params.set('code', code);
+  if (tokenHash) params.set('token_hash', tokenHash);
+  if (type) params.set('type', type);
+  if (next) params.set('next', next);
+  return Astro.redirect(`/api/auth/callback?${params.toString()}`);
+}
+
+// If no server-side params, render a page with JS to read hash fragments
+---
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verificando... | Vivra</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #F7F8FA;
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wrap { text-align: center; padding: 24px; }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid #EAECF0;
+      border-top-color: #F97316; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    p { color: #6B7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner"></div>
+    <p>Verificando tu enlace...</p>
+  </div>
+
+  <script is:inline>
+    (function() {
+      // Read hash fragment params (Supabase implicit flow puts tokens here)
+      var hash = window.location.hash.substring(1);
+      if (!hash) {
+        // No hash and no query params — something went wrong
+        window.location.href = '/login?error=no_code';
+        return;
+      }
+
+      var params = new URLSearchParams(hash);
+
+      // Recovery flow: Supabase sends access_token, refresh_token, type=recovery
+      var accessToken = params.get('access_token');
+      var refreshToken = params.get('refresh_token');
+      var type = params.get('type');
+      var tokenHash = params.get('token_hash');
+
+      if (tokenHash && type) {
+        // OTP-based verification
+        window.location.href = '/api/auth/callback?token_hash=' + encodeURIComponent(tokenHash) + '&type=' + encodeURIComponent(type) + '&next=update-password';
+      } else if (accessToken && type === 'recovery') {
+        // Implicit flow recovery: we have the tokens directly
+        // Set the session client-side, then redirect to update-password
+        // But we can't easily set server cookies from client...
+        // Instead, forward to a handler that can exchange them
+        window.location.href = '/api/auth/callback?access_token=' + encodeURIComponent(accessToken) +
+          '&refresh_token=' + encodeURIComponent(refreshToken || '') +
+          '&type=recovery&next=update-password';
+      } else if (accessToken) {
+        // Other implicit flow (signup confirmation, etc.)
+        window.location.href = '/api/auth/callback?access_token=' + encodeURIComponent(accessToken) +
+          '&refresh_token=' + encodeURIComponent(refreshToken || '') +
+          '&type=' + encodeURIComponent(type || 'signup');
+      } else {
+        window.location.href = '/login?error=no_code';
+      }
+    })();
+  </script>
+</body>
+</html>
