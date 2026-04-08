@@ -8,9 +8,6 @@
  *
  * This page handles BOTH cases and forwards to the API callback.
  */
-import '../styles/global.css';
-import { createSupabaseClient } from '../../lib/supabase';
-
 // Handle PKCE flow (query params) server-side
 const url = Astro.url;
 const code = url.searchParams.get('code');
