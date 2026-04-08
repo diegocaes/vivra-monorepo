@@ -72,12 +72,12 @@ export default function ReferidosScreen() {
 
   useEffect(() => { fetchReferralData(); }, [fetchReferralData]);
 
-  const shareLink = referralCode ? `vivrapet.com/register?ref=${referralCode}` : '';
+  const shareLink = referralCode ? `https://vivrapet.com/register?ref=${referralCode}` : '';
 
   const handleCopy = async () => {
     if (!shareLink) return;
     try {
-      await Share.share({ message: `https://${shareLink}` });
+      await Share.share({ message: shareLink });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -89,7 +89,7 @@ export default function ReferidosScreen() {
     if (!shareLink) return;
     try {
       await Share.share({
-        message: `Registra a tu mascota en Vivra y recibe 30 dias gratis de Premium. Usa mi link: https://${shareLink}`,
+        message: `Registra a tu mascota en Vivra y recibe 30 dias gratis de Premium. Usa mi link: ${shareLink}`,
       });
     } catch {
       // User cancelled share
