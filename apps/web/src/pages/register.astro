@@ -53,15 +53,11 @@ if (Astro.request.method === 'POST') {
   const password = formData.get('password') as string;
   const refCode = ((formData.get('ref_code') as string) || refFromUrl || refFromCookie)?.trim().toUpperCase();
 
-  // Validate referral code (invite-only)
-  const isValidRef = await validateRefCode(refCode);
-  if (!isValidRef) {
-    const refParam = refCode ? `&ref=${refCode}` : '';
-    return Astro.redirect(`/register?error=invalid_ref${refParam}`);
-  }
-
   // Persist referral code in cookie so it survives OAuth redirect and email confirmation
-  saveRefCookie(refCode);
+  if (refCode) {
+    const isValidRef = await validateRefCode(refCode);
+    if (isValidRef) saveRefCookie(refCode);
+  }
 
   if (action === 'google') {
     const origin = new URL(Astro.request.url).origin;
@@ -228,25 +224,24 @@ if (refFromUrl) {
                 {error === 'auth_failed' && 'Error al conectar con Google. Intenta de nuevo.'}
                 {error === 'weak_password' && 'La contrasena debe tener al menos 8 caracteres.'}
                 {error === 'password_mismatch' && 'Las contrasenas no coinciden.'}
-                {error === 'invalid_ref' && 'Codigo de invitacion invalido. Necesitas que alguien te invite para registrarte.'}
-                {error === 'no_ref' && 'Vivra es solo por invitación. Pide un código a alguien que ya use la app.'}
+                {error === 'invalid_ref' && 'Codigo de referido invalido. Verifica que esté bien escrito.'}
+                {error === 'no_ref' && 'Ocurrio un error. Intenta de nuevo.'}
               </div>
             )}
 
-            <!-- Referral code (invite-only) -->
+            <!-- Referral code (optional) -->
             <div class="mb-4">
-              <label class="block text-sm font-medium text-ink mb-1.5">Codigo de invitacion</label>
+              <label class="block text-sm font-medium text-ink mb-1.5">Codigo de referido <span class="text-muted font-normal">(opcional)</span></label>
               <input
                 type="text"
                 name="ref_code"
                 id="ref-code-input"
                 value={initialRef}
-                required
                 autocomplete="off"
                 placeholder="Ej: TINTO2847"
                 class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 uppercase tracking-wider font-mono"
               />
-              <p class="text-xs text-muted mt-1">Te lo da alguien que ya usa Vivra</p>
+              <p class="text-xs text-muted mt-1">Si alguien te invito, ingresa su codigo aqui</p>
             </div>
 
             <!-- Google OAuth -->
