@@ -26,8 +26,10 @@ export default function DashboardScreen() {
   const { isPremium } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
 
-  // Fetch unread notification count
+  // Fetch unread notification count + trial status
   useEffect(() => {
     if (!user) return;
     supabase
@@ -37,6 +39,21 @@ export default function DashboardScreen() {
       .eq('read', false)
       .eq('dismissed', false)
       .then(({ count }) => setUnreadCount(count ?? 0))
+      .then(undefined, () => {});
+
+    // Check Supabase trial status (for referral trials, independent of RevenueCat)
+    supabase
+      .from('user_subscriptions')
+      .select('plan, source, premium_until, trial_ends_at')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.plan === 'premium' && data?.source === 'trial' && data?.premium_until) {
+          const days = Math.max(0, Math.ceil((new Date(data.premium_until).getTime() - Date.now()) / 86400000));
+          setTrialDaysLeft(days);
+          setIsTrial(true);
+        }
+      })
       .then(undefined, () => {});
   }, [user, refreshing]);
 
@@ -172,8 +189,44 @@ export default function DashboardScreen() {
         {/* Fun fact */}
         <FunFact breed={petData.pet.breed} />
 
+        {/* Trial expiring banner */}
+        {isTrial && trialDaysLeft !== null && trialDaysLeft <= 1 && (
+          <TouchableOpacity
+            style={styles.trialExpiringBanner}
+            onPress={() => router.push('/paywall' as any)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="time-outline" size={20} color="#DC2626" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.trialExpiringTitle}>
+                Tu Premium gratis vence {trialDaysLeft === 0 ? 'hoy' : 'mañana'}
+              </Text>
+              <Text style={styles.trialExpiringDesc}>
+                Sin Premium perderás compartir mascota con co-dueño y funciones avanzadas
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#DC2626" />
+          </TouchableOpacity>
+        )}
+
+        {/* Trial active banner */}
+        {isTrial && trialDaysLeft !== null && trialDaysLeft > 1 && (
+          <TouchableOpacity
+            style={styles.trialBanner}
+            onPress={() => router.push('/premium' as any)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="star" size={18} color={Colors.accent} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.premiumBannerTitle}>Premium gratis por {trialDaysLeft} días</Text>
+              <Text style={styles.premiumBannerDesc}>Gracias a tu referido. Disfruta todas las funciones.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
+          </TouchableOpacity>
+        )}
+
         {/* Premium upsell */}
-        {!isPremium && (
+        {!isPremium && !isTrial && (
           <TouchableOpacity
             style={styles.premiumBanner}
             onPress={() => router.push('/paywall' as any)}
@@ -316,6 +369,28 @@ const styles = StyleSheet.create({
   premiumBannerInfo: { flex: 1 },
   premiumBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   premiumBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  trialBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.accentLight,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.accent + '30',
+  },
+  trialExpiringBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#FEF2F2',
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  trialExpiringTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: '#DC2626' },
+  trialExpiringDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
   errorCard: {
     backgroundColor: Colors.bad + '12',
     borderColor: Colors.bad,

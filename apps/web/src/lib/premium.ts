@@ -72,7 +72,7 @@ export const LIMITS = {
     maxVaccineRecords: 20,
     maxWeightRecords: 6,
     maxVetVisits: 10,
-    maxFoods: 1,
+    maxFoods: Infinity,
     maxFlights: 1,
   },
   premium: {
@@ -155,6 +155,7 @@ export function isAtLimit(key: LimitKey, currentCount: number, premium: PremiumS
 
 /**
  * Fetch premium status from Supabase. Use in Astro pages/layouts.
+ * Includes co-owner sharing: if a sharing partner has premium, this user gets it too.
  */
 export async function getPremiumStatus(supabase: any, userId: string): Promise<PremiumStatus> {
   try {
@@ -164,7 +165,47 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
       .eq('user_id', userId)
       .maybeSingle();
 
-    return evaluatePremium(data as UserSubscription | null);
+    const ownStatus = evaluatePremium(data as UserSubscription | null);
+    if (ownStatus.isPremium) return ownStatus;
+
+    // Co-owner premium sharing: check if any sharing partner has active premium
+    try {
+      const { createSupabaseAdminClient } = await import('./supabase');
+      const admin = createSupabaseAdminClient();
+      const [sharedWithMe, myShares] = await Promise.all([
+        admin.from('pet_shares').select('owner_id').eq('shared_with', userId),
+        admin.from('pet_shares').select('shared_with').eq('owner_id', userId),
+      ]);
+
+      const partnerIds = new Set<string>();
+      sharedWithMe.data?.forEach((s: any) => partnerIds.add(s.owner_id));
+      myShares.data?.forEach((s: any) => partnerIds.add(s.shared_with));
+
+      if (partnerIds.size > 0) {
+        const { data: partnerSubs } = await admin
+          .from('user_subscriptions')
+          .select('plan, source, premium_until, trial_ends_at')
+          .in('user_id', [...partnerIds]);
+
+        for (const sub of partnerSubs || []) {
+          const partnerStatus = evaluatePremium(sub as UserSubscription);
+          if (partnerStatus.isPremium) {
+            return {
+              isPremium: true,
+              plan: 'premium',
+              source: 'shared',
+              daysLeft: partnerStatus.daysLeft,
+              isTrial: false,
+              isExpiringSoon: partnerStatus.isExpiringSoon,
+            };
+          }
+        }
+      }
+    } catch {
+      // Silently ignore if pet_shares doesn't exist
+    }
+
+    return ownStatus;
   } catch {
     // Table doesn't exist yet — treat as free
     return evaluatePremium(null);

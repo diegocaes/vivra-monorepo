@@ -6,7 +6,7 @@ import EmptyState from '../components/ui/EmptyState.astro';
 import PremiumGate from '../components/ui/PremiumGate.astro';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
-import { getPremiumStatus, isAtLimit } from '../lib/premium';
+import { getPremiumStatus } from '../lib/premium';
 import { FOOD_TYPES } from '@vivra/shared';
 
 const { supabase, user, activePetId } = Astro.locals;
@@ -42,10 +42,6 @@ if (Astro.request.method === 'POST') {
     };
 
     if (action === 'add') {
-      const { count: foodCount } = await supabase.from('foods').select('id', { count: 'exact', head: true }).eq('pet_id', pet.id);
-      if (isAtLimit('maxFoods', foodCount ?? 0, premium)) {
-        return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent('Límite alcanzado. Refiere un amigo o suscríbete a Premium para ilimitados.'));
-      }
       const { error } = await supabase.from('foods').insert({ pet_id: pet.id, ...fields });
       if (error) return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent(error.message));
     }
@@ -370,14 +366,20 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
   )}
 
   {foods.length === 0 ? (
-    <EmptyState
-      icon="food"
-      title="Sin alimentos registrados"
-      description={`Registra qué come ${pet.name} para hacer seguimiento de su dieta`}
-    />
+    <div class="mb-5 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 px-5 py-6 text-center animate-fade-up">
+      <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 mx-auto mb-3">
+        <svg class="h-6 w-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+      </div>
+      <p class="text-sm font-semibold text-ink mb-1">Registra el alimento de {pet.name}</p>
+      <p class="text-xs text-muted mb-3">Agrega su comida actual para hacer seguimiento de dieta y bolsa</p>
+      <button type="button" id="empty-add-food" class="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Agregar alimento
+      </button>
+    </div>
   ) : (
     <div class="space-y-3">
-      {foods.map((food, i) => (
+      {foods.slice(0, premium.isPremium ? foods.length : 3).map((food, i) => (
         <Card variant="elevated" class:list={['animate-fade-up', i < 5 && `animate-fade-up-delay-${Math.min(i + 1, 5)}`]}>
 
           {/* ── VIEW ── */}
@@ -496,6 +498,17 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
 
         </Card>
       ))}
+
+      {!premium.isPremium && foods.length > 3 && (
+        <div class="mt-3 rounded-2xl border border-card-border bg-canvas px-5 py-4 text-center">
+          <p class="text-sm font-semibold text-ink mb-1">+{foods.length - 3} alimentos anteriores</p>
+          <p class="text-xs text-muted mb-3">Desbloquea el historial completo con Premium</p>
+          <a href="/premium" class="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent-dark transition-all active:scale-95">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            Ver historial completo
+          </a>
+        </div>
+      )}
     </div>
   )}
 
@@ -585,6 +598,16 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
         });
       }
     }
+    // Empty state → open food form
+    var emptyAddBtn = document.getElementById('empty-add-food');
+    if (emptyAddBtn && toggleBtn && formBody) {
+      emptyAddBtn.addEventListener('click', function() {
+        formBody.classList.remove('hidden');
+        if (toggleIcon) toggleIcon.style.transform = 'rotate(180deg)';
+        formBody.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+
     document.addEventListener('astro:page-load', setupAlimentacion);
   </script>
 

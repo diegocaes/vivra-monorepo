@@ -249,7 +249,7 @@ if (isPremium && pet) {
 }
 
 // Co-owner data
-let coOwners: { id: string; shared_with: string; email: string }[] = [];
+let coOwners: { id: string; shared_with: string; email: string; name: string }[] = [];
 let pendingInvite: { token: string; expires_at: string } | null = null;
 let ownerEmail = '';
 const inviteTokenParam = Astro.url.searchParams.get('invite_token');
@@ -265,10 +265,12 @@ try {
     if (shares && shares.length > 0) {
       for (const share of shares) {
         const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
+        const sharedName = sharedUser?.user_metadata?.full_name || sharedUser?.user_metadata?.name || '';
         coOwners.push({
           id: share.id,
           shared_with: share.shared_with,
           email: sharedUser?.email ?? 'Usuario',
+          name: sharedName,
         });
       }
     }
@@ -583,7 +585,8 @@ const origin = new URL(Astro.request.url).origin;
                       {co.email[0]?.toUpperCase()}
                     </div>
                     <div>
-                      <p class="text-sm font-medium text-ink">{co.email}</p>
+                      <p class="text-sm font-medium text-ink">{co.name || co.email}</p>
+                      {co.name && <p class="text-xs text-muted">{co.email}</p>}
                       <p class="text-xs text-muted">Co-dueño</p>
                     </div>
                   </div>

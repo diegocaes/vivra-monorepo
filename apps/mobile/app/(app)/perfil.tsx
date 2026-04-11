@@ -457,11 +457,13 @@ export default function PerfilScreen() {
                   <Ionicons name="people-outline" size={20} color={Colors.accent} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.coOwnerLabel}>
-                      {coOwners.length > 0 ? `Co-dueño (${coOwners.length})` : 'Agregar co-dueño'}
+                      {coOwners.length > 0
+                        ? (coOwners[0]?.shared_with_name || coOwners[0]?.shared_with_email || `Co-dueño (${coOwners.length})`)
+                        : 'Agregar co-dueño'}
                     </Text>
                     <Text style={styles.coOwnerSub}>
                       {coOwners.length > 0
-                        ? 'Administrar acceso compartido'
+                        ? (coOwners.length > 1 ? `+${coOwners.length - 1} más · Administrar acceso` : 'Co-dueño · Administrar acceso')
                         : isPremium ? `Comparte a ${pet.name}` : 'Disponible con Premium'}
                     </Text>
                   </View>

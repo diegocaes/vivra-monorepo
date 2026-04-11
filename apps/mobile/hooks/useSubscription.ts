@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import Purchases, { PurchasesPackage, CustomerInfo } from 'react-native-purchases';
 import { REVENUECAT_API_KEY, ENTITLEMENT_ID } from '../constants/revenueCat';
 import { useAuth } from './useAuth';
+import { supabase } from '../lib/supabase';
 
 interface SubscriptionState {
   isPremium: boolean;
@@ -78,12 +79,35 @@ export function useSubscription(): SubscriptionState {
   const checkSubscription = useCallback(async () => {
     try {
       const info = await Purchases.getCustomerInfo();
-      const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      setIsPremium(premium);
+      const rcPremium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+      if (rcPremium) {
+        setIsPremium(true);
+        return;
+      }
     } catch (e) {
       console.error('Check subscription error:', e);
     }
-  }, []);
+
+    // Fallback: check Supabase trial/referral premium (not in RevenueCat)
+    try {
+      if (user) {
+        const { data } = await supabase
+          .from('user_subscriptions')
+          .select('plan, premium_until')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (data?.plan === 'premium' && data?.premium_until) {
+          const daysLeft = Math.ceil((new Date(data.premium_until).getTime() - Date.now()) / 86400000);
+          if (daysLeft > 0) {
+            setIsPremium(true);
+            return;
+          }
+        }
+      }
+    } catch { /* user_subscriptions may not exist */ }
+
+    setIsPremium(false);
+  }, [user]);
 
   const loadOfferings = useCallback(async () => {
     try {

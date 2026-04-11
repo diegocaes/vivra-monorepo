@@ -121,9 +121,16 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
               <View style={styles.coOwnerIcon}>
                 <Ionicons name="person" size={18} color={Colors.accent} />
               </View>
-              <Text style={styles.coOwnerText} numberOfLines={1}>
-                Co-dueño
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.coOwnerText} numberOfLines={1}>
+                  {co.shared_with_name || co.shared_with_email || 'Co-dueño'}
+                </Text>
+                {co.shared_with_name && co.shared_with_email && (
+                  <Text style={styles.coOwnerEmail} numberOfLines={1}>
+                    {co.shared_with_email}
+                  </Text>
+                )}
+              </View>
               {isOwner && (
                 <TouchableOpacity
                   onPress={() => revokeCoOwner(co.id)}
@@ -201,9 +208,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   coOwnerText: {
-    flex: 1,
     fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
     color: Colors.ink,
+  },
+  coOwnerEmail: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: 2,
   },
   inviteReady: {
     alignItems: 'center',

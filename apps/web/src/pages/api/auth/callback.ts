@@ -117,10 +117,13 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
               .single();
 
             if (pet) {
+              const userName = user.user_metadata?.full_name || user.user_metadata?.name || null;
               await admin.from('pet_shares').insert({
                 pet_id: invite.pet_id,
                 owner_id: pet.user_id,
                 shared_with: user.id,
+                shared_with_email: user.email || null,
+                shared_with_name: userName,
               });
               await admin
                 .from('pet_share_invites')

@@ -36,6 +36,19 @@ const fullName = user.user_metadata?.full_name || user.user_metadata?.name || ''
 const firstName = fullName.split(' ')[0] || user.email?.split('@')[0] || 'amigo';
 const onboardingError = Astro.url.searchParams.get('error');
 
+// Check if user was referred (for trial messaging in UI)
+let isReferred = false;
+try {
+  const admin = createSupabaseAdminClient();
+  const { data: ref } = await admin
+    .from('referrals')
+    .select('id')
+    .eq('referred_id', user.id)
+    .eq('status', 'pending')
+    .maybeSingle();
+  isReferred = !!ref;
+} catch {}
+
 // Handle final form submission
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
@@ -189,8 +202,8 @@ if (Astro.request.method === 'POST') {
           premium_days_granted: 30,
         }).eq('id', pendingRef.id);
 
-        // Grant referred user: 14 days premium trial
-        const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+        // Grant referred user: 7 days premium trial
+        const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         await admin.from('user_subscriptions').upsert({
           user_id: user.id,
           plan: 'premium',
@@ -259,53 +272,64 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
 
         <!-- ───────────── PASO 1: Bienvenida ───────────── -->
         <div data-step="1" class="animate-fade-up">
-          <div class="relative overflow-hidden rounded-3xl text-white px-6 py-8 shadow-xl" style="background: var(--color-accent)">
-            <div class="absolute -top-10 -right-10 h-36 w-36 rounded-full bg-white/5"></div>
-            <div class="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-white/5"></div>
+          <div class="text-center mb-6">
+            <img src="/Vivra.svg" alt="Vivra" class="h-14 mx-auto mb-4" />
+            <h1 class="text-2xl font-bold text-ink tracking-tight mb-2">
+              ¡Hola, {firstName}!
+            </h1>
+            <p class="text-sm text-muted leading-relaxed">
+              Estás a un minuto de tener toda la información de tu mascota en un solo lugar.
+            </p>
+          </div>
 
-            <div class="relative text-center">
-              <div class="mb-4 animate-float inline-block">
-                <img src="/Vivra-white.svg" alt="Vivra" class="h-14 w-14 mx-auto" />
+          {isReferred && (
+            <div class="rounded-2xl border border-accent/30 bg-accent/5 px-4 py-3 mb-5 flex items-center gap-3">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent">
+                <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
-              <h1 class="text-2xl font-bold tracking-tight mb-2">
-                ¡Hola, {firstName}!
-              </h1>
-              <p class="text-sm text-white/70 leading-relaxed mb-6">
-                Estás a un minuto de poder tener toda la información en un sólo lugar de tu mascota.
-              </p>
-
-              <div class="space-y-3 text-left mb-8">
-                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
-                  <svg class="h-5 w-5 shrink-0 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6"/></svg>
-                  <div>
-                    <p class="text-sm font-semibold">Perfil y pasaporte</p>
-                    <p class="text-xs text-white/60">Toda su info y un pasaporte digital para viajes</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
-                  <span class="text-lg shrink-0">💉</span>
-                  <div>
-                    <p class="text-sm font-semibold">Historial de vacunas</p>
-                    <p class="text-xs text-white/60">Nunca pierdas un registro</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5">
-                  <span class="text-lg shrink-0">🏃</span>
-                  <div>
-                    <p class="text-sm font-semibold">Registro de actividad</p>
-                    <p class="text-xs text-white/60">Paseos, ejercicio y bienestar</p>
-                  </div>
-                </div>
+              <div>
+                <p class="text-sm font-bold text-accent-dark">7 días Premium gratis</p>
+                <p class="text-xs text-muted">Por invitación de un amigo</p>
               </div>
+            </div>
+          )}
 
-              <button
-                id="btn-step1-next"
-                class="w-full rounded-2xl bg-white text-gray-900 px-6 py-3.5 font-bold text-sm transition-all hover:bg-white/90 active:scale-95 shadow-lg"
-              >
-                Empezar →
-              </button>
+          <div class="space-y-3 mb-6">
+            <div class="flex items-center gap-3 rounded-2xl bg-accent text-white px-4 py-3.5">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6"/></svg>
+              </div>
+              <div>
+                <p class="text-sm font-semibold">Perfil y pasaporte</p>
+                <p class="text-xs text-white/70">Toda su info y un pasaporte digital</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 rounded-2xl bg-accent text-white px-4 py-3.5">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              </div>
+              <div>
+                <p class="text-sm font-semibold">Vacunas y salud</p>
+                <p class="text-xs text-white/70">Nunca pierdas un registro</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 rounded-2xl bg-accent text-white px-4 py-3.5">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              </div>
+              <div>
+                <p class="text-sm font-semibold">Actividad y bienestar</p>
+                <p class="text-xs text-white/70">Paseos, ejercicio y más</p>
+              </div>
             </div>
           </div>
+
+          <button
+            id="btn-step1-next"
+            class="w-full rounded-2xl bg-accent px-6 py-3.5 font-bold text-sm text-white transition-all hover:bg-accent-dark active:scale-95 shadow-md"
+          >
+            Empezar
+          </button>
         </div>
 
         <!-- ───────────── PASO 2: Nombre, raza y foto ───────────── -->
@@ -390,7 +414,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
         <div data-step="3" class="hidden">
           <div class="mb-6 text-center">
             <p class="text-xs font-semibold text-accent uppercase tracking-widest mb-1">Paso 2 de 3</p>
-            <h2 class="text-2xl font-bold text-ink">¿Cuándo nació? 🎂</h2>
+            <h2 class="text-2xl font-bold text-ink">¿Cuándo nació?</h2>
             <p class="text-sm text-muted mt-1">Para calcular su edad y recordar su cumpleaños.</p>
           </div>
 
@@ -506,7 +530,9 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
             <div class="absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-white/5"></div>
 
             <div class="relative">
-              <div class="text-6xl mb-4 animate-float inline-block">🐕</div>
+              <div class="mb-4 animate-float inline-block">
+                <img src="/Vivra-white.svg" alt="Vivra" class="h-14 mx-auto" />
+              </div>
 
               <div class="mb-3 flex items-center justify-center">
                 <div class="flex items-center gap-2.5 rounded-full bg-green-500 px-5 py-2.5 shadow-lg">
@@ -516,13 +542,23 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
               </div>
 
               <h2 class="text-2xl font-bold tracking-tight mt-4 mb-2" id="celebration-title">
-                ¡Listo! El perfil está creado 🎉
+                ¡Listo! El perfil está creado
               </h2>
-              <p class="text-sm text-white/70 leading-relaxed mb-8" id="celebration-subtitle">
+              <p class="text-sm text-white/70 leading-relaxed mb-4" id="celebration-subtitle">
                 {isAddMode
                   ? 'Ya puedes empezar a llevar toda la información e historial de tu peludo.'
                   : 'Bienvenido a Vivra. Tu mejor amigo ya tiene su historial digital: vacunas, peso, actividad y más.'}
               </p>
+
+              {isReferred && !isAddMode && (
+                <div class="rounded-2xl bg-white/15 px-4 py-3 mb-6 text-left">
+                  <div class="flex items-center gap-2 mb-1">
+                    <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    <p class="text-sm font-bold">7 días Premium activados</p>
+                  </div>
+                  <p class="text-xs text-white/70 leading-relaxed">Gráficas de peso, score detallado, inventario de comida y más — todo desbloqueado.</p>
+                </div>
+              )}
 
               <button
                 id="btn-final-submit"
@@ -677,7 +713,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
         // Update celebration screen title
         const celebTitle = document.getElementById('celebration-title');
         const celebBtn = document.getElementById('btn-final-label');
-        if (celebTitle) celebTitle.textContent = `¡Listo! El pasaporte de ${store.name} está creado 🎉`;
+        if (celebTitle) celebTitle.textContent = `¡Listo! El pasaporte de ${store.name} está creado`;
         if (celebBtn) celebBtn.textContent = `Vamos al perfil de ${store.name} →`;
 
         goTo(3);

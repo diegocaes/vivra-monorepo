@@ -8,6 +8,8 @@ import type { Pet, Vaccine, WeightRecord, Food } from '../types/supabase';
 export interface CoOwner {
   id: string;
   shared_with: string;
+  shared_with_email: string | null;
+  shared_with_name: string | null;
 }
 
 export interface PetData {
@@ -126,7 +128,7 @@ export function usePet(): PetData {
       if (user && pet.user_id === user.id) {
         const { data: shares } = await supabase
           .from('pet_shares')
-          .select('id, shared_with')
+          .select('id, shared_with, shared_with_email, shared_with_name')
           .eq('pet_id', pet.id);
         setCoOwners((shares as CoOwner[]) ?? []);
       } else {

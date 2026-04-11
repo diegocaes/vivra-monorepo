@@ -7,7 +7,7 @@ const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
 const features = [
-  { icon: '👥', name: 'Compartir con tu pareja', desc: 'Ambos dueños pueden ver y registrar toda la info de su mascota', free: 'No', premium: 'Co-dueño ilimitado' },
+  { icon: '👥', name: 'Premium compartido', desc: 'Si uno paga Premium, ambos co-dueños tienen acceso completo', free: 'No', premium: 'Ambos con Premium' },
   { icon: '🐾', name: 'Mascotas ilimitadas', desc: 'Registra todos tus perros en una sola cuenta', free: '1 mascota', premium: 'Hasta 10' },
   { icon: '📊', name: 'Grafica de peso', desc: 'Visualiza la evolucion del peso con graficas detalladas', free: 'Ultimo peso', premium: 'Historial completo' },
   { icon: '🧡', name: 'Score detallado', desc: 'Desglose por pilar, flags y recomendaciones personalizadas', free: 'Score general', premium: 'Detalle completo' },
@@ -94,6 +94,13 @@ const features = [
           <div>
             <p class="text-sm font-medium text-ink">Refiere amigos</p>
             <p class="text-xs text-muted mt-0.5">Cada amigo que se une = 1 mes premium gratis para ti</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm">👥</div>
+          <div>
+            <p class="text-sm font-medium text-ink">Premium compartido</p>
+            <p class="text-xs text-muted mt-0.5">Si tu co-dueño tiene Premium, tú también lo obtienes</p>
           </div>
         </div>
         <div class="flex items-start gap-3">

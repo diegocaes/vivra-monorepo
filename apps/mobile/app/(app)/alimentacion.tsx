@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect, Text as SvgText, Line, G } from 'react-native-svg';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
@@ -111,6 +112,7 @@ function enrichFood(food: Food): FoodWithCalc {
 }
 
 export default function AlimentacionScreen() {
+  const router = useRouter();
   const { pet } = usePetContext();
   const { isPremium } = useSubscription();
   const [foods, setFoods] = useState<FoodWithCalc[]>([]);
@@ -369,7 +371,7 @@ export default function AlimentacionScreen() {
         {foods.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Historial de alimentos</Text>
-            {foods.map(food => (
+            {(isPremium ? foods : foods.slice(0, 3)).map(food => (
               <TouchableOpacity key={food.id} activeOpacity={0.7} onPress={() => openEditFood(food)}>
                 <Card>
                   <View style={styles.itemRow}>
@@ -396,6 +398,17 @@ export default function AlimentacionScreen() {
                 </Card>
               </TouchableOpacity>
             ))}
+            {!isPremium && foods.length > 3 && (
+              <TouchableOpacity
+                style={styles.historyGate}
+                onPress={() => router.push('/premium' as any)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="lock-closed-outline" size={16} color={Colors.accent} />
+                <Text style={styles.historyGateText}>+{foods.length - 3} alimentos · Ver historial completo</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.accent} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -517,4 +530,10 @@ const styles = StyleSheet.create({
   chartTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink, marginBottom: Spacing.sm },
   // Form
   formRow: { flexDirection: 'row', gap: Spacing.sm },
+  historyGate: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.canvas, borderRadius: Radius.lg, borderWidth: 1,
+    borderColor: Colors.cardBorder, padding: Spacing.md, marginTop: Spacing.xs,
+  },
+  historyGateText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.accent },
 });
