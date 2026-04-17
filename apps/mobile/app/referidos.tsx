@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Share, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useEffect, useCallback } from 'react';
@@ -8,10 +8,12 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/Card';
 
-const TIERS = [
-  { target: 1, label: '1 Referido', reward: 'Color especial de tema', emoji: '\uD83C\uDFA8', description: 'Desbloquea un color de tema exclusivo para tu mascota' },
-  { target: 3, label: '3 Referidos', reward: 'Mascota extra gratis', emoji: '\uD83D\uDC3E', description: 'Agrega una mascota adicional sin necesidad de Premium' },
-  { target: 5, label: '5 Referidos', reward: '1 mes Premium gratis', emoji: '\u2B50', description: 'Disfruta de todas las funciones Premium por 1 mes' },
+// Honest milestones — matches backend: 30 days per completed referral, cumulative.
+const MILESTONES = [
+  { target: 1, label: '1 referido', reward: '30 días premium' },
+  { target: 3, label: '3 referidos', reward: '90 días premium' },
+  { target: 5, label: '5 referidos', reward: '150 días premium' },
+  { target: 10, label: '10 referidos', reward: '300 días premium' },
 ];
 
 export default function ReferidosScreen() {
@@ -25,7 +27,7 @@ export default function ReferidosScreen() {
   const fetchReferralData = useCallback(async () => {
     if (!user) return;
 
-    // Fetch referral code
+    // Fetch referral code; use RPC fallback so pet-name prefix matches the web scheme
     const { data: codeData } = await supabase
       .from('referral_codes')
       .select('code')
@@ -35,7 +37,7 @@ export default function ReferidosScreen() {
     if (codeData?.code) {
       setReferralCode(codeData.code);
     } else {
-      // Generate a new referral code: first 3 chars of pet name + 4 random digits
+      // No code yet — ask backend to generate one (uses the first pet's name if available)
       const { data: petData } = await supabase
         .from('pets')
         .select('name')
@@ -44,18 +46,11 @@ export default function ReferidosScreen() {
         .limit(1)
         .maybeSingle();
 
-      const petPrefix = petData?.name
-        ? petData.name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase()
-        : 'VIV';
-      const digits = Math.floor(1000 + Math.random() * 9000).toString();
-      const newCode = petPrefix + digits;
-
-      const { error: insertError } = await supabase
-        .from('referral_codes')
-        .insert({ user_id: user.id, code: newCode, uses_count: 0 });
-
-      if (!insertError) {
-        setReferralCode(newCode);
+      const { data: rpcData, error: rpcError } = await supabase.rpc('generate_my_referral_code', {
+        p_base: petData?.name || 'PET',
+      });
+      if (!rpcError && rpcData?.ok && rpcData.code) {
+        setReferralCode(rpcData.code);
       }
     }
 
@@ -130,9 +125,9 @@ export default function ReferidosScreen() {
           <View style={styles.heroIconWrap}>
             <Ionicons name="gift" size={32} color={Colors.accent} />
           </View>
-          <Text style={styles.heroTitle}>Invita y gana premios</Text>
+          <Text style={styles.heroTitle}>Invita y gana premium</Text>
           <Text style={styles.heroSubtitle}>
-            Regala 30 dias de Vivra Premium a tus amigos y gana recompensas exclusivas
+            Tus amigos reciben 7 días Premium gratis y tú ganas 30 días por cada referido que cree su mascota
           </Text>
         </View>
 
@@ -164,72 +159,62 @@ export default function ReferidosScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={[styles.statNumber, { color: Colors.accent }]}>
-              {TIERS.filter(t => completedCount >= t.target).length}/{TIERS.length}
+              {completedCount * 30}d
             </Text>
-            <Text style={styles.statLabel}>Premios</Text>
+            <Text style={styles.statLabel}>Premium ganado</Text>
           </View>
         </View>
 
-        {/* Rewards tiers */}
+        {/* Milestones — cumulative, no fake tiers */}
         <View>
-          <Text style={styles.rewardsSectionTitle}>Tus Recompensas</Text>
-          {TIERS.map((tier, index) => {
-            const unlocked = completedCount >= tier.target;
-            const progress = Math.min(completedCount, tier.target);
+          <Text style={styles.rewardsSectionTitle}>Tus metas</Text>
+          {MILESTONES.map((m, index) => {
+            const done = completedCount >= m.target;
             return (
-              <View key={index} style={[styles.tierCard, unlocked && styles.tierCardUnlocked]}>
-                <View style={styles.tierHeader}>
-                  <View style={[styles.tierEmoji, unlocked && styles.tierEmojiUnlocked]}>
-                    <Text style={styles.tierEmojiText}>{tier.emoji}</Text>
-                  </View>
-                  <View style={styles.tierInfo}>
-                    <Text style={styles.tierLabel}>{tier.label}</Text>
-                    <Text style={[styles.tierReward, unlocked && styles.tierRewardUnlocked]}>{tier.reward}</Text>
-                    <Text style={styles.tierDesc}>{tier.description}</Text>
-                  </View>
+              <View key={index} style={[styles.milestoneRow, done && styles.milestoneRowDone]}>
+                <View style={[styles.milestoneDot, done && styles.milestoneDotDone]}>
+                  {done ? (
+                    <Ionicons name="checkmark" size={14} color={Colors.accent} />
+                  ) : (
+                    <Text style={styles.milestoneTarget}>{m.target}</Text>
+                  )}
                 </View>
-                {/* Progress bar */}
-                <View style={styles.tierProgressRow}>
-                  <View style={styles.tierProgressBarBg}>
-                    <View
-                      style={[
-                        styles.tierProgressBarFill,
-                        {
-                          width: `${(progress / tier.target) * 100}%`,
-                          backgroundColor: unlocked ? Colors.good : Colors.accent,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.tierProgressText}>
-                    {'\uD83D\uDC64'} {progress}/{tier.target}
+                <Text style={[styles.milestoneLabel, done && styles.milestoneLabelDone]}>{m.label}</Text>
+                <View style={[styles.milestoneBadge, done && styles.milestoneBadgeDone]}>
+                  <Text style={[styles.milestoneBadgeText, done && styles.milestoneBadgeTextDone]}>
+                    {m.reward}
                   </Text>
                 </View>
-                {/* Redeem button */}
-                <TouchableOpacity
-                  style={[styles.redeemBtn, unlocked ? styles.redeemBtnUnlocked : styles.redeemBtnLocked]}
-                  disabled={!unlocked}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    if (unlocked) {
-                      Alert.alert('Recompensa', `Tu recompensa "${tier.reward}" sera aplicada automaticamente.`);
-                    }
-                  }}
-                >
-                  {!unlocked && <Ionicons name="lock-closed" size={14} color={Colors.muted} style={{ marginRight: 4 }} />}
-                  <Text style={[styles.redeemBtnText, unlocked ? styles.redeemTextUnlocked : styles.redeemTextLocked]}>
-                    {unlocked ? 'Canjear' : 'Bloqueado'}
-                  </Text>
-                </TouchableOpacity>
               </View>
             );
           })}
         </View>
 
-        {/* Footer note */}
-        <Text style={styles.footerNote}>
-          Los referidos son verificados por nuestro equipo
-        </Text>
+        {/* How it works */}
+        <Card>
+          <Text style={styles.sectionTitle}>Cómo funciona</Text>
+          <View style={styles.howRow}>
+            <View style={styles.howNum}><Text style={styles.howNumText}>1</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.howTitle}>Comparte tu link</Text>
+              <Text style={styles.howDesc}>Envíaselo a otros dueños de mascotas</Text>
+            </View>
+          </View>
+          <View style={styles.howRow}>
+            <View style={styles.howNum}><Text style={styles.howNumText}>2</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.howTitle}>Ellos crean su mascota</Text>
+              <Text style={styles.howDesc}>Reciben 7 días de Premium gratis al unirse</Text>
+            </View>
+          </View>
+          <View style={styles.howRow}>
+            <View style={styles.howNum}><Text style={styles.howNumText}>3</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.howTitle}>Tú ganas 30 días Premium</Text>
+              <Text style={styles.howDesc}>Automático, sin límite, acumulativo</Text>
+            </View>
+          </View>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -377,129 +362,100 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Rewards section
+  // Milestones
   rewardsSectionTitle: {
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.ink,
     marginBottom: Spacing.sm,
   },
-  tierCard: {
+  milestoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     backgroundColor: Colors.card,
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.xs,
   },
-  tierCardUnlocked: {
-    borderColor: Colors.good + '40',
-    backgroundColor: '#F0FDF4',
+  milestoneRowDone: {
+    borderColor: Colors.accentLight,
+    backgroundColor: Colors.accentLight,
   },
-  tierHeader: {
+  milestoneDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneDotDone: {
+    backgroundColor: Colors.card,
+  },
+  milestoneTarget: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.muted,
+  },
+  milestoneLabel: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.muted,
+  },
+  milestoneLabelDone: {
+    color: Colors.ink,
+  },
+  milestoneBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.canvas,
+  },
+  milestoneBadgeDone: {
+    backgroundColor: Colors.card,
+  },
+  milestoneBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    color: Colors.muted,
+  },
+  milestoneBadgeTextDone: {
+    color: Colors.accent,
+  },
+
+  // How it works
+  howRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
-  tierEmoji: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.canvas,
+  howNum: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.accentLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tierEmojiUnlocked: {
-    backgroundColor: Colors.good + '15',
-  },
-  tierEmojiText: {
-    fontSize: 22,
-  },
-  tierInfo: {
-    flex: 1,
-  },
-  tierLabel: {
+  howNumText: {
     fontSize: FontSize.xs,
-    fontWeight: FontWeight.semibold,
-    color: Colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  tierReward: {
-    fontSize: FontSize.md,
     fontWeight: FontWeight.bold,
-    color: Colors.ink,
-    marginTop: 2,
+    color: Colors.accent,
   },
-  tierRewardUnlocked: {
-    color: Colors.good,
-  },
-  tierDesc: {
-    fontSize: FontSize.xs,
-    color: Colors.muted,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-
-  // Progress
-  tierProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  tierProgressBarBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: Colors.cardBorder,
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-  },
-  tierProgressBarFill: {
-    height: 6,
-    borderRadius: Radius.full,
-  },
-  tierProgressText: {
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.medium,
-    color: Colors.muted,
-    minWidth: 36,
-    textAlign: 'right' as const,
-  },
-
-  // Redeem button
-  redeemBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.sm,
-  },
-  redeemBtnUnlocked: {
-    backgroundColor: Colors.good,
-  },
-  redeemBtnLocked: {
-    backgroundColor: Colors.canvas,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  redeemBtnText: {
+  howTitle: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
+    color: Colors.ink,
   },
-  redeemTextUnlocked: {
-    color: Colors.white,
-  },
-  redeemTextLocked: {
-    color: Colors.muted,
-  },
-
-  // Footer
-  footerNote: {
+  howDesc: {
     fontSize: FontSize.xs,
     color: Colors.muted,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
+    marginTop: 2,
   },
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,45 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 
+const PENDING_REF_KEY = 'pending_referral';
+
 export default function RegisterScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ ref?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [refCode, setRefCode] = useState('');
+  const [showRefField, setShowRefField] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Pre-fill ref code from deep link or from previously stored pending one
+  useEffect(() => {
+    (async () => {
+      if (params.ref) {
+        const cleaned = String(params.ref).toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (cleaned) {
+          setRefCode(cleaned);
+          setShowRefField(true);
+          return;
+        }
+      }
+      const stored = await AsyncStorage.getItem(PENDING_REF_KEY);
+      if (stored) {
+        setRefCode(stored);
+        setShowRefField(true);
+      }
+    })();
+  }, [params.ref]);
 
   async function handleRegister() {
     if (!email.trim() || !password.trim()) {
@@ -30,24 +58,60 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
+    // Align with web: minimum 8 characters
+    if (password.length < 8) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 8 caracteres');
       return;
     }
 
+    // Validate ref code up-front if provided
+    const cleanRef = refCode.trim().toUpperCase();
+    if (cleanRef) {
+      const { data: code } = await supabase
+        .from('referral_codes')
+        .select('user_id')
+        .eq('code', cleanRef)
+        .maybeSingle();
+      if (!code) {
+        Alert.alert(
+          'Código inválido',
+          'El código de referido no existe. Puedes continuar sin código o corregirlo.',
+        );
+        return;
+      }
+    }
+
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
       password,
     });
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      const msg = error.message?.toLowerCase() ?? '';
+      if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
+        Alert.alert('Este email ya tiene cuenta', 'Inicia sesión en lugar de crear una nueva.');
+      } else {
+        Alert.alert('Error', error.message);
+      }
+      return;
+    }
+
+    // Persist ref code so it survives email confirmation roundtrip
+    if (cleanRef) {
+      await AsyncStorage.setItem(PENDING_REF_KEY, cleanRef);
+    }
+
+    // If Supabase auto-confirmed (rare on mobile), route directly into the app.
+    // Otherwise tell the user to check email and navigate back to login.
+    if (signUpData.session) {
+      router.replace('/onboarding' as any);
     } else {
       Alert.alert(
         '¡Cuenta creada!',
-        'Revisa tu email para confirmar tu cuenta.',
+        'Revisa tu email para confirmar. Después inicia sesión.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login' as any) }],
       );
     }
   }
@@ -57,58 +121,86 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <View style={styles.inner}>
-        <View style={styles.header}>
-          <Text style={styles.logo}>Vivra</Text>
-          <Text style={styles.subtitle}>Crea tu cuenta</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.inner}>
+          <View style={styles.header}>
+            <Text style={styles.logo}>Vivra</Text>
+            <Text style={styles.subtitle}>Crea tu cuenta</Text>
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={Colors.muted}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Contraseña (mín. 8 caracteres)"
+              placeholderTextColor={Colors.muted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Confirmar contraseña"
+              placeholderTextColor={Colors.muted}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoComplete="new-password"
+            />
+
+            {showRefField ? (
+              <View>
+                <Text style={styles.refLabel}>Código de referido</Text>
+                <TextInput
+                  style={[styles.input, styles.refInput]}
+                  placeholder="Ej: TINTO2847"
+                  placeholderTextColor={Colors.muted}
+                  value={refCode}
+                  onChangeText={(t) => setRefCode(t.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                <Text style={styles.refHint}>
+                  Si alguien te invitó, recibes 7 días Premium gratis
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={() => setShowRefField(true)} style={styles.refToggle}>
+                <Text style={styles.refToggleText}>¿Tienes un código de referido?</Text>
+              </TouchableOpacity>
+            )}
+
+            <Button
+              title="Crear cuenta"
+              onPress={handleRegister}
+              loading={loading}
+            />
+          </View>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>¿Ya tienes cuenta? </Text>
+            <Link href="/(auth)/login">
+              <Text style={styles.footerLink}>Inicia sesión</Text>
+            </Link>
+          </View>
         </View>
-
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={Colors.muted}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Contraseña"
-            placeholderTextColor={Colors.muted}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="new-password"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Confirmar contraseña"
-            placeholderTextColor={Colors.muted}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoComplete="new-password"
-          />
-
-          <Button
-            title="Crear cuenta"
-            onPress={handleRegister}
-            loading={loading}
-          />
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>¿Ya tienes cuenta? </Text>
-          <Link href="/(auth)/login">
-            <Text style={styles.footerLink}>Inicia sesión</Text>
-          </Link>
-        </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -118,10 +210,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.canvas,
   },
-  inner: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+  },
+  inner: {
     paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
   },
   header: {
     alignItems: 'center',
@@ -149,6 +244,30 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     fontSize: FontSize.md,
     color: Colors.ink,
+  },
+  refLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    color: Colors.ink,
+    marginBottom: Spacing.xs,
+  },
+  refInput: {
+    fontFamily: 'monospace',
+    letterSpacing: 1,
+  },
+  refHint: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: Spacing.xs,
+  },
+  refToggle: {
+    paddingVertical: Spacing.xs,
+    alignSelf: 'center',
+  },
+  refToggleText: {
+    fontSize: FontSize.sm,
+    color: Colors.accent,
+    fontWeight: FontWeight.medium,
   },
   footer: {
     flexDirection: 'row',

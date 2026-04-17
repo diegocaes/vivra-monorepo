@@ -27,6 +27,8 @@ export default function RootLayout() {
       return;
     }
 
+    let cancelled = false;
+
     // Check owned + shared pets
     Promise.all([
       supabase
@@ -42,15 +44,32 @@ export default function RootLayout() {
         .limit(1),
     ])
       .then(([ownedRes, sharedRes]) => {
+        if (cancelled) return;
+        // If either query errored, we can't trust the result — keep hasPets
+        // as null so the loading screen stays visible rather than wrongly
+        // routing the user to /onboarding and risking a duplicate pet.
+        if (ownedRes.error || sharedRes.error) {
+          console.warn(
+            '[layout] pets fetch error:',
+            ownedRes.error?.message || sharedRes.error?.message,
+          );
+          return;
+        }
         const has = ((ownedRes.count ?? 0) + (sharedRes.count ?? 0)) > 0;
         setHasPets(has);
         if (ownedRes.data?.[0]?.name) {
           scheduleDailyActivityReminder({ petName: ownedRes.data[0].name });
         }
       })
-      .then(undefined, () => {
-        setHasPets(false);
+      .then(undefined, (e) => {
+        if (cancelled) return;
+        console.warn('[layout] pets fetch threw:', e);
+        // Leave hasPets as null on transient errors
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   useEffect(() => {

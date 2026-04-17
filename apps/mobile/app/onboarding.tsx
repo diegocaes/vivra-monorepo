@@ -14,12 +14,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
 import { DOG_BREEDS } from '@vivra/shared';
+
+const PENDING_REF_KEY = 'pending_referral';
 
 const STEPS = [
   { title: 'Nombre', subtitle: 'Cómo se llama tu mascota?' },
@@ -100,22 +103,64 @@ export default function OnboardingScreen() {
     if (!user) return;
     setSaving(true);
 
+    const cleanName = petName.trim();
     const { error } = await supabase.from('pets').insert({
       user_id: user.id,
-      name: petName.trim(),
+      name: cleanName,
       breed: breed || null,
       birth_date: getBirthDateISO() || null,
       gender: gender || null,
       weight_kg: weightKg ? parseFloat(weightKg) : null,
     });
 
-    setSaving(false);
-
     if (error) {
+      setSaving(false);
       Alert.alert('Error', error.message);
       return;
     }
 
+    // ── Post-pet setup: referral code + subscription + pending referral redemption ──
+    // All best-effort; we don't block the user from entering the app on failures.
+    try {
+      // 1. Generate personal referral code (idempotent)
+      await supabase.rpc('generate_my_referral_code', {
+        p_base: cleanName || 'PET',
+      });
+    } catch (e) {
+      console.warn('[onboarding] generate referral code failed:', e);
+    }
+
+    try {
+      // 2. Redeem any pending referral code the user entered at signup
+      const pendingRef = await AsyncStorage.getItem(PENDING_REF_KEY);
+      if (pendingRef) {
+        const { data, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef });
+        if (redeemErr) {
+          console.warn('[onboarding] redeem_referral failed:', redeemErr.message);
+        } else if (!data?.ok) {
+          console.warn('[onboarding] redeem_referral rejected:', data?.error);
+        }
+        await AsyncStorage.removeItem(PENDING_REF_KEY);
+      } else {
+        // 3. Ensure a user_subscriptions row exists (free plan default)
+        //    RLS lets users read their own row; inserting uses the user's auth.
+        const { data: existingSub } = await supabase
+          .from('user_subscriptions')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!existingSub) {
+          await supabase.from('user_subscriptions').insert({
+            user_id: user.id,
+            plan: 'free',
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[onboarding] post-pet setup error:', e);
+    }
+
+    setSaving(false);
     router.replace('/(app)');
   };
 

@@ -102,27 +102,28 @@ export default function InviteScreen() {
   };
 
   const handleAccept = async () => {
-    if (!invite || !user) return;
+    if (!invite || !user || !token) return;
     setAccepting(true);
 
-    const { error: shareError } = await supabase.from('pet_shares').insert({
-      pet_id: invite.petId,
-      owner_id: invite.ownerId,
-      shared_with: user.id,
-    });
+    // Use RPC so the co-owner can insert into pet_shares
+    // (RLS only allows the pet owner to INSERT directly, so we bypass via SECURITY DEFINER function)
+    const { data, error } = await supabase.rpc('accept_pet_share_invite', { p_token: token });
 
-    if (shareError) {
-      setAccepting(false);
-      Alert.alert('Error', 'No se pudo aceptar la invitación');
+    setAccepting(false);
+
+    if (error || !data?.ok) {
+      const errCode = (data?.error as string | undefined) || 'unknown';
+      const messages: Record<string, string> = {
+        not_found: 'Esta invitación ya no existe',
+        already_used: 'Esta invitación ya fue usada',
+        expired: 'Esta invitación expiró',
+        self_invite: 'No puedes aceptar tu propia invitación',
+        pet_not_found: 'La mascota ya no está disponible',
+      };
+      Alert.alert('No se pudo aceptar', messages[errCode] || 'Intenta de nuevo más tarde');
       return;
     }
 
-    await supabase
-      .from('pet_share_invites')
-      .update({ status: 'accepted', accepted_by: user.id })
-      .eq('id', invite.inviteId);
-
-    setAccepting(false);
     setStatus('accepted');
 
     // Navigate to app after a brief delay

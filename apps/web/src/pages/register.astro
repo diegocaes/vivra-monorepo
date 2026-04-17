@@ -76,11 +76,13 @@ if (Astro.request.method === 'POST') {
     const cleanPassword = password?.trim();
     const confirmPassword = (formData.get('confirm_password') as string)?.trim();
 
+    const refSuffix = refCode ? `&ref=${encodeURIComponent(refCode)}` : '';
+
     if (!cleanPassword || cleanPassword.length < 8) {
-      return Astro.redirect(`/register?error=weak_password&ref=${refCode}`);
+      return Astro.redirect(`/register?error=weak_password${refSuffix}`);
     }
     if (cleanPassword !== confirmPassword) {
-      return Astro.redirect(`/register?error=password_mismatch&ref=${refCode}`);
+      return Astro.redirect(`/register?error=password_mismatch${refSuffix}`);
     }
 
     const { data: signUpData, error: registerError } = await supabase.auth.signUp({
@@ -92,10 +94,10 @@ if (Astro.request.method === 'POST') {
       const code = msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')
         ? 'email_exists'
         : 'register_failed';
-      return Astro.redirect(`/register?error=${code}&ref=${refCode}`);
+      return Astro.redirect(`/register?error=${code}${refSuffix}`);
     }
     if (!signUpData.user) {
-      return Astro.redirect(`/register?error=register_failed&ref=${refCode}`);
+      return Astro.redirect(`/register?error=register_failed${refSuffix}`);
     }
     return Astro.redirect('/register?success=check_email');
   }

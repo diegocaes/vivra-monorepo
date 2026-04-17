@@ -36,12 +36,13 @@ const code = refCode?.code ?? '';
 const origin = new URL(Astro.request.url).origin;
 const shareLink = code ? `${origin}/register?ref=${code}` : '';
 
-// Milestones
+// Cumulative rewards (actually matches how the backend grants them:
+// 30 days per completed referral, no tiered bonuses).
 const milestones = [
-  { target: 1, label: '1 referido', reward: '1 mes premium', done: completedReferrals >= 1 },
-  { target: 3, label: '3 referidos', reward: '3 meses premium', done: completedReferrals >= 3 },
-  { target: 5, label: '5 referidos', reward: '6 meses premium', done: completedReferrals >= 5 },
-  { target: 10, label: '10 referidos', reward: '1 ano premium', done: completedReferrals >= 10 },
+  { target: 1, label: '1 referido', reward: '30 dias premium', done: completedReferrals >= 1 },
+  { target: 3, label: '3 referidos', reward: '90 dias premium', done: completedReferrals >= 3 },
+  { target: 5, label: '5 referidos', reward: '150 dias premium', done: completedReferrals >= 5 },
+  { target: 10, label: '10 referidos', reward: '300 dias premium', done: completedReferrals >= 10 },
 ];
 ---
 
@@ -178,7 +179,7 @@ const milestones = [
           <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-bold text-accent">2</div>
           <div>
             <p class="text-sm font-medium text-ink">Ellos se registran y crean su mascota</p>
-            <p class="text-xs text-muted mt-0.5">Reciben 14 dias de premium gratis al unirse</p>
+            <p class="text-xs text-muted mt-0.5">Reciben 7 dias de premium gratis al unirse</p>
           </div>
         </div>
         <div class="flex items-start gap-3">

@@ -51,39 +51,41 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (user) {
     // Process pending referral code (from registration)
+    // Note: actual reward granting happens atomically in onboarding via the
+    // redeem_referral RPC. Here we just create a pending row that survives
+    // the email-confirm roundtrip so the user doesn't need to re-enter the code.
     const pendingRef = cookies.get('pending_referral')?.value;
     if (pendingRef) {
       try {
         const admin = createSupabaseAdminClient();
-        // Find the referral code and its owner
         const { data: refCode } = await admin
           .from('referral_codes')
           .select('user_id, code')
           .eq('code', pendingRef)
           .maybeSingle();
 
+        // BLOCK self-referral at the earliest point we can check
         if (refCode && refCode.user_id !== user.id) {
-          // Check if this user wasn't already referred
           const { data: existingRef } = await admin
             .from('referrals')
-            .select('id')
+            .select('id, status')
             .eq('referred_id', user.id)
             .maybeSingle();
 
+          // Only insert if no previous referral exists for this user
           if (!existingRef) {
-            // Create pending referral (completed after pet creation in onboarding)
-            await admin.from('referrals').insert({
+            const { error: insErr } = await admin.from('referrals').insert({
               referrer_id: refCode.user_id,
               referred_id: user.id,
               code: refCode.code,
               status: 'pending',
             });
+            if (insErr) console.warn('[auth/callback] referral insert failed:', insErr.message);
           }
         }
-      } catch {
-        // Silently ignore if referral tables don't exist yet
+      } catch (e) {
+        console.warn('[auth/callback] referral processing error:', e);
       }
-      // Clear the cookie
       cookies.delete('pending_referral', { path: '/' });
     }
 

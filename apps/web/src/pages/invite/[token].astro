@@ -1,15 +1,39 @@
 ---
+import { createSupabaseAdminClient } from '../../lib/supabase';
+
 const { token } = Astro.params;
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
 
-// Save invite token as cookie so the auth callback can process it after registration
-Astro.cookies.set('pending_share_invite', token!, {
-  path: '/',
-  httpOnly: true,
-  sameSite: 'lax',
-  maxAge: 60 * 60 * 24 * 7,
-  secure: import.meta.env.PROD,
-});
+// Only persist the invite cookie if the token is well-formed AND the invite
+// exists in the DB as pending + unexpired. This prevents burning a signup
+// on a bogus token, and avoids us leaking a cookie that could never match.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let inviteValid = false;
+if (token && UUID_RE.test(token)) {
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data } = await admin
+      .from('pet_share_invites')
+      .select('id, status, expires_at')
+      .eq('token', token)
+      .maybeSingle();
+    if (data && data.status === 'pending' && new Date(data.expires_at) > new Date()) {
+      inviteValid = true;
+    }
+  } catch (e) {
+    console.warn('[invite] token validation failed:', e);
+  }
+}
+
+if (inviteValid) {
+  Astro.cookies.set('pending_share_invite', token!, {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7,
+    secure: import.meta.env.PROD,
+  });
+}
 ---
 
 <html lang="es">
