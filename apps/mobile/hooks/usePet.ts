@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from './useSubscription';
-import { scheduleVaccineReminder, scheduleGroomingReminder } from './useNotifications';
-import type { Pet, Vaccine, WeightRecord, Food } from '../types/supabase';
+import { scheduleVaccineReminder, scheduleGroomingReminder, schedulePreventiveReminder } from './useNotifications';
+import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
 
 export interface CoOwner {
   id: string;
@@ -11,6 +11,8 @@ export interface CoOwner {
   shared_with_email: string | null;
   shared_with_name: string | null;
 }
+
+export type PreventiveRow = Pick<PreventiveTreatment, 'type' | 'date_given' | 'product_name'>;
 
 export interface PetData {
   pet: Pet | null;
@@ -24,6 +26,8 @@ export interface PetData {
   groomings: { type: string; date: string }[];
   activityLogs: { date: string; walks: number; duration_minutes: number | null }[];
   adventures: { date: string }[];
+  /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
+  preventives: PreventiveRow[];
   lastAntipulgas: { date_given: string; product_name: string | null } | null;
   lastDesparasitante: { date_given: string; product_name: string | null } | null;
   loading: boolean;
@@ -45,6 +49,7 @@ export function usePet(): PetData {
   const [groomings, setGroomings] = useState<PetData['groomings']>([]);
   const [activityLogs, setActivityLogs] = useState<PetData['activityLogs']>([]);
   const [adventures, setAdventures] = useState<PetData['adventures']>([]);
+  const [preventives, setPreventives] = useState<PreventiveRow[]>([]);
   const [lastAntipulgas, setLastAntipulgas] = useState<PetData['lastAntipulgas']>(null);
   const [lastDesparasitante, setLastDesparasitante] = useState<PetData['lastDesparasitante']>(null);
   const [loading, setLoading] = useState(true);
@@ -100,8 +105,7 @@ export function usePet(): PetData {
         groomingsRes,
         activityRes,
         adventuresRes,
-        antipulgasRes,
-        desparasitanteRes,
+        preventivesRes,
       ] = await Promise.all([
         supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
         supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
@@ -110,9 +114,13 @@ export function usePet(): PetData {
         supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
         supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
-        supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'antipulgas').order('date_given', { ascending: false }).limit(1),
-        supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'desparasitante').order('date_given', { ascending: false }).limit(1),
+        supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
+
+      const allPreventives = (preventivesRes.data as PreventiveRow[]) ?? [];
+      // 'combinado' counts as both antipulgas AND desparasitante for "last dose".
+      const lastAnti = allPreventives.find(p => p.type === 'antipulgas' || p.type === 'combinado') ?? null;
+      const lastDes = allPreventives.find(p => p.type === 'desparasitante' || p.type === 'combinado') ?? null;
 
       setVaccines(vaccinesRes.data ?? []);
       setWeightRecords(weightsRes.data ?? []);
@@ -121,8 +129,9 @@ export function usePet(): PetData {
       setGroomings(groomingsRes.data ?? []);
       setActivityLogs(activityRes.data ?? []);
       setAdventures(adventuresRes.data ?? []);
-      setLastAntipulgas(antipulgasRes.data?.[0] ?? null);
-      setLastDesparasitante(desparasitanteRes.data?.[0] ?? null);
+      setPreventives(allPreventives);
+      setLastAntipulgas(lastAnti);
+      setLastDesparasitante(lastDes);
 
       // Fetch co-owners if user is the owner
       if (user && pet.user_id === user.id) {
@@ -149,6 +158,23 @@ export function usePet(): PetData {
         const lastGroom = groomingsRes.data?.[0];
         if (lastGroom?.date) {
           scheduleGroomingReminder({ petName: pet.name, lastGroomingDate: new Date(lastGroom.date + 'T00:00:00') });
+        }
+      }
+
+      // Preventive reminders — free + premium, everyone benefits. Schedule
+      // one reminder per "last dose" (antipulgas, desparasitante) 3d before
+      // the next 30-day due date. For 'combinado', this fires twice (once
+      // per type) because both coverage types matter.
+      if (pet) {
+        if (lastAnti?.date_given) {
+          const nextDue = new Date(lastAnti.date_given + 'T09:00:00');
+          nextDue.setDate(nextDue.getDate() + 30);
+          schedulePreventiveReminder({ petName: pet.name, type: 'antipulgas', nextDueDate: nextDue }).catch(() => {});
+        }
+        if (lastDes?.date_given) {
+          const nextDue = new Date(lastDes.date_given + 'T09:00:00');
+          nextDue.setDate(nextDue.getDate() + 30);
+          schedulePreventiveReminder({ petName: pet.name, type: 'desparasitante', nextDueDate: nextDue }).catch(() => {});
         }
       }
     } catch (e: any) {
@@ -191,6 +217,7 @@ export function usePet(): PetData {
     groomings,
     activityLogs,
     adventures,
+    preventives,
     lastAntipulgas,
     lastDesparasitante,
     loading,

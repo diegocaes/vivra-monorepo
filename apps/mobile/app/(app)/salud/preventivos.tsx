@@ -11,12 +11,13 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
+import { schedulePreventiveReminder } from '../../../hooks/useNotifications';
 import type { PreventiveTreatment } from '../../../types/supabase';
 
-type TreatmentType = 'antipulgas' | 'desparasitante';
+type TreatmentType = 'antipulgas' | 'desparasitante' | 'combinado';
 
 interface StatusCardProps {
-  type: TreatmentType;
+  type: 'antipulgas' | 'desparasitante';
   last: PreventiveTreatment | null;
   onAdd: () => void;
 }
@@ -29,6 +30,7 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
 
   let statusColor = Colors.muted;
   let statusText = 'Sin registro';
+  let isUrgent = false;
 
   if (last) {
     const nextDate = new Date(last.date_given);
@@ -38,22 +40,33 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
     if (daysLeft < 0) {
       statusColor = Colors.bad;
       statusText = `Vencido hace ${Math.abs(daysLeft)}d`;
+      isUrgent = true;
     } else if (daysLeft <= 5) {
       statusColor = Colors.warn;
       statusText = `En ${daysLeft}d`;
+      isUrgent = true;
     } else {
       statusColor = Colors.good;
       statusText = `En ${daysLeft}d`;
     }
+  } else {
+    isUrgent = true;
   }
 
   return (
-    <TouchableOpacity activeOpacity={0.7} onPress={onAdd} style={styles.statusCard}>
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={onAdd}
+      style={[
+        styles.statusCard,
+        isUrgent && { borderColor: statusColor, borderWidth: 2, backgroundColor: statusColor + '12' },
+      ]}
+    >
       <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
       <Ionicons name={config.icon} size={22} color={config.iconColor} />
       <View style={styles.statusInfo}>
         <Text style={styles.statusLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{config.label}</Text>
-        <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
+        <Text style={[styles.statusText, { color: statusColor, fontWeight: isUrgent ? FontWeight.bold : FontWeight.medium }]}>{statusText}</Text>
       </View>
       <Ionicons name="add-circle-outline" size={24} color={Colors.accent} />
     </TouchableOpacity>
@@ -81,13 +94,22 @@ export default function PreventivosScreen() {
   const fetchData = useCallback(async () => {
     if (!pet?.id) return;
 
-    const [antiRes, desRes] = await Promise.all([
-      supabase.from('preventive_treatments').select('*').eq('pet_id', pet.id).eq('type', 'antipulgas').order('date_given', { ascending: false }),
-      supabase.from('preventive_treatments').select('*').eq('pet_id', pet.id).eq('type', 'desparasitante').order('date_given', { ascending: false }),
-    ]);
+    // Fetch all treatments in one roundtrip. A 'combinado' row counts as BOTH
+    // antipulgas and desparasitante, so we merge it into both lists below.
+    const { data, error } = await supabase
+      .from('preventive_treatments')
+      .select('*')
+      .eq('pet_id', pet.id)
+      .order('date_given', { ascending: false });
 
-    setAntipulgas((antiRes.data as PreventiveTreatment[]) ?? []);
-    setDesparasitante((desRes.data as PreventiveTreatment[]) ?? []);
+    if (error) console.warn('[Preventivos] fetch error:', error.message);
+
+    const all = (data as PreventiveTreatment[]) ?? [];
+    const anti = all.filter(t => t.type === 'antipulgas' || t.type === 'combinado');
+    const des = all.filter(t => t.type === 'desparasitante' || t.type === 'combinado');
+
+    setAntipulgas(anti);
+    setDesparasitante(des);
     setLoading(false);
   }, [pet?.id]);
 
@@ -124,6 +146,22 @@ export default function PreventivosScreen() {
     setSaving(false);
 
     if (error) { Alert.alert('Error', error.message); return; }
+
+    // Schedule a local reminder for the next dose (30 days after date_given).
+    // For 'combinado' we schedule under both labels so the user gets one
+    // clear notification covering the combined product.
+    try {
+      const nextDue = new Date(dateApplied + 'T09:00:00');
+      nextDue.setDate(nextDue.getDate() + 30);
+      await schedulePreventiveReminder({
+        petName: pet.name,
+        type: formType,
+        nextDueDate: nextDue,
+      });
+    } catch (e) {
+      console.warn('[Preventivos] schedule reminder failed:', e);
+    }
+
     setShowForm(false);
     fetchData();
   };
@@ -169,7 +207,10 @@ export default function PreventivosScreen() {
     </View>
   );
 
-  const formLabel = formType === 'antipulgas' ? 'Antipulgas' : 'Desparasitante';
+  const formLabel =
+    formType === 'antipulgas' ? 'Antipulgas'
+    : formType === 'desparasitante' ? 'Desparasitante'
+    : 'Combinado (antipulgas + desparasitante)';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -191,6 +232,16 @@ export default function PreventivosScreen() {
           <StatusCard type="antipulgas" last={antipulgas[0] ?? null} onAdd={() => openForm('antipulgas')} />
           <StatusCard type="desparasitante" last={desparasitante[0] ?? null} onAdd={() => openForm('desparasitante')} />
         </View>
+
+        {/* Combinado CTA — a single product covering both */}
+        <TouchableOpacity activeOpacity={0.7} onPress={() => openForm('combinado')} style={styles.combinedCta}>
+          <Ionicons name="sparkles" size={18} color={Colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.combinedCtaLabel}>Registrar combinado</Text>
+            <Text style={styles.combinedCtaSub}>Un solo producto que cubre antipulgas + desparasitante</Text>
+          </View>
+          <Ionicons name="add-circle" size={22} color={Colors.accent} />
+        </TouchableOpacity>
 
         {/* History lists */}
         {renderList(antipulgas, 'Historial Antipulgas')}
@@ -268,4 +319,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm, paddingVertical: 1, alignSelf: 'flex-start', marginTop: 2,
   },
   costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
+  combinedCta: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.accentLight,
+    borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.accent + '33',
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+  },
+  combinedCtaLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  combinedCtaSub: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
 });

@@ -71,6 +71,11 @@ export interface BloodTestRecord {
   date: string; // ISO date
 }
 
+export interface PreventiveRecord {
+  type: 'antipulgas' | 'desparasitante' | 'combinado';
+  date_given: string; // ISO date
+}
+
 export interface ScoreInput {
   pet: PetData;
   weightRecords: WeightRecord[];
@@ -81,6 +86,8 @@ export interface ScoreInput {
   adventures: AdventureRecord[];
   foods: FoodRecord[];
   bloodTests?: BloodTestRecord[];
+  /** Registros de antipulgas/desparasitante/combinado. 'combinado' cuenta como ambos. */
+  preventives?: PreventiveRecord[];
 }
 
 // ─── Tipos de salida ─────────────────────────────────────────────────────────
@@ -215,9 +222,9 @@ function getFoodKcalPerG(foodType: string | null): number {
 
 const PILLAR_DESC = {
   peso: 'Compara el peso actual con el rango ideal de la raza. Un peso saludable reduce riesgos articulares y metabólicos.',
-  cuidado: 'Evalúa vacunas al día y frecuencia de visitas al veterinario. La prevención es la base de una vida larga.',
+  cuidado: 'Evalúa vacunas, visitas al veterinario, antipulgas/desparasitante y exámenes de sangre. La prevención es la base de una vida larga.',
   raza: 'Factores genéticos y de edad que influyen en la salud. Cada raza tiene predisposiciones específicas.',
-  actividad: 'Mide los paseos diarios, su duración y el cuidado estético. Un perro activo es un perro feliz.',
+  actividad: 'Mide paseos diarios, aventuras y cuidado estético (grooming). Un perro activo es un perro feliz.',
   nutricion: 'Analiza la calidad del alimento y si la porción diaria es adecuada según el peso y la raza.',
 } as const;
 
@@ -317,22 +324,24 @@ function scorePeso(input: ScoreInput): PillarScore {
 
 function scoreCuidado(input: ScoreInput): PillarScore {
   const { vaccines, vetVisits } = input;
+  const preventives = input.preventives ?? [];
   const tips: string[] = [];
-  const hasAnyData = vaccines.length > 0 || vetVisits.length > 0;
+  const hasAnyData = vaccines.length > 0 || vetVisits.length > 0 || preventives.length > 0;
 
   if (!hasAnyData) {
     return {
       name: 'Cuidado preventivo', id: 'cuidado' as PillarId, score: 10, max: 20, pct: 50,
       status: 'Pendiente de registro', description: PILLAR_DESC.cuidado,
-      tips: ['Agrega vacunas y visitas al vet para completar este indicador'],
+      tips: ['Agrega vacunas, antipulgas y visitas al vet para completar este indicador'],
       isEstimated: true,
     };
   }
 
-  // Sub-score vacunas (10 pts)
+  // Budget: vaccines 8 · vet 8 · preventives 4 · blood test bonus up to +2 → cap 20
+  // Sub-score vacunas (8 pts)
   let vaccineScore = 0;
   if (vaccines.length === 0) {
-    vaccineScore = 3; // neutral, no penaliza fuerte sin datos
+    vaccineScore = 2;
     tips.push('Registra las vacunas para monitorear el calendario de inmunización');
   } else {
     const coreNames = ['rabia', 'parvovirus', 'moquillo', 'adenovirus'];
@@ -343,29 +352,29 @@ function scoreCuidado(input: ScoreInput): PillarScore {
       )
     ).length;
 
-    vaccineScore = Math.max(3, Math.round((coveredCore / coreNames.length) * 8));
+    vaccineScore = Math.max(2, Math.round((coveredCore / coreNames.length) * 6));
 
     const anyRecent = vaccines.some(v => daysBetween(v.date_given) < 365);
     if (anyRecent) {
-      vaccineScore = Math.min(10, vaccineScore + 2);
+      vaccineScore = Math.min(8, vaccineScore + 2);
     } else {
       tips.push('Puede ser buen momento para revisar el calendario de vacunas con el vet');
     }
   }
 
-  // Sub-score visitas al vet (10 pts)
+  // Sub-score visitas al vet (8 pts)
   let vetScore = 0;
   if (vetVisits.length === 0) {
-    vetScore = 3;
+    vetScore = 2;
     tips.push('Registrar las visitas al veterinario ayuda a llevar un seguimiento completo');
   } else {
     const daysSince = daysBetween(vetVisits[0].date);
     if (daysSince <= 365) {
-      vetScore = 10;
+      vetScore = 8;
     } else if (daysSince <= 365 * 1.5) {
-      vetScore = 7;
+      vetScore = 6;
     } else if (daysSince <= 730) {
-      vetScore = 4;
+      vetScore = 3;
       tips.push('Llevan un tiempo sin visita registrada — un chequeo anual es ideal');
     } else {
       vetScore = 1;
@@ -373,7 +382,36 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     }
   }
 
-  // Bonus: examen de sangre anual (+2 pts si hay uno reciente, -1 si nunca)
+  // Sub-score preventivos (4 pts) — antipulgas + desparasitante cada 30 días
+  // 'combinado' cuenta como ambos. 2 pts si cada categoría está al día (< 40d), 1 si < 60d, 0 si no.
+  const lastAnti = preventives
+    .filter(p => p.type === 'antipulgas' || p.type === 'combinado')
+    .map(p => daysBetween(p.date_given))
+    .sort((a, b) => a - b)[0];
+  const lastDes = preventives
+    .filter(p => p.type === 'desparasitante' || p.type === 'combinado')
+    .map(p => daysBetween(p.date_given))
+    .sort((a, b) => a - b)[0];
+
+  function scoreOne(d: number | undefined): number {
+    if (d === undefined) return 0;
+    if (d <= 40) return 2;  // al día (ciclo mensual + 10d de margen)
+    if (d <= 60) return 1;  // apenas vencido
+    return 0;
+  }
+  const preventiveScore = scoreOne(lastAnti) + scoreOne(lastDes);
+  if (lastAnti === undefined) {
+    tips.push('Registra el antipulgas para completar el cuidado preventivo');
+  } else if (lastAnti > 40) {
+    tips.push(`Han pasado ${lastAnti}d desde el último antipulgas — aplicar cada ~30d ideal`);
+  }
+  if (lastDes === undefined) {
+    tips.push('Registra el desparasitante para completar el cuidado preventivo');
+  } else if (lastDes > 40) {
+    tips.push(`Han pasado ${lastDes}d desde el último desparasitante — aplicar cada ~30d ideal`);
+  }
+
+  // Bonus: examen de sangre anual (+2 pts si hay uno reciente)
   const bloodTests = input.bloodTests ?? [];
   const hasRecentBlood = bloodTests.some(bt => daysBetween(bt.date) <= 365);
   let bloodBonus = 0;
@@ -385,7 +423,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     tips.push('Ha pasado más de un año desde el último examen de sangre');
   }
 
-  const total = clamp(vaccineScore + vetScore + bloodBonus, 2, 20);
+  const total = clamp(vaccineScore + vetScore + preventiveScore + bloodBonus, 2, 20);
   let status: string;
   if (total >= 18) status = 'Cuidado preventivo al día';
   else if (total >= 14) status = 'Buen seguimiento preventivo';
@@ -395,7 +433,8 @@ function scoreCuidado(input: ScoreInput): PillarScore {
   return {
     name: 'Cuidado preventivo', id: 'cuidado' as PillarId,
     score: total, max: 20, pct: clamp(total * 5, 10, 100),
-    status, description: PILLAR_DESC.cuidado, tips: tips.slice(0, 2), isEstimated: vaccines.length === 0 && vetVisits.length === 0,
+    status, description: PILLAR_DESC.cuidado, tips: tips.slice(0, 2),
+    isEstimated: vaccines.length === 0 && vetVisits.length === 0 && preventives.length === 0,
   };
 }
 

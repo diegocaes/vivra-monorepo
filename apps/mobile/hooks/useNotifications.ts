@@ -106,12 +106,15 @@ export function useNotifications() {
 /** Schedule a local notification for a preventive treatment reminder */
 export async function schedulePreventiveReminder(opts: {
   petName: string;
-  type: 'antipulgas' | 'desparasitante';
+  type: 'antipulgas' | 'desparasitante' | 'combinado';
   nextDueDate: Date;
   daysBeforeAlert?: number;
 }) {
   const { petName, type, nextDueDate, daysBeforeAlert = 3 } = opts;
-  const label = type === 'antipulgas' ? 'antipulgas' : 'desparasitante';
+  const label =
+    type === 'antipulgas' ? 'antipulgas'
+    : type === 'desparasitante' ? 'desparasitante'
+    : 'preventivo mensual';
 
   // Alert N days before due date
   const alertDate = new Date(nextDueDate);
@@ -120,11 +123,21 @@ export async function schedulePreventiveReminder(opts: {
   // Don't schedule if alert date is in the past
   if (alertDate <= new Date()) return;
 
+  // Avoid stacking duplicate reminders for the same (pet, type). Cancel any
+  // previously scheduled reminder of the same treatmentType for this pet.
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    const d = n.content.data as { type?: string; treatmentType?: string; petName?: string } | undefined;
+    if (d?.type === 'preventive_reminder' && d.treatmentType === type && d.petName === petName) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title: `${petName}: ${label} próximo`,
       body: `El ${label} de ${petName} vence en ${daysBeforeAlert} días. ¡No lo olvides!`,
-      data: { type: 'preventive_reminder', treatmentType: type },
+      data: { type: 'preventive_reminder', treatmentType: type, petName },
       sound: true,
     },
     trigger: {

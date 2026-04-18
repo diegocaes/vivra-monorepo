@@ -104,6 +104,28 @@ export default function DashboardScreen() {
   // Active food for progress bar
   const activeFood = petData.foods.find(f => f.daily_grams && f.bag_size);
 
+  // Preventive critical banner — show if overdue OR never registered
+  const preventiveStatus = (() => {
+    const compute = (dateStr: string | null | undefined) => {
+      if (!dateStr) return { status: 'never' as const, days: 0 };
+      const next = new Date(dateStr);
+      next.setDate(next.getDate() + 30);
+      const days = Math.ceil((next.getTime() - Date.now()) / 86400000);
+      if (days < 0) return { status: 'overdue' as const, days: Math.abs(days) };
+      return { status: 'ok' as const, days };
+    };
+    const anti = compute(petData.lastAntipulgas?.date_given);
+    const des = compute(petData.lastDesparasitante?.date_given);
+    const neverTypes: string[] = [];
+    const overdueTypes: { label: string; days: number }[] = [];
+    if (anti.status === 'never') neverTypes.push('antipulgas');
+    else if (anti.status === 'overdue') overdueTypes.push({ label: 'antipulgas', days: anti.days });
+    if (des.status === 'never') neverTypes.push('desparasitante');
+    else if (des.status === 'overdue') overdueTypes.push({ label: 'desparasitante', days: des.days });
+    return { neverTypes, overdueTypes };
+  })();
+  const showPreventiveBanner = preventiveStatus.neverTypes.length > 0 || preventiveStatus.overdueTypes.length > 0;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header with notification bell */}
@@ -135,6 +157,34 @@ export default function DashboardScreen() {
       >
         {/* Hero card */}
         <PetHeroCard pet={petData.pet} />
+
+        {/* Preventivo critical banner — overdue or never registered */}
+        {showPreventiveBanner && (
+          <TouchableOpacity
+            style={styles.preventiveBanner}
+            onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="alert-circle" size={22} color={Colors.bad} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.preventiveBannerTitle}>
+                {preventiveStatus.neverTypes.length === 2
+                  ? `${petData.pet.name} no tiene protección preventiva`
+                  : preventiveStatus.overdueTypes.length === 2
+                    ? 'Preventivos vencidos'
+                    : preventiveStatus.neverTypes.length > 0
+                      ? `Falta ${preventiveStatus.neverTypes[0]}`
+                      : `${preventiveStatus.overdueTypes[0].label} vencido ${preventiveStatus.overdueTypes[0].days}d`}
+              </Text>
+              <Text style={styles.preventiveBannerDesc}>
+                {preventiveStatus.neverTypes.length > 0 && preventiveStatus.overdueTypes.length === 0
+                  ? 'Registra la última dosis para activar recordatorios'
+                  : 'Aplica y registra la nueva dosis'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.bad} />
+          </TouchableOpacity>
+        )}
 
         {/* Vitality Score */}
         {vitality && (
@@ -391,6 +441,18 @@ const styles = StyleSheet.create({
   },
   trialExpiringTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: '#DC2626' },
   trialExpiringDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  preventiveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#FEF2F2',
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    borderWidth: 2,
+    borderColor: Colors.bad,
+  },
+  preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.bad },
+  preventiveBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
   errorCard: {
     backgroundColor: Colors.bad + '12',
     borderColor: Colors.bad,

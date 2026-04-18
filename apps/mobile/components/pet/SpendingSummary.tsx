@@ -24,18 +24,20 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
   const [loading, setLoading] = useState(true);
 
   const fetchSpending = useCallback(async () => {
-    const [vetRes, groomRes, flightRes, treatRes, prevRes] = await Promise.all([
+    const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
       supabase.from('vet_visits').select('cost').eq('pet_id', petId),
       supabase.from('groomings').select('cost').eq('pet_id', petId),
       supabase.from('flights').select('ticket_price').eq('pet_id', petId),
       supabase.from('treats').select('price').eq('pet_id', petId),
       supabase.from('preventive_treatments').select('cost').eq('pet_id', petId),
+      supabase.from('foods').select('price').eq('pet_id', petId),
     ]);
 
     const sum = (arr: any[] | null, key: string) =>
       (arr ?? []).reduce((s: number, r: any) => s + (r[key] ?? 0), 0);
 
     setCategories([
+      { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sum(foodRes.data, 'price') },
       { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sum(vetRes.data, 'cost') },
       { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sum(groomRes.data, 'cost') },
       { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sum(flightRes.data, 'ticket_price') },

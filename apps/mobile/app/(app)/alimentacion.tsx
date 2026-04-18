@@ -99,8 +99,14 @@ interface FoodWithCalc extends Food {
 function enrichFood(food: Food): FoodWithCalc {
   const totalGrams = food.bag_size ? bagToGrams(food.bag_size, food.bag_unit ?? 'kg') : null;
   const daysTotal = (totalGrams && food.daily_grams) ? Math.floor(totalGrams / food.daily_grams) : null;
-  const daysElapsed = food.start_date
-    ? Math.floor((Date.now() - new Date(food.start_date + 'T00:00:00').getTime()) / 86400000)
+  // Use start_date if the user set one; otherwise fall back to created_at so
+  // pets with older rows still show a bag-progress bar instead of an empty state.
+  const bagStartStr = food.start_date || food.created_at || null;
+  const bagStart = bagStartStr
+    ? new Date(bagStartStr.length > 10 ? bagStartStr : bagStartStr + 'T00:00:00')
+    : null;
+  const daysElapsed = bagStart
+    ? Math.floor((Date.now() - bagStart.getTime()) / 86400000)
     : null;
   const daysRemaining = (daysTotal && daysElapsed !== null)
     ? Math.max(0, daysTotal - daysElapsed)

@@ -30,6 +30,7 @@ const [
   { data: activityLogs },
   { data: foods },
   { data: adventures },
+  { data: preventives },
 ] = await Promise.all([
   supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
@@ -38,6 +39,7 @@ const [
   supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
   supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type').eq('pet_id', pet.id).order('created_at', { ascending: false }),
   supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
+  supabase.from('preventive_treatments').select('type, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);
 
 // Blood tests (may not exist yet)
@@ -62,6 +64,7 @@ const scoreInput: ScoreInput = {
   activityLogs: activityLogs ?? [],
   adventures: (adventures ?? []).map((a: any) => ({ date: a.date })),
   foods: foods ?? [],
+  preventives: (preventives ?? []) as { type: 'antipulgas' | 'desparasitante' | 'combinado'; date_given: string }[],
   bloodTests,
 };
 

@@ -39,8 +39,10 @@ const { data: treatments } = await supabase
   .eq('pet_id', pet.id)
   .order('date_given', { ascending: false });
 
-const antipulgasList = (treatments ?? []).filter(t => t.type === 'antipulgas');
-const desparasitanteList = (treatments ?? []).filter(t => t.type === 'desparasitante');
+// A 'combinado' row acts as both antipulgas and desparasitante. Include it in
+// both lists so "last dose" + history reflect reality for each specific type.
+const antipulgasList = (treatments ?? []).filter(t => t.type === 'antipulgas' || t.type === 'combinado');
+const desparasitanteList = (treatments ?? []).filter(t => t.type === 'desparasitante' || t.type === 'combinado');
 
 function daysUntilNext(lastDateStr: string | null | undefined) {
   if (!lastDateStr) return { daysLeft: 0, overdue: true, nextDate: null };
@@ -71,16 +73,16 @@ const openForm = Astro.url.searchParams.get('new');
 
     {/* Antipulgas */}
     <div class:list={[
-      'rounded-2xl p-4 border',
-      antipulgasStatus.overdue || !antipulgasList.length ? 'bg-red-50 border-red-100' : antipulgasStatus.daysLeft <= 5 ? 'bg-amber/10 border-amber/20' : 'bg-green-50 border-green-100'
+      'rounded-2xl p-4 border-2',
+      antipulgasStatus.overdue || !antipulgasList.length ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : antipulgasStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-green-50 border-green-200'
     ]}>
       <div class="text-2xl mb-2">🐛</div>
       <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Antipulgas</p>
       {!antipulgasList.length ? (
-        <p class="text-sm font-bold text-red-500">Nunca aplicado</p>
+        <p class="text-base font-black text-red-600">Nunca aplicado</p>
       ) : antipulgasStatus.overdue ? (
         <>
-          <p class="text-sm font-bold text-red-500">Vencido</p>
+          <p class="text-base font-black text-red-600">Vencido {Math.abs(antipulgasStatus.daysLeft)}d</p>
           <p class="text-[11px] text-muted mt-0.5">Último: {formatDate(antipulgasList[0].date_given)}</p>
         </>
       ) : (
@@ -95,16 +97,16 @@ const openForm = Astro.url.searchParams.get('new');
 
     {/* Desparasitante */}
     <div class:list={[
-      'rounded-2xl p-4 border',
-      desparasitanteStatus.overdue || !desparasitanteList.length ? 'bg-red-50 border-red-100' : desparasitanteStatus.daysLeft <= 5 ? 'bg-amber/10 border-amber/20' : 'bg-green-50 border-green-100'
+      'rounded-2xl p-4 border-2',
+      desparasitanteStatus.overdue || !desparasitanteList.length ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : desparasitanteStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-green-50 border-green-200'
     ]}>
       <div class="text-2xl mb-2">💊</div>
       <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Desparasitante</p>
       {!desparasitanteList.length ? (
-        <p class="text-sm font-bold text-red-500">Nunca aplicado</p>
+        <p class="text-base font-black text-red-600">Nunca aplicado</p>
       ) : desparasitanteStatus.overdue ? (
         <>
-          <p class="text-sm font-bold text-red-500">Vencido</p>
+          <p class="text-base font-black text-red-600">Vencido {Math.abs(desparasitanteStatus.daysLeft)}d</p>
           <p class="text-[11px] text-muted mt-0.5">Último: {formatDate(desparasitanteList[0].date_given)}</p>
         </>
       ) : (
@@ -118,8 +120,8 @@ const openForm = Astro.url.searchParams.get('new');
     </div>
   </div>
 
-  {/* ── ADD BUTTON ── */}
-  <div class="flex gap-2 mb-6 animate-fade-up">
+  {/* ── ADD BUTTONS ── */}
+  <div class="flex gap-2 mb-3 animate-fade-up">
     <a href="/salud/preventivos?new=antipulgas" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-card border border-card-border px-4 py-3 text-sm font-semibold text-ink hover:border-accent/30 transition-all active:scale-95">
       <span>🐛</span> Registrar antipulgas
     </a>
@@ -127,14 +129,24 @@ const openForm = Astro.url.searchParams.get('new');
       <span>💊</span> Registrar desparasitante
     </a>
   </div>
+  <a href="/salud/preventivos?new=combinado" class="flex items-center justify-center gap-2 rounded-2xl bg-accent-light border border-accent/30 px-4 py-3 text-sm font-semibold text-ink hover:border-accent transition-all active:scale-95 mb-6 animate-fade-up">
+    <span>✨</span> Registrar combinado (antipulgas + desparasitante)
+  </a>
 
   {/* ── FORM (inline) ── */}
-  {openForm && (
+  {openForm && (openForm === 'antipulgas' || openForm === 'desparasitante' || openForm === 'combinado') && (
     <div class="mb-6 animate-fade-up" id="form-section">
       <div class="rounded-2xl bg-card border border-card-border p-5">
         <h2 class="text-sm font-bold text-ink mb-4">
-          {openForm === 'antipulgas' ? '🐛 Registrar antipulgas' : '💊 Registrar desparasitante'}
+          {openForm === 'antipulgas' ? '🐛 Registrar antipulgas'
+            : openForm === 'desparasitante' ? '💊 Registrar desparasitante'
+            : '✨ Registrar combinado'}
         </h2>
+        {openForm === 'combinado' && (
+          <p class="text-xs text-muted mb-3 leading-relaxed">
+            Un producto combinado (p. ej. NexGard Spectra, Simparica Trio) cuenta como antipulgas y desparasitante a la vez.
+          </p>
+        )}
         <form method="POST" class="space-y-3">
           <input type="hidden" name="_action" value="add" />
           <input type="hidden" name="type" value={openForm} />
@@ -155,7 +167,7 @@ const openForm = Astro.url.searchParams.get('new');
             <input
               type="text"
               name="product_name"
-              placeholder={openForm === 'antipulgas' ? 'Ej: Frontline, NexGard...' : 'Ej: Drontal, Milbemax...'}
+              placeholder={openForm === 'antipulgas' ? 'Ej: Frontline, NexGard...' : openForm === 'desparasitante' ? 'Ej: Drontal, Milbemax...' : 'Ej: NexGard Spectra, Simparica Trio...'}
               class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
             />
           </div>
@@ -219,9 +231,12 @@ const openForm = Astro.url.searchParams.get('new');
       <div class="rounded-2xl bg-card border border-card-border divide-y divide-card-border overflow-hidden">
         {antipulgasList.map((t) => (
           <div class="flex items-center gap-3 px-4 py-3">
-            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-green-50 text-base">🐛</div>
+            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-green-50 text-base">{t.type === 'combinado' ? '✨' : '🐛'}</div>
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-ink">{t.product_name || 'Antipulgas'}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-ink truncate">{t.product_name || (t.type === 'combinado' ? 'Combinado' : 'Antipulgas')}</p>
+                {t.type === 'combinado' && <span class="inline-flex items-center rounded-full bg-accent-light px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-dark border border-accent/30">Combinado</span>}
+              </div>
               <p class="text-[11px] text-muted">{formatDate(t.date_given)}{t.lot_number ? ` · Lote: ${t.lot_number}` : ''}{t.cost ? ` · $${t.cost}` : ''}</p>
               {t.notes && <p class="text-[11px] text-muted/70 truncate mt-0.5">{t.notes}</p>}
             </div>
@@ -252,9 +267,12 @@ const openForm = Astro.url.searchParams.get('new');
       <div class="rounded-2xl bg-card border border-card-border divide-y divide-card-border overflow-hidden">
         {desparasitanteList.map((t) => (
           <div class="flex items-center gap-3 px-4 py-3">
-            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-blue-50 text-base">💊</div>
+            <div class="h-9 w-9 shrink-0 flex items-center justify-center rounded-xl bg-blue-50 text-base">{t.type === 'combinado' ? '✨' : '💊'}</div>
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-ink">{t.product_name || 'Desparasitante'}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-sm font-semibold text-ink truncate">{t.product_name || (t.type === 'combinado' ? 'Combinado' : 'Desparasitante')}</p>
+                {t.type === 'combinado' && <span class="inline-flex items-center rounded-full bg-accent-light px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent-dark border border-accent/30">Combinado</span>}
+              </div>
               <p class="text-[11px] text-muted">{formatDate(t.date_given)}{t.lot_number ? ` · Lote: ${t.lot_number}` : ''}{t.cost ? ` · $${t.cost}` : ''}</p>
               {t.notes && <p class="text-[11px] text-muted/70 truncate mt-0.5">{t.notes}</p>}
             </div>

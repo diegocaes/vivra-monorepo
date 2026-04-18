@@ -69,6 +69,7 @@ export interface Food {
   frequency: string | null;
   start_date: string | null;
   end_date: string | null;
+  price: number | null;
   notes: string | null;
   created_at: string;
 }
@@ -188,8 +189,9 @@ export interface Treat {
 export interface PreventiveTreatment {
   id: string;
   pet_id: string;
-  type: 'antipulgas' | 'desparasitante';
+  type: 'antipulgas' | 'desparasitante' | 'combinado';
   product_name: string | null;
+  lot_number: string | null;
   date_given: string;
   next_due: string | null;
   cost: number | null;

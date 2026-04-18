@@ -166,88 +166,112 @@ La diferencia clave de Vivra vs. esos modelos: **no requerimos hardware**. Toda 
 
 ## 7. Arquitectura del Vivra Vitality Score
 
+> **Principio rector:** el tono es siempre positivo. El peor estado visible es "Perfil en construcción". Nunca se muestra "crítico" ni lenguaje médico afirmativo. El score no reemplaza al veterinario.
+
 ### Fórmula general
 
 ```
-VitalityScore = Σ(pilar_i × peso_i) × modificadores_raza_edad
+VitalityScore = Σ(pilar_i)   donde cada pilar ∈ [2, 20]
 ```
 
-### Los 5 pilares (20 pts cada uno = 100 pts máximo)
+- **Rango total:** 10–100 (nunca 0 — cada pilar tiene un piso de 2 pts aunque falten datos)
+- **Gate de visibilidad:** el número solo se muestra cuando hay datos en ≥ 2 áreas. Con < 2 áreas, la UI dice "Completando el perfil" y lista qué agregar.
+- **Datos "estimados":** cuando un pilar no tiene datos, aporta 10/20 pts (neutro) y se marca `isEstimated: true` para que la UI lo distinga visualmente del resto.
+
+### Los 5 pilares (20 pts cada uno)
 
 #### Pilar 1 — Peso Corporal (20 pts)
-```
-puntos = 20 × (1 - penalización_desvío)
-```
-- Rango ideal: ±5% del peso ideal de la raza → 20/20
-- 5–10% desviación → -2 pts por % de desviación
-- 10–20% desviación → -3 pts por % adicional
-- >20% desviación → máximo 2 pts
-- Bonus: tendencia de mejora (+2 pts) o penalización por empeoramiento (-2 pts)
+- **Base:** desviación % del peso actual vs. punto medio del rango ideal de la raza
+  - `desvPct ≤ 5%` → 20 pts
+  - `5% < desvPct ≤ 10%` → 14–20 pts (decreciente)
+  - `10% < desvPct ≤ 20%` → 6–14 pts
+  - `desvPct > 20%` → 2–6 pts
+- **Ajustes por tendencia** (si hay ≥ 2 registros):
+  - Sobrepeso + aumentando: −2 pts (tip: revisar porciones)
+  - Sobrepeso + bajando: +1 pt (progreso positivo)
+  - Bajo peso + bajando: −2 pts (tip: comentar al vet)
+- **Penalización por peso desactualizado:** −3 pts si el último registro tiene > 45 días
+- **Excepción cachorros:** < 1 año → 10/20 fijo (están en crecimiento, no aplica el rango adulto)
 - **Base científica:** WSAVA BCS, VetCompass obesity data (Pegram 2021)
 
 #### Pilar 2 — Cuidado Preventivo (20 pts)
-```
-puntos = vacunas_score (10) + visitas_score (10)
-```
-- Vacunas core al día (rabia, parvo, moquillo, adenovirus): 10 pts proporcionales
-- Última visita al vet: ≤12 meses = 10 pts; 12–18 meses = 6 pts; 18–24 meses = 3 pts; >24 meses = 0 pts
-- **Base científica:** GeroScience 2024 (gaps en visitas → edad biológica acelerada), AVMA guidelines
+Presupuesto: **8 vacunas + 8 vet + 4 preventivos + 2 bonus por examen de sangre**, con cap a 20.
+
+- **Sub-score vacunas (8 pts):**
+  - Cobertura de core (rabia, parvo, moquillo, adenovirus): 2–6 pts proporcional
+  - +2 pts si hay alguna vacuna en los últimos 365 días
+- **Sub-score visitas al vet (8 pts):**
+  - ≤ 12 meses = 8 · 12–18 meses = 6 · 18–24 meses = 3 · > 24 meses = 1
+- **Sub-score preventivos (4 pts):**
+  - Antipulgas + desparasitante cada 30 días; 'combinado' cuenta como ambos
+  - Cada categoría: ≤ 40 días = 2 pts · ≤ 60 días = 1 pt · sin registro/vencido = 0
+- **Bonus examen de sangre anual (+2 pts)** si hay uno en los últimos 365 días
+- **Base científica:** GeroScience 2024 (gaps en visitas → edad biológica acelerada), AVMA, WSAVA
 
 #### Pilar 3 — Raza + Edad (20 pts — ajuste de riesgo)
-```
-puntos = 20 - penalizaciones_por_riesgos_activos
-```
-- Score base 20; se descuentan puntos si existen factores de riesgo activos por edad+raza
-- Alerta dental: ≥2 años + raza pequeña/braquicéfala sin grooming reciente → -4 pts
-- Alerta cardiaca: raza predispuesta (CKCS, Boxer, Doberman) ≥5 años sin vet reciente → -4 pts
-- Alerta obesidad: raza de alto riesgo (Labrador, Beagle) + castrado + >6 años → -3 pts
-- Alerta senior: >8 años (razas medianas), >6 años (razas grandes), >10 años (razas pequeñas) → -2 pts (watchlist)
+- Score base 20; se descuentan puntos solo si hay factores de riesgo activos conocidos para esa combinación raza+edad
+- Riesgo dental: ≥ 2 años + raza pequeña/braquicéfala + > 60 días sin grooming → −3 pts
+- Riesgo cardíaco: razas predispuestas (CKCS, Boxer, Doberman) ≥ 5 años → −3 pts
+- Riesgo obesidad: raza de alto riesgo + castrado + ≥ 6 años + peso sobre ideal → −2 pts
+- Senior (umbral depende del tamaño de la raza): −2 pts (tip de cuidado, no alerta)
+- Si falta raza o fecha de nacimiento: `isEstimated: true`, score conservador 12–15
 - **Base científica:** Gough/Thomas textbook, VetCompass/Pegram 2021, Cornell periodontal, Nature 2023
 
 #### Pilar 4 — Actividad y Bienestar (20 pts)
-```
-puntos = actividad_score (12) + grooming_score (8)
-```
-- Actividades/aventuras en últimos 30 días: ≥4 = 12; 2–3 = 8; 1 = 4; 0 = 0
-- Grooming reciente: ≤30 días = 8; 31–60 días = 5; 61–90 días = 2; >90 días = 0
+Presupuesto: **12 actividad + 8 grooming**, con cap a 20.
+
+- **Sub-score actividad 30d (12 pts):** se evalúa `días activos` (paseos + aventuras, sin duplicar fechas) y `paseos efectivos` (cada aventura = 2 paseos)
+  - 20+ días activos o 40+ paseos efectivos → 12 pts
+  - 12+ días o 24+ paseos → 10 pts
+  - 6+ días o 12+ paseos → 7 pts
+  - 2+ días → 5 pts
+  - < 2 días → 2 pts
+  - Bonus: +1 pt si hay 2+ aventuras en el mes
+  - Bonus: +1 pt si el promedio de duración es ≥ 45 min/día
+- **Sub-score grooming (8 pts):** ≤ 30 días = 8 · 31–60 = 5 · 61–90 = 2 · > 90 = 1
 - **Base científica:** Dog Aging Project 2023 (actividad → longevidad, función cognitiva)
 
 #### Pilar 5 — Nutrición (20 pts)
-```
-puntos = calidad_dieta (10) + precision_porcion (10)
-```
-- Alimento registrado con datos completos (brand + gramos + tipo): 10 pts base
-- Porción adecuada: grams/día vs. necesidad calórica MER (Purina formula):
-  - MER = 132 × (peso_kg ^ 0.75) para perros adultos activos (kcal/día)
-  - Kcal/g promedio: kibble premium ≈ 3.5 kcal/g, estándar ≈ 3.0 kcal/g
-  - ±10% del objetivo: 10 pts; ±10–25%: 6 pts; ±25–40%: 3 pts; >40%: 0 pts
+Presupuesto: **10 calidad + 10 precisión de porción**, con cap a 20.
+
+- **Calidad de dieta (10 pts):** base 5 + marca (+2) + tipo registrado (+1 a +3 según categoría: veterinario/premium = +3)
+- **Precisión de porción (10 pts):** compara `gramos_diarios × kcal/g` contra MER
+  - MER = 132 × peso_kg^0.75 (kcal/día, Purina adulto activo)
+  - Densidad calórica por tipo: croquetas 3.3 · premium/veterinario 3.8 · raw 1.8 · húmedo 1.0 · casero 1.5 (kcal/g)
+  - Desviación ≤ 10% = 10 pts · ≤ 20% = 8 pts · ≤ 35% = 5 pts · > 35% = 3 pts
+  - Si faltan gramos o peso: 2–6 pts con tip para completar
 - **Base científica:** Purina MER calculator, PMC diet quality study
 
-### Categorías de score (inspiradas en WHOOP)
+### Categorías de score (tono positivo, nunca alarmante)
 
-| Score | Categoría | Color | Mensaje |
+| Score | Categoría | Color | Headline |
 |---|---|---|---|
-| 85–100 | Excelente | Verde intenso (`#22c55e`) | "Salud óptima — sigue así" |
-| 70–84 | Muy bueno | Verde (`#7CB974`) | "Buen estado general" |
-| 55–69 | Regular | Amarillo (`#F59E0B`) | "Hay áreas de mejora" |
-| 40–54 | Atención | Naranja (`#F97316`) | "Requiere atención" |
-| 0–39 | Crítico | Rojo (`#EF4444`) | "Consulta con tu veterinario" |
+| 85–100 | Excelente | Verde (`#22C55E`) | "En excelente forma" |
+| 70–84 | Muy bueno | Verde (`#22C55E`) | "Muy buen estado" |
+| 55–69 | Aceptable | Amarillo (`#F59E0B`) | "Buen comienzo" |
+| 40–54 | En construcción | Naranja (`#F97316`) | "Perfil en construcción" |
+| 0–39 | Historial inicial | Gris (`#94A3B8`) | "Comenzando el historial" |
 
-### Sistema de flags (multi-signal: ≥2 flags = alerta roja)
-Inspirado en Apple Vitals: una sola señal = aviso; dos o más simultáneas = alerta prioritaria.
+**Notas:**
+- Nunca se muestra rojo ni texto como "crítico" o "consulta al vet urgente". La decisión es deliberada: un score bajo casi siempre refleja falta de datos, no un problema clínico real.
+- El subline siempre es constructivo: explica qué falta o sugiere un próximo paso concreto.
+
+### Sistema de flags (sugerencias amables, no alertas)
+
+Cada flag tiene una de tres severidades visuales: `suggestion` (naranja), `reminder` (azul), `tip` (amarillo/gris). Nunca rojo. Se listan en orden de prioridad, máximo 4 visibles.
 
 ```
-flags = {
-  weight_gain:        peso > 5% sobre ideal, tendencia ascendente 30 días
-  vaccine_gap:        vacuna core vencida o próxima a vencer (<30 días)
-  vet_overdue:        sin visita al vet en >18 meses
-  dental_risk:        edad ≥2 años + sin grooming en >60 días + raza pequeña
-  obesity_risk:       BCS implícito >6/9 + raza alto riesgo + castrado
-  senior_watchlist:   edad supera umbral senior para su tamaño
-  diet_missing:       sin datos de alimentación registrados
-  activity_low:       0 actividades en 30 días
-}
+weight_check       peso > 108% del ideal (suggestion si está subiendo, tip si estable)
+vet_reminder       > 14 meses desde la última visita registrada
+vaccine_check      vacunas registradas pero sin dosis en los últimos 365d
+dental_tip         ≥ 2 años + raza de riesgo dental + > 75d sin grooming
+cardiac_tip        raza cardiaca_risk: very_high + ≥ 6 años + sin vet en 1 año
+senior_care        edad senior + > 210d sin vet (sugerir chequeos semestrales)
+blood_test         sin examen de sangre en los últimos 365 días
+food_missing       sin alimento registrado
 ```
+
+**Diferencia con Apple Vitals:** no implementamos "multi-signal anomaly detection" (2+ señales = alerta prioritaria). La razón es epistemológica: sin biosensores, no tenemos la granularidad para considerar una "coincidencia" de señales clínicamente significativa. Las flags son recordatorios independientes, no un sistema de alertas médicas.
 
 ---
 

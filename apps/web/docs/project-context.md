@@ -254,37 +254,40 @@ export const LIMITS = {
 
 ## Vitality Score (Motor de Salud)
 
-### Archivo: `src/lib/vitality-score.ts`
+### Archivo: `packages/shared/lib/vitality-score.ts`
 
-Score de 0 a 100, dividido en 5 pilares de 20 puntos cada uno:
+Motor compartido entre web y mobile. Score de 0 a 100, dividido en 5 pilares de 20 puntos cada uno. El diseño siempre usa tono positivo — el peor estado visible es "Perfil en construcción", nunca "crítico".
 
 | Pilar | Que evalua | Datos que usa |
 |-------|-----------|---------------|
-| Peso | BCS (Body Condition Score), rango ideal por raza | weight_records, breed_data |
-| Cuidado preventivo | Vacunas al dia, visitas al vet recientes | vaccines, vet_visits |
-| Raza y edad | Riesgos geneticos, etapa de vida | breed, birth_date, breed_data |
-| Actividad | Frecuencia de paseos, grooming | activity_logs, groomings |
-| Nutricion | Calidad de dieta, porcion adecuada | foods |
+| Peso | Desviacion vs rango ideal de la raza, tendencia, frescura del dato | weight_records, breed_data |
+| Cuidado preventivo | Vacunas, visitas al vet, antipulgas/desparasitante/combinado, examen de sangre anual | vaccines, vet_visits, preventive_treatments, blood_tests |
+| Raza y edad | Riesgos geneticos y de etapa de vida (dental, cardiaco, obesidad, senior) | breed, birth_date, breed_data |
+| Actividad | Paseos, aventuras, duracion promedio y grooming de los ultimos 30 dias | activity_logs, adventures, groomings |
+| Nutricion | Calidad del alimento + precision de porcion vs. MER (Purina) | foods, weight_records |
 
 ### Output
 ```typescript
 {
-  total: 72,                    // Score final
-  color: '#22C55E',             // Verde=bueno, amber=regular, rojo=malo
-  headline: 'Buen estado',      // Texto principal
-  subline: '...',               // Descripcion
-  showScore: true,              // false si faltan datos minimos
+  total: 72,                    // Score 0-100 (0 solo si showScore=false)
+  color: '#22C55E',             // Verde (alto) / amber / naranja / gris (construccion). Nunca rojo.
+  headline: 'Muy buen estado',  // Texto principal positivo
+  subline: '...',               // Descripcion o proximo paso
+  showScore: true,              // false si hay < 2 areas con datos
   pillars: [                    // Detalle por pilar
-    { name: 'Peso', emoji: '...', score: 16, max: 20, pct: 80, description: '...', status: '...', tips: ['...'] }
+    { id: 'peso', name: 'Peso', score: 16, max: 20, pct: 80, description: '...', status: '...', tips: ['...'], isEstimated: false }
   ],
-  pendingAreas: [               // Areas sin datos suficientes
+  pendingAreas: [               // Solo cuando showScore=false — guia para completar perfil
     { label: 'Registra el peso', href: '/salud/peso' }
   ],
-  flags: [                      // Alertas/avisos
-    { message: '...', action: '...', href: '...', severity: 'suggestion' }
-  ]
+  flags: [                      // Sugerencias amables (nunca alertas rojas)
+    { message: '...', action: '...', href: '...', severity: 'suggestion' | 'reminder' | 'tip' }
+  ],
+  dataSufficiency: 'ready' | 'building' | 'too_early',
 }
 ```
+
+**Documentacion cientifica completa:** [`apps/web/docs/vitality-score-research.md`](./vitality-score-research.md) — formulas detalladas de cada pilar con referencias a WSAVA, Purina MER, Dog Aging Project, GeroScience 2024, etc.
 
 ### Datos de razas: `src/lib/breed-data.ts`
 ~40 razas con: peso ideal (min/max kg), esperanza de vida, riesgos de salud, riesgo dental/cardiaco/obesidad, edad senior.
@@ -418,13 +421,14 @@ if (!pet) return Astro.redirect('/onboarding');
 
 ## Archivos Clave (rutas absolutas)
 
-### Logica de negocio (reutilizable en iOS)
-- `src/lib/premium.ts` — Gates, limites, evaluacion de premium
-- `src/lib/vitality-score.ts` — Motor del score 0-100
-- `src/lib/breed-data.ts` — Datos de razas (~40)
-- `src/lib/badges.ts` — Sistema de insignias
-- `src/lib/vaccine-badges.ts` — Mapa vacuna -> badge PNG
-- `src/lib/utils.ts` — Helpers (timeAgo, formatDate, calculateAge)
+### Logica de negocio (compartida web + mobile via `@vivra/shared`)
+- `packages/shared/lib/vitality-score.ts` — Motor del score 0-100 (5 pilares)
+- `packages/shared/lib/breed-data.ts` — Datos de razas (~40)
+- `packages/shared/lib/badges.ts` — Sistema de insignias
+- `packages/shared/lib/constants.ts` — Enums (tipos de grooming, etc.)
+- `packages/shared/lib/utils.ts` — Helpers (timeAgo, formatDate, calculateAge)
+- `apps/web/src/lib/premium.ts` — Gates + limites (solo web, equivalente mobile en `apps/mobile/hooks/useSubscription.ts`)
+- `apps/web/src/lib/vaccine-badges.ts` — Mapa vacuna -> badge PNG
 
 ### Infraestructura
 - `src/middleware.ts` — Auth guard

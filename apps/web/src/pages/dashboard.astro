@@ -9,7 +9,7 @@ import { evaluateBadges } from '@vivra/shared';
 import type { BadgeCounts } from '@vivra/shared';
 import { BREED_FACTS } from '@vivra/shared';
 import type { DogBreed } from '@vivra/shared';
-import { getPremiumStatus, evaluatePremium } from '../lib/premium';
+import { getPremiumStatus } from '../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const isNewlyOnboarded = Astro.url.searchParams.get('onboarded') === '1';
@@ -28,8 +28,7 @@ const [
   { data: allVetVisits },
   { data: weightRecords },
   { data: foods },
-  { data: lastAntipulgas },
-  { data: lastDesparasitante },
+  { data: allPreventives },
   { count: weightCount },
   { count: flightCount },
   { data: activityLogs },
@@ -40,13 +39,19 @@ const [
   supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-  supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'antipulgas').order('date_given', { ascending: false }).limit(1),
-  supabase.from('preventive_treatments').select('date_given, product_name').eq('pet_id', pet.id).eq('type', 'desparasitante').order('date_given', { ascending: false }).limit(1),
+  // All preventives (antipulgas, desparasitante, combinado) in one call.
+  // 'combinado' rows count as BOTH antipulgas and desparasitante for next-due.
+  supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('weight_records').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
   supabase.from('flights').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
   supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
   supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
 ]);
+
+// Split preventives — 'combinado' counts for both
+const preventives = allPreventives ?? [];
+const lastAntipulgas = preventives.filter(p => p.type === 'antipulgas' || p.type === 'combinado');
+const lastDesparasitante = preventives.filter(p => p.type === 'desparasitante' || p.type === 'combinado');
 
 // Blood tests (may not exist yet)
 let bloodTests: { date: string }[] = [];
@@ -102,6 +107,7 @@ const vitalityInput: ScoreInput = {
   adventures: (adventures ?? []).map((a: any) => ({ date: a.date })),
   foods: activeFoods,
   bloodTests,
+  preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
 };
 const dashScore = calculateVitalityScore(vitalityInput);
 
@@ -712,7 +718,14 @@ const topActions = todoActions.slice(0, 4);
 
   {/* ── PREVENTIVOS: Antipulgas + Desparasitante ── */}
   <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
-    <a href="/salud/preventivos" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+    <a href="/salud/preventivos" class:list={[
+      'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
+      !antipulgasInfo.lastDate || antipulgasInfo.overdue
+        ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
+        : antipulgasInfo.daysLeft <= 5
+          ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
+          : 'border border-card-border bg-card'
+    ]}>
       <div class="flex items-center gap-2 mb-2">
         <span class="text-base">🐛</span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Antipulgas</p>
@@ -722,27 +735,34 @@ const topActions = todoActions.slice(0, 4);
           <div class="flex items-baseline gap-1.5">
             <span class:list={[
               'text-2xl font-black leading-none',
-              antipulgasInfo.overdue ? 'text-red-500' : antipulgasInfo.daysLeft <= 5 ? 'text-amber-500' : 'text-ink'
+              antipulgasInfo.overdue ? 'text-red-600' : antipulgasInfo.daysLeft <= 5 ? 'text-amber-600' : 'text-ink'
             ]}>
-              {antipulgasInfo.overdue ? '!' : `${antipulgasInfo.daysLeft}d`}
+              {antipulgasInfo.overdue ? `-${Math.abs(antipulgasInfo.daysLeft)}d` : `${antipulgasInfo.daysLeft}d`}
             </span>
             {!antipulgasInfo.overdue && <span class="text-xs text-muted">restantes</span>}
           </div>
           <p class:list={[
             'text-[11px] mt-1',
-            antipulgasInfo.overdue ? 'text-red-500 font-semibold' : 'text-muted'
+            antipulgasInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
+            {antipulgasInfo.overdue ? '⚠️ Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
           </p>
         </>
       ) : (
         <>
-          <p class="text-sm font-semibold text-muted">—</p>
-          <p class="text-[11px] text-accent mt-1">Registrar primera dosis</p>
+          <p class="text-base font-black text-red-600">Nunca aplicado</p>
+          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
         </>
       )}
     </a>
-    <a href="/salud/preventivos" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
+    <a href="/salud/preventivos" class:list={[
+      'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
+      !desparasitanteInfo.lastDate || desparasitanteInfo.overdue
+        ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
+        : desparasitanteInfo.daysLeft <= 5
+          ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
+          : 'border border-card-border bg-card'
+    ]}>
       <div class="flex items-center gap-2 mb-2">
         <span class="text-base">💊</span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Desparasitante</p>
@@ -752,23 +772,23 @@ const topActions = todoActions.slice(0, 4);
           <div class="flex items-baseline gap-1.5">
             <span class:list={[
               'text-2xl font-black leading-none',
-              desparasitanteInfo.overdue ? 'text-red-500' : desparasitanteInfo.daysLeft <= 5 ? 'text-amber-500' : 'text-ink'
+              desparasitanteInfo.overdue ? 'text-red-600' : desparasitanteInfo.daysLeft <= 5 ? 'text-amber-600' : 'text-ink'
             ]}>
-              {desparasitanteInfo.overdue ? '!' : `${desparasitanteInfo.daysLeft}d`}
+              {desparasitanteInfo.overdue ? `-${Math.abs(desparasitanteInfo.daysLeft)}d` : `${desparasitanteInfo.daysLeft}d`}
             </span>
             {!desparasitanteInfo.overdue && <span class="text-xs text-muted">restantes</span>}
           </div>
           <p class:list={[
             'text-[11px] mt-1',
-            desparasitanteInfo.overdue ? 'text-red-500 font-semibold' : 'text-muted'
+            desparasitanteInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
+            {desparasitanteInfo.overdue ? '⚠️ Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
           </p>
         </>
       ) : (
         <>
-          <p class="text-sm font-semibold text-muted">—</p>
-          <p class="text-[11px] text-accent mt-1">Registrar primera dosis</p>
+          <p class="text-base font-black text-red-600">Nunca aplicado</p>
+          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
         </>
       )}
     </a>

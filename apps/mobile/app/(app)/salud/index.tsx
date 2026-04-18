@@ -141,6 +141,11 @@ export default function SaludScreen() {
             <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
           </TouchableOpacity>
         )}
+
+        {/* Disclaimer: the score is informational, not diagnostic */}
+        <Text style={styles.disclaimer}>
+          El Vitality Score es orientativo, no un diagnóstico médico.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -241,4 +246,11 @@ const styles = StyleSheet.create({
   premiumBannerInfo: { flex: 1 },
   premiumBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   premiumBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  disclaimer: {
+    fontSize: 11,
+    color: Colors.muted,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+    lineHeight: 15,
+  },
 });

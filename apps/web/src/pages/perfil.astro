@@ -231,21 +231,23 @@ const isOtherBreed = pet?.breed && !breedInList;
 const premium = await getPremiumStatus(supabase, user.id);
 const isPremium = premium.isPremium;
 
-let spending = { vet: 0, grooming: 0, vuelos: 0, snacks: 0, preventivos: 0, total: 0 };
+let spending = { alimento: 0, vet: 0, grooming: 0, vuelos: 0, snacks: 0, preventivos: 0, total: 0 };
 if (isPremium && pet) {
-  const [vetRes, groomRes, flightRes, treatRes, prevRes] = await Promise.all([
+  const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
     supabase.from('vet_visits').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
     supabase.from('groomings').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
     supabase.from('flights').select('ticket_price').eq('pet_id', pet.id).not('ticket_price', 'is', null),
     supabase.from('treats').select('price').eq('pet_id', pet.id).not('price', 'is', null),
     supabase.from('preventive_treatments').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    supabase.from('foods').select('price').eq('pet_id', pet.id).not('price', 'is', null),
   ]);
+  spending.alimento = (foodRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
   spending.vet = (vetRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
   spending.grooming = (groomRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
   spending.vuelos = (flightRes.data ?? []).reduce((s: number, r: any) => s + (r.ticket_price ?? 0), 0);
   spending.snacks = (treatRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
   spending.preventivos = (prevRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
-  spending.total = spending.vet + spending.grooming + spending.vuelos + spending.snacks + spending.preventivos;
+  spending.total = spending.alimento + spending.vet + spending.grooming + spending.vuelos + spending.snacks + spending.preventivos;
 }
 
 // Co-owner data
@@ -675,6 +677,12 @@ const origin = new URL(Astro.request.url).origin;
       {isPremium ? (
         spending.total > 0 ? (
           <div class="space-y-2">
+            {spending.alimento > 0 && (
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-muted">🥫 Alimentos</span>
+                <span class="font-semibold text-ink">${spending.alimento}</span>
+              </div>
+            )}
             {spending.vet > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">🩺 Veterinario</span>
@@ -712,7 +720,7 @@ const origin = new URL(Astro.request.url).origin;
             </div>
           </div>
         ) : (
-          <p class="text-sm text-muted">Sin gastos registrados aún. Los gastos de veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
+          <p class="text-sm text-muted">Sin gastos registrados aún. Los gastos de alimentos, veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
         )
       ) : (
         <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">

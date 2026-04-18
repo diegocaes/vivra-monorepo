@@ -40,11 +40,11 @@ const SUPPORT_OPTIONS = [
 const FAQ_ITEMS = [
   {
     q: '¿Qué es el score de bienestar?',
-    a: 'Es un número de 0 a 100 que mide qué tan completo está el historial de tu mascota. Se calcula con 5 pilares: peso, cuidado preventivo, raza y edad, actividad y nutrición.',
+    a: 'Un número de 0 a 100 que resume qué tan bien documentado está el cuidado de tu perro. Se calcula con 5 pilares de 20 pts cada uno: peso (vs. rango ideal de la raza), cuidado preventivo (vacunas, vet, antipulgas, desparasitante), raza y edad, actividad (paseos + grooming) y nutrición. No es un diagnóstico médico.',
   },
   {
     q: '¿Un score bajo significa que mi perro está enfermo?',
-    a: 'No. Generalmente un score bajo significa que faltan datos por registrar. A medida que completes el perfil, el score sube.',
+    a: 'No. Un score bajo casi siempre significa que faltan datos registrados, no que haya un problema real. Solo refleja lo que está en Vivra. A medida que completes el perfil, el score sube. Si te preocupa algo concreto, siempre consulta al vet.',
   },
   {
     q: '¿Vivra reemplaza al veterinario?',
