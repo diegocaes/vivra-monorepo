@@ -65,6 +65,10 @@ export interface FoodRecord {
   bag_size: number | null;
   bag_unit: string | null; // 'g' | 'kg' | 'lb'
   type: string | null;     // column name in foods table
+  /** ISO date — cuándo se empezó a usar este alimento (user-entered) */
+  start_date?: string | null;
+  /** ISO timestamp — cuándo se registró en la app (auto) */
+  created_at?: string | null;
 }
 
 export interface BloodTestRecord {
@@ -249,10 +253,13 @@ function scorePeso(input: ScoreInput): PillarScore {
   const latestWeight = weightRecords[0]?.weight_kg ?? pet.weight_kg;
   const lastWeightDate = weightRecords[0]?.date ?? null;
   const daysSinceWeight = lastWeightDate ? daysBetween(lastWeightDate) : null;
+  // "Onboarding-only" = tenemos pet.weight_kg pero ningún weight_record.
+  // No sabemos si ese peso sigue siendo vigente, así que lo tratamos como estimado.
+  const isOnboardingOnlyWeight = weightRecords.length === 0 && !!pet.weight_kg;
 
   if (!latestWeight) {
     return {
-      name: 'Peso', id: 'peso' as PillarId, score: 10, max: 20, pct: 50,
+      name: 'Peso', id: 'peso' as PillarId, score: 4, max: 20, pct: 20,
       status: 'Pendiente de registro', description: PILLAR_DESC.peso,
       tips: ['Registrar el peso regularmente ayuda a detectar cambios a tiempo'],
       isEstimated: true,
@@ -313,10 +320,18 @@ function scorePeso(input: ScoreInput): PillarScore {
     status = `Buen peso · ${latestWeight} kg`;
   }
 
+  // Si solo tenemos el peso de onboarding, no podemos medir tendencia ni frescura.
+  // Tope a 14/20 y lo marcamos como estimado para que la UI lo distinga.
+  if (isOnboardingOnlyWeight) {
+    pts = Math.min(pts, 14);
+    tips.push('Registra el peso actual para afinar el análisis — el que tenemos es del registro inicial');
+  }
+
   return {
     name: 'Peso', id: 'peso' as PillarId,
     score: clamp(pts, 2, 20), max: 20, pct: clamp(pts * 5, 10, 100),
-    status, description: PILLAR_DESC.peso, tips: tips.slice(0, 2), isEstimated: false,
+    status, description: PILLAR_DESC.peso, tips: tips.slice(0, 2),
+    isEstimated: isOnboardingOnlyWeight,
   };
 }
 
@@ -330,7 +345,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
 
   if (!hasAnyData) {
     return {
-      name: 'Cuidado preventivo', id: 'cuidado' as PillarId, score: 10, max: 20, pct: 50,
+      name: 'Cuidado preventivo', id: 'cuidado' as PillarId, score: 4, max: 20, pct: 20,
       status: 'Pendiente de registro', description: PILLAR_DESC.cuidado,
       tips: ['Agrega vacunas, antipulgas y visitas al vet para completar este indicador'],
       isEstimated: true,
@@ -355,8 +370,14 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     vaccineScore = Math.max(2, Math.round((coveredCore / coreNames.length) * 6));
 
     const anyRecent = vaccines.some(v => daysBetween(v.date_given) < 365);
+    const anyInLast18Months = vaccines.some(v => daysBetween(v.date_given) < 550);
     if (anyRecent) {
       vaccineScore = Math.min(8, vaccineScore + 2);
+    } else if (!anyInLast18Months) {
+      // Todas las vacunas tienen más de 18 meses — probablemente desactualizadas.
+      // Tope suave, no castigo fuerte.
+      vaccineScore = Math.min(vaccineScore, 4);
+      tips.push('Las vacunas registradas son antiguas — vale la pena revisar el calendario con el vet');
     } else {
       tips.push('Puede ser buen momento para revisar el calendario de vacunas con el vet');
     }
@@ -531,7 +552,7 @@ function scoreActividad(input: ScoreInput): PillarScore {
 
   if (!hasAnyData) {
     return {
-      name: 'Actividad', id: 'actividad' as PillarId, score: 10, max: 20, pct: 50,
+      name: 'Actividad', id: 'actividad' as PillarId, score: 4, max: 20, pct: 20,
       status: 'Pendiente de registro', description: PILLAR_DESC.actividad,
       tips: ['Registrar paseos diarios ayuda a visualizar su nivel de actividad'],
       isEstimated: true,
@@ -628,7 +649,7 @@ function scoreNutricion(input: ScoreInput): PillarScore {
 
   if (foods.length === 0) {
     return {
-      name: 'Nutrición', id: 'nutricion' as PillarId, score: 10, max: 20, pct: 50,
+      name: 'Nutrición', id: 'nutricion' as PillarId, score: 4, max: 20, pct: 20,
       status: 'Pendiente de registro', description: PILLAR_DESC.nutricion,
       tips: ['Registra el alimento actual para obtener un análisis nutricional personalizado'],
       isEstimated: true,
@@ -636,6 +657,14 @@ function scoreNutricion(input: ScoreInput): PillarScore {
   }
 
   const f = foods[0];
+
+  // Frescura del registro: el último alimento puede haber sido registrado hace
+  // mucho y el usuario haber cambiado. Si el registro es muy antiguo, aplicamos
+  // un tope al score para que el indicador refleje la incertidumbre.
+  const foodLogDate = f.start_date ?? f.created_at ?? null;
+  const daysSinceFoodLog = foodLogDate ? daysBetween(foodLogDate) : null;
+  const isStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 180;
+  const isVeryStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 365;
 
   // Calidad del alimento (10 pts)
   let qualityScore = 5;
@@ -647,6 +676,14 @@ function scoreNutricion(input: ScoreInput): PillarScore {
     else qualityScore += 1;
   }
   qualityScore = Math.min(10, qualityScore);
+
+  if (isVeryStaleFood) {
+    qualityScore = Math.min(qualityScore, 5);
+    tips.push('El último registro de alimento tiene más de un año — confirma si sigue siendo el mismo');
+  } else if (isStaleFood) {
+    qualityScore = Math.min(qualityScore, 7);
+    tips.push('Hace tiempo que no actualizas el alimento — si cambió, vale la pena registrarlo');
+  }
 
   // Precisión de porción (10 pts)
   let portionScore = 0;
@@ -689,7 +726,8 @@ function scoreNutricion(input: ScoreInput): PillarScore {
   return {
     name: 'Nutrición', id: 'nutricion' as PillarId,
     score: total, max: 20, pct: clamp(total * 5, 10, 100),
-    status, description: PILLAR_DESC.nutricion, tips: tips.slice(0, 2), isEstimated: false,
+    status, description: PILLAR_DESC.nutricion, tips: tips.slice(0, 2),
+    isEstimated: isVeryStaleFood,
   };
 }
 

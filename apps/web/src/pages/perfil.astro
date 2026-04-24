@@ -4,7 +4,7 @@ import Card from '../components/ui/Card.astro';
 import Input from '../components/ui/Input.astro';
 import Button from '../components/ui/Button.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import { DOG_BREEDS } from '@vivra/shared';
+import { DOG_BREEDS, formatCurrency } from '@vivra/shared';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
@@ -680,43 +680,43 @@ const origin = new URL(Astro.request.url).origin;
             {spending.alimento > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">🥫 Alimentos</span>
-                <span class="font-semibold text-ink">${spending.alimento}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.alimento)}</span>
               </div>
             )}
             {spending.vet > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">🩺 Veterinario</span>
-                <span class="font-semibold text-ink">${spending.vet}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.vet)}</span>
               </div>
             )}
             {spending.grooming > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">✂️ Grooming</span>
-                <span class="font-semibold text-ink">${spending.grooming}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.grooming)}</span>
               </div>
             )}
             {spending.vuelos > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">✈️ Vuelos</span>
-                <span class="font-semibold text-ink">${spending.vuelos}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.vuelos)}</span>
               </div>
             )}
             {spending.snacks > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">🦴 Snacks</span>
-                <span class="font-semibold text-ink">${spending.snacks}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.snacks)}</span>
               </div>
             )}
             {spending.preventivos > 0 && (
               <div class="flex items-center justify-between text-sm">
                 <span class="text-muted">💊 Preventivos</span>
-                <span class="font-semibold text-ink">${spending.preventivos}</span>
+                <span class="font-semibold text-ink">${formatCurrency(spending.preventivos)}</span>
               </div>
             )}
             <hr class="border-card-border/50 my-2" />
             <div class="flex items-center justify-between text-sm">
               <span class="font-semibold text-ink">Total</span>
-              <span class="font-bold text-accent text-base">${spending.total}</span>
+              <span class="font-bold text-accent text-base">${formatCurrency(spending.total)}</span>
             </div>
           </div>
         ) : (

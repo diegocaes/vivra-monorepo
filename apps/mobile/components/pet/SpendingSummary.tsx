@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../ui/Card';
+import { formatCurrency } from '@vivra/shared';
 
 interface SpendingSummaryProps {
   petId: string;
@@ -24,27 +25,40 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
   const [loading, setLoading] = useState(true);
 
   const fetchSpending = useCallback(async () => {
-    const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
-      supabase.from('vet_visits').select('cost').eq('pet_id', petId),
-      supabase.from('groomings').select('cost').eq('pet_id', petId),
-      supabase.from('flights').select('ticket_price').eq('pet_id', petId),
-      supabase.from('treats').select('price').eq('pet_id', petId),
-      supabase.from('preventive_treatments').select('cost').eq('pet_id', petId),
-      supabase.from('foods').select('price').eq('pet_id', petId),
-    ]);
+    try {
+      const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
+        supabase.from('vet_visits').select('cost').eq('pet_id', petId),
+        supabase.from('groomings').select('cost').eq('pet_id', petId),
+        supabase.from('flights').select('ticket_price').eq('pet_id', petId),
+        supabase.from('treats').select('price').eq('pet_id', petId),
+        supabase.from('preventive_treatments').select('cost').eq('pet_id', petId),
+        supabase.from('foods').select('price').eq('pet_id', petId),
+      ]);
 
-    const sum = (arr: any[] | null, key: string) =>
-      (arr ?? []).reduce((s: number, r: any) => s + (r[key] ?? 0), 0);
+      // Log silent errors so they surface in dev without breaking the UI.
+      for (const [name, res] of [
+        ['vet_visits', vetRes], ['groomings', groomRes], ['flights', flightRes],
+        ['treats', treatRes], ['preventive_treatments', prevRes], ['foods', foodRes],
+      ] as const) {
+        if (res.error) console.warn(`[SpendingSummary] ${name} error:`, res.error.message);
+      }
 
-    setCategories([
-      { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sum(foodRes.data, 'price') },
-      { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sum(vetRes.data, 'cost') },
-      { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sum(groomRes.data, 'cost') },
-      { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sum(flightRes.data, 'ticket_price') },
-      { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: sum(treatRes.data, 'price') },
-      { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: sum(prevRes.data, 'cost') },
-    ]);
-    setLoading(false);
+      const sum = (arr: any[] | null, key: string) =>
+        (arr ?? []).reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
+
+      setCategories([
+        { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sum(foodRes.data, 'price') },
+        { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sum(vetRes.data, 'cost') },
+        { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sum(groomRes.data, 'cost') },
+        { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sum(flightRes.data, 'ticket_price') },
+        { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: sum(treatRes.data, 'price') },
+        { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: sum(prevRes.data, 'cost') },
+      ]);
+    } catch (e: any) {
+      console.warn('[SpendingSummary] unexpected error:', e?.message ?? e);
+    } finally {
+      setLoading(false);
+    }
   }, [petId]);
 
   useEffect(() => { fetchSpending(); }, [fetchSpending]);
@@ -77,14 +91,14 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
       <View style={styles.header}>
         <Ionicons name="wallet-outline" size={20} color={Colors.accent} />
         <Text style={styles.headerTitle}>Gastos totales</Text>
-        <Text style={styles.grandTotal}>${grandTotal.toLocaleString()}</Text>
+        <Text style={styles.grandTotal}>${formatCurrency(grandTotal)}</Text>
       </View>
       <View style={styles.list}>
         {categories.filter(c => c.total > 0).map(c => (
           <View key={c.label} style={styles.row}>
             <Ionicons name={c.icon} size={16} color={c.iconColor} />
             <Text style={styles.catLabel}>{c.label}</Text>
-            <Text style={styles.catTotal}>${c.total.toLocaleString()}</Text>
+            <Text style={styles.catTotal}>${formatCurrency(c.total)}</Text>
           </View>
         ))}
         {grandTotal === 0 && (

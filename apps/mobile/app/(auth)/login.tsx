@@ -14,6 +14,7 @@ import { Link } from 'expo-router';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password.trim()) {
@@ -41,6 +43,35 @@ export default function LoginScreen() {
 
     if (error) {
       Alert.alert('Error', error.message);
+    }
+  }
+
+  async function handleAppleLogin() {
+    setAppleLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error('No se recibió el token de Apple');
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      // User cancellation is not an error worth surfacing.
+      if (error.code === 'ERR_REQUEST_CANCELED') return;
+      Alert.alert('Error', error.message ?? 'Error al iniciar sesión con Apple');
+    } finally {
+      setAppleLoading(false);
     }
   }
 
@@ -136,11 +167,22 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={Radius.md}
+              style={styles.appleButton}
+              onPress={handleAppleLogin}
+            />
+          )}
+
           <Button
             title="Continuar con Google"
             onPress={handleGoogleLogin}
             variant="outline"
             loading={googleLoading}
+            disabled={appleLoading}
           />
 
           <TouchableOpacity style={styles.forgotLink}>
@@ -212,6 +254,10 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.md,
     color: Colors.muted,
     fontSize: FontSize.sm,
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
   },
   forgotLink: {
     alignItems: 'center',

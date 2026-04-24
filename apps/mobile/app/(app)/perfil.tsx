@@ -518,6 +518,47 @@ export default function PerfilScreen() {
               </Card>
             )}
 
+            {/* Legal & support */}
+            <Card>
+              <Text style={styles.sectionTitle}>Legal y soporte</Text>
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => Linking.openURL('https://vivrapet.com/privacy')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="shield-checkmark-outline" size={20} color={Colors.accent} />
+                <Text style={styles.legalRowText}>Política de privacidad</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => Linking.openURL('https://vivrapet.com/terms')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
+                <Text style={styles.legalRowText}>Términos de uso (EULA)</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => Linking.openURL('mailto:soporte@vivrapet.com?subject=Soporte%20Vivra')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="mail-outline" size={20} color={Colors.accent} />
+                <Text style={styles.legalRowText}>Contactar soporte</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => Linking.openURL('itms-apps://apps.apple.com/app/id6761087142?action=write-review')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="star-outline" size={20} color={Colors.accent} />
+                <Text style={styles.legalRowText}>Calificar Vivra en la App Store</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.muted} />
+              </TouchableOpacity>
+            </Card>
+
             {/* Danger zone */}
             <Card>
               <Text style={[styles.sectionTitle, { color: Colors.bad }]}>Zona de peligro</Text>
@@ -684,6 +725,12 @@ const styles = StyleSheet.create({
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },
   emptyText: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
+  // Legal rows
+  legalRow: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
+    paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder,
+  },
+  legalRowText: { flex: 1, fontSize: FontSize.sm, color: Colors.ink, fontWeight: FontWeight.medium },
   // Danger zone
   dangerBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

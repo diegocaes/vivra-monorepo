@@ -3,7 +3,7 @@ import { calculateVitalityScore, VitalityScoreResult, ScoreInput } from '@vivra/
 import type { PetData } from './usePet';
 
 export function useVitality(petData: PetData): VitalityScoreResult | null {
-  const { pet, vaccines, weightRecords, foods, vetVisits, groomings, activityLogs, adventures, preventives } = petData;
+  const { pet, vaccines, weightRecords, foods, vetVisits, groomings, activityLogs, adventures, bloodTests, preventives } = petData;
 
   return useMemo(() => {
     if (!pet) return null;
@@ -32,10 +32,13 @@ export function useVitality(petData: PetData): VitalityScoreResult | null {
         bag_size: f.bag_size,
         bag_unit: f.bag_unit,
         type: f.type,
+        start_date: f.start_date,
+        created_at: f.created_at,
       })),
+      bloodTests: bloodTests.map(b => ({ date: b.date })),
       preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
     };
 
     return calculateVitalityScore(input);
-  }, [pet, vaccines, weightRecords, foods, vetVisits, groomings, activityLogs, adventures, preventives]);
+  }, [pet, vaccines, weightRecords, foods, vetVisits, groomings, activityLogs, adventures, bloodTests, preventives]);
 }

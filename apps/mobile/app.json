@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vivra",
     "slug": "vivra-mobile",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.vivrapet.app",
@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vivrapet.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Vivra necesita acceso a la cámara para tomar fotos de tu mascota.",
         "NSPhotoLibraryUsageDescription": "Vivra necesita acceso a tus fotos para seleccionar una imagen de tu mascota.",
@@ -44,6 +45,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-notifications",
         {

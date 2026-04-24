@@ -37,7 +37,7 @@ const [
   supabase.from('vet_visits').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('groomings').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
-  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type').eq('pet_id', pet.id).order('created_at', { ascending: false }),
+  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
   supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
   supabase.from('preventive_treatments').select('type, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);

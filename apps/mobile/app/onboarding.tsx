@@ -216,6 +216,7 @@ export default function OnboardingScreen() {
               <View style={styles.iconCircle}>
                 <Ionicons name="paw" size={40} color={Colors.accent} />
               </View>
+              <Text style={styles.welcomeBadge}>Bienvenido a Vivra</Text>
               <TextInput
                 style={styles.bigInput}
                 placeholder="Ej: Max, Luna, Rocky..."
@@ -378,7 +379,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
+  },
+  welcomeBadge: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: Spacing.lg,
   },
   bigInput: {
     fontSize: FontSize.xxl,

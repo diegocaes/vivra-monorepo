@@ -80,6 +80,25 @@ export function timeAgo(isoStr: string): string {
   return `Hace ${months} mes${months !== 1 ? 'es' : ''}`;
 }
 
+/**
+ * Formatea un monto monetario con separador de miles y dos decimales.
+ * Evita errores de punto flotante (ej. 255.23999999999998 → "255.24").
+ * No incluye el símbolo de moneda — el caller lo antepone según el contexto.
+ *
+ * Ejemplo: formatCurrency(255.23999999999998) → "255.24"
+ *          formatCurrency(1234.5)             → "1,234.50"
+ *          formatCurrency(null)               → "0.00"
+ */
+export function formatCurrency(value: number | null | undefined): string {
+  const n = typeof value === 'number' && isFinite(value) ? value : 0;
+  // Redondeamos primero para normalizar artefactos de float, luego formateamos.
+  const rounded = Math.round(n * 100) / 100;
+  return rounded.toLocaleString('es-CO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /** Retorna cuánto tiempo falta hasta una fecha */
 export function timeUntil(dateStr: string): string {
   const target = new Date(dateStr + 'T00:00:00');

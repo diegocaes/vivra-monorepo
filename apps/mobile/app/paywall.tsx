@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,9 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { PREMIUM_FEATURES } from '../constants/revenueCat';
 import { useSubscription } from '../hooks/useSubscription';
 import { PACKAGE_TYPE } from 'react-native-purchases';
+
+const PRIVACY_URL = 'https://vivrapet.com/privacy';
+const TERMS_URL = 'https://vivrapet.com/terms';
 
 export default function PaywallScreen() {
   const router = useRouter();
@@ -39,95 +42,130 @@ export default function PaywallScreen() {
         <Ionicons name="close" size={24} color={Colors.muted} />
       </TouchableOpacity>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="star" size={32} color={Colors.white} />
-        </View>
-        <Text style={styles.title}>Vivra Premium</Text>
-        <Text style={styles.subtitle}>Todo lo que necesitas para cuidar a tus mascotas</Text>
-      </View>
-
-      {/* Features */}
-      <View style={styles.featuresContainer}>
-        {PREMIUM_FEATURES.map((feature, i) => (
-          <View key={i} style={styles.featureRow}>
-            <View style={styles.featureIcon}>
-              <Ionicons name={feature.icon} size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>{feature.title}</Text>
-              <Text style={styles.featureDesc}>{feature.description}</Text>
-            </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.iconContainer}>
+            <Ionicons name="star" size={32} color={Colors.white} />
           </View>
-        ))}
-      </View>
+          <Text style={styles.title}>Vivra Premium</Text>
+          <Text style={styles.subtitle}>Todo lo que necesitas para cuidar a tus mascotas</Text>
+        </View>
 
-      {/* Pricing */}
-      <View style={styles.pricingContainer}>
-        {isLoading ? (
-          <ActivityIndicator color={Colors.accent} />
-        ) : (
-          <>
-            {/* Yearly — best value */}
-            {yearly && (
-              <TouchableOpacity
-                style={[styles.planCard, styles.planCardHighlight]}
-                onPress={() => handlePurchase(yearly)}
-              >
-                <View style={styles.bestValueBadge}>
-                  <Text style={styles.bestValueText}>Mejor precio</Text>
-                </View>
-                <Text style={styles.planName}>Anual</Text>
-                <Text style={styles.planPrice}>
-                  {yearly.product.priceString}
-                  <Text style={styles.planPeriod}>/año</Text>
-                </Text>
-                <Text style={styles.planSavings}>
-                  {monthly ? `Ahorra vs mensual` : ''}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Monthly */}
-            {monthly && (
-              <TouchableOpacity
-                style={styles.planCard}
-                onPress={() => handlePurchase(monthly)}
-              >
-                <Text style={styles.planName}>Mensual</Text>
-                <Text style={styles.planPrice}>
-                  {monthly.product.priceString}
-                  <Text style={styles.planPeriod}>/mes</Text>
-                </Text>
-                <Text style={styles.planTrial}>7 días gratis</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Fallback if packages not loaded yet */}
-            {!monthly && !yearly && (
-              <View style={styles.fallbackContainer}>
-                <Text style={styles.fallbackText}>
-                  No se pudieron cargar los planes. Verifica tu conexión.
-                </Text>
-                <TouchableOpacity style={styles.retryBtn} onPress={refresh}>
-                  <Text style={styles.retryText}>Reintentar</Text>
-                </TouchableOpacity>
+        {/* Features */}
+        <View style={styles.featuresContainer}>
+          {PREMIUM_FEATURES.map((feature, i) => (
+            <View key={i} style={styles.featureRow}>
+              <View style={styles.featureIcon}>
+                <Ionicons name={feature.icon} size={20} color={Colors.accent} />
               </View>
-            )}
-          </>
-        )}
-      </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureTitle}>{feature.title}</Text>
+                <Text style={styles.featureDesc}>{feature.description}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <TouchableOpacity onPress={handleRestore}>
-          <Text style={styles.restoreText}>Restaurar compra</Text>
-        </TouchableOpacity>
-        <Text style={styles.legalText}>
-          La suscripción se renueva automáticamente. Puedes cancelar en cualquier momento desde Ajustes de tu iPhone.
-        </Text>
-      </View>
+        {/* Pricing */}
+        <View style={styles.pricingContainer}>
+          {isLoading ? (
+            <ActivityIndicator color={Colors.accent} />
+          ) : (
+            <>
+              {/* Yearly — best value */}
+              {yearly && (
+                <TouchableOpacity
+                  style={[styles.planCard, styles.planCardHighlight]}
+                  onPress={() => handlePurchase(yearly)}
+                >
+                  <View style={styles.bestValueBadge}>
+                    <Text style={styles.bestValueText}>Mejor precio</Text>
+                  </View>
+                  <Text style={styles.planName}>Anual</Text>
+                  <Text style={styles.planPrice}>
+                    {yearly.product.priceString}
+                    <Text style={styles.planPeriod}>/año</Text>
+                  </Text>
+                  <Text style={styles.planSavings}>
+                    {monthly ? `Ahorra vs mensual` : ''}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Monthly */}
+              {monthly && (
+                <TouchableOpacity
+                  style={styles.planCard}
+                  onPress={() => handlePurchase(monthly)}
+                >
+                  <Text style={styles.planName}>Mensual</Text>
+                  <Text style={styles.planPrice}>
+                    {monthly.product.priceString}
+                    <Text style={styles.planPeriod}>/mes</Text>
+                  </Text>
+                  <Text style={styles.planTrial}>7 días gratis</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Fallback if packages not loaded yet */}
+              {!monthly && !yearly && (
+                <View style={styles.fallbackContainer}>
+                  <Text style={styles.fallbackText}>
+                    No se pudieron cargar los planes. Verifica tu conexión.
+                  </Text>
+                  <TouchableOpacity style={styles.retryBtn} onPress={refresh}>
+                    <Text style={styles.retryText}>Reintentar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Apple-required full disclosure (Guideline 3.1.2) — right next to the purchase buttons */}
+        <View style={styles.disclosureBox}>
+          <Text style={styles.disclosureTitle}>Detalles de la suscripción</Text>
+          <Text style={styles.disclosureText}>
+            • El plan mensual incluye 7 días de prueba gratis. Al final de la prueba,
+            se cobrará {monthly?.product.priceString ?? 'el precio mostrado'} al mes.
+          </Text>
+          <Text style={styles.disclosureText}>
+            • El plan anual se cobra {yearly?.product.priceString ?? 'una sola vez al año'} por 12 meses.
+          </Text>
+          <Text style={styles.disclosureText}>
+            • La suscripción se renueva automáticamente al final de cada período, a menos
+            que la canceles al menos 24 horas antes del final del período en curso.
+          </Text>
+          <Text style={styles.disclosureText}>
+            • El pago se cargará a tu cuenta de Apple al confirmar la compra.
+          </Text>
+          <Text style={styles.disclosureText}>
+            • Puedes gestionar o cancelar tu suscripción en Ajustes → Apple ID → Suscripciones.
+          </Text>
+        </View>
+
+        {/* Legal links — required by App Store Review */}
+        <View style={styles.legalLinks}>
+          <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+            <Text style={styles.legalLink}>Términos de uso (EULA)</Text>
+          </TouchableOpacity>
+          <Text style={styles.legalLinkSep}> · </Text>
+          <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Text style={styles.legalLink}>Política de privacidad</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Restore */}
+        <View style={styles.footer}>
+          <TouchableOpacity onPress={handleRestore}>
+            <Text style={styles.restoreText}>Restaurar compra</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -136,12 +174,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.canvas,
+  },
+  scrollContent: {
     paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   closeBtn: {
     alignSelf: 'flex-end',
     padding: Spacing.sm,
     marginTop: Spacing.xs,
+    marginRight: Spacing.md,
   },
   header: {
     alignItems: 'center',
@@ -276,21 +318,49 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
   },
+  disclosureBox: {
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    gap: Spacing.xs,
+  },
+  disclosureTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.ink,
+    marginBottom: Spacing.xs,
+  },
+  disclosureText: {
+    fontSize: 11,
+    color: Colors.muted,
+    lineHeight: 16,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: Spacing.md,
+  },
+  legalLink: {
+    fontSize: FontSize.xs,
+    color: Colors.accent,
+    fontWeight: FontWeight.medium,
+  },
+  legalLinkSep: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+  },
   footer: {
     alignItems: 'center',
-    gap: Spacing.md,
-    marginTop: 'auto',
-    paddingBottom: Spacing.lg,
+    marginTop: Spacing.md,
   },
   restoreText: {
     fontSize: FontSize.md,
     color: Colors.accent,
     fontWeight: FontWeight.medium,
-  },
-  legalText: {
-    fontSize: FontSize.xs,
-    color: Colors.muted,
-    textAlign: 'center',
-    lineHeight: 16,
   },
 });

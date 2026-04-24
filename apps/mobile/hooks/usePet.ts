@@ -26,6 +26,8 @@ export interface PetData {
   groomings: { type: string; date: string }[];
   activityLogs: { date: string; walks: number; duration_minutes: number | null }[];
   adventures: { date: string }[];
+  /** Blood test records sorted by date desc. Used for the vitality score bonus + reminder. */
+  bloodTests: { date: string }[];
   /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
   preventives: PreventiveRow[];
   lastAntipulgas: { date_given: string; product_name: string | null } | null;
@@ -49,6 +51,7 @@ export function usePet(): PetData {
   const [groomings, setGroomings] = useState<PetData['groomings']>([]);
   const [activityLogs, setActivityLogs] = useState<PetData['activityLogs']>([]);
   const [adventures, setAdventures] = useState<PetData['adventures']>([]);
+  const [bloodTests, setBloodTests] = useState<PetData['bloodTests']>([]);
   const [preventives, setPreventives] = useState<PreventiveRow[]>([]);
   const [lastAntipulgas, setLastAntipulgas] = useState<PetData['lastAntipulgas']>(null);
   const [lastDesparasitante, setLastDesparasitante] = useState<PetData['lastDesparasitante']>(null);
@@ -105,6 +108,7 @@ export function usePet(): PetData {
         groomingsRes,
         activityRes,
         adventuresRes,
+        bloodTestsRes,
         preventivesRes,
       ] = await Promise.all([
         supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
@@ -114,6 +118,7 @@ export function usePet(): PetData {
         supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
         supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
+        supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
 
@@ -129,6 +134,7 @@ export function usePet(): PetData {
       setGroomings(groomingsRes.data ?? []);
       setActivityLogs(activityRes.data ?? []);
       setAdventures(adventuresRes.data ?? []);
+      setBloodTests(bloodTestsRes.data ?? []);
       setPreventives(allPreventives);
       setLastAntipulgas(lastAnti);
       setLastDesparasitante(lastDes);
@@ -217,6 +223,7 @@ export function usePet(): PetData {
     groomings,
     activityLogs,
     adventures,
+    bloodTests,
     preventives,
     lastAntipulgas,
     lastDesparasitante,
