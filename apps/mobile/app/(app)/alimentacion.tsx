@@ -14,6 +14,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { FormField } from '../../components/ui/FormField';
+import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
 import type { Food, Treat } from '../../types/supabase';
 
@@ -142,6 +143,7 @@ export default function AlimentacionScreen() {
   // Treat form
   const [showTreatForm, setShowTreatForm] = useState(false);
   const [savingTreat, setSavingTreat] = useState(false);
+  const [editingTreat, setEditingTreat] = useState<Treat | null>(null);
   const [treatName, setTreatName] = useState('');
   const [treatBrand, setTreatBrand] = useState('');
   const [treatPrice, setTreatPrice] = useState('');
@@ -179,6 +181,26 @@ export default function AlimentacionScreen() {
   };
 
   const openAddFood = () => { resetFoodForm(); setShowFoodForm(true); };
+
+  const duplicateFromFood = (food: Food) => {
+    setBrand(food.brand);
+    setFoodType(food.food_type ?? food.type ?? '');
+    setDailyGrams(food.daily_grams?.toString() ?? '');
+    setFrequency(food.frequency ?? '');
+    setBagSize(food.bag_size?.toString() ?? '');
+    setBagUnit(food.bag_unit ?? 'kg');
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setFoodNotes(food.notes ?? '');
+    setEditingFood(null);
+  };
+
+  const duplicateFromTreat = (treat: Treat) => {
+    setTreatName(treat.name);
+    setTreatBrand(treat.brand ?? '');
+    setTreatPrice(treat.price?.toString() ?? '');
+    setTreatDate(new Date().toISOString().slice(0, 10));
+    setTreatNotes(treat.notes ?? '');
+  };
 
   const openEditFood = (food: Food) => {
     setEditingFood(food);
@@ -238,6 +260,17 @@ export default function AlimentacionScreen() {
   const resetTreatForm = () => {
     setTreatName(''); setTreatBrand(''); setTreatPrice('');
     setTreatDate(new Date().toISOString().slice(0, 10)); setTreatNotes('');
+    setEditingTreat(null);
+  };
+
+  const openEditTreat = (treat: Treat) => {
+    setEditingTreat(treat);
+    setTreatName(treat.name);
+    setTreatBrand(treat.brand ?? '');
+    setTreatPrice(treat.price?.toString() ?? '');
+    setTreatDate(treat.purchase_date ?? new Date().toISOString().slice(0, 10));
+    setTreatNotes(treat.notes ?? '');
+    setShowTreatForm(true);
   };
 
   const handleSaveTreat = async () => {
@@ -245,14 +278,16 @@ export default function AlimentacionScreen() {
     if (!treatName.trim()) { Alert.alert('Error', 'Ingresa el nombre del snack'); return; }
 
     setSavingTreat(true);
-    const { error } = await supabase.from('treats').insert({
-      pet_id: pet.id,
+    const payload = {
       name: treatName.trim(),
       brand: treatBrand || null,
       price: treatPrice ? parseFloat(treatPrice) : null,
       purchase_date: treatDate || null,
       notes: treatNotes || null,
-    });
+    };
+    const { error } = editingTreat
+      ? await supabase.from('treats').update(payload).eq('id', editingTreat.id)
+      : await supabase.from('treats').insert({ ...payload, pet_id: pet.id });
     setSavingTreat(false);
     if (error) { Alert.alert('Error', error.message); return; }
     resetTreatForm();
@@ -423,26 +458,33 @@ export default function AlimentacionScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Snacks y premios</Text>
             {treats.map(treat => (
-              <Card key={treat.id}>
-                <View style={styles.itemRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemTitle} numberOfLines={1}>{treat.name}</Text>
-                    {treat.brand && <Text style={styles.itemSub}>{treat.brand}</Text>}
-                    {treat.purchase_date && <Text style={styles.itemDate}>{formatDate(treat.purchase_date)}</Text>}
-                    {treat.notes && <Text style={styles.itemNotes}>{treat.notes}</Text>}
-                  </View>
-                  <View style={styles.itemRight}>
-                    {treat.price !== null && treat.price > 0 && (
-                      <View style={styles.costBadge}>
-                        <Text style={styles.costText}>${treat.price}</Text>
+              <TouchableOpacity key={treat.id} activeOpacity={0.7} onPress={() => openEditTreat(treat)}>
+                <Card>
+                  <View style={styles.itemRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemTitle} numberOfLines={1}>{treat.name}</Text>
+                      {treat.brand && <Text style={styles.itemSub}>{treat.brand}</Text>}
+                      {treat.purchase_date && <Text style={styles.itemDate}>{formatDate(treat.purchase_date)}</Text>}
+                      {treat.notes && <Text style={styles.itemNotes}>{treat.notes}</Text>}
+                    </View>
+                    <View style={styles.itemRight}>
+                      {treat.price !== null && treat.price > 0 && (
+                        <View style={styles.costBadge}>
+                          <Text style={styles.costText}>${treat.price}</Text>
+                        </View>
+                      )}
+                      <View style={styles.rowActions}>
+                        <TouchableOpacity onPress={() => openEditTreat(treat)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDeleteTreat(treat.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                        </TouchableOpacity>
                       </View>
-                    )}
-                    <TouchableOpacity onPress={() => handleDeleteTreat(treat.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                    </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              </Card>
+                </Card>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -450,6 +492,17 @@ export default function AlimentacionScreen() {
 
       {/* Food form */}
       <BottomSheet visible={showFoodForm} onClose={() => setShowFoodForm(false)} title={editingFood ? 'Editar alimento' : 'Agregar alimento'}>
+        {!editingFood && foods.length > 0 && (
+          <TouchableOpacity
+            style={styles.duplicateBtn}
+            onPress={() => duplicateFromFood(foods[0])}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="copy-outline" size={15} color={Colors.accent} />
+            <Text style={styles.duplicateBtnText}>Repetir: {foods[0].brand}</Text>
+            <Ionicons name="chevron-forward" size={14} color={Colors.accent} />
+          </TouchableOpacity>
+        )}
         <FormField label="Marca" value={brand} onChangeText={setBrand} placeholder="Ej: Royal Canin, Hills..." />
         <SelectField label="Tipo" value={foodType} options={FOOD_OPTIONS} onSelect={setFoodType} />
         <FormField label="Ración diaria (g)" value={dailyGrams} onChangeText={setDailyGrams} placeholder="Ej: 200" keyboardType="decimal-pad" />
@@ -462,17 +515,28 @@ export default function AlimentacionScreen() {
             <SelectField label="Unidad" value={bagUnit} options={UNIT_OPTIONS} onSelect={setBagUnit} />
           </View>
         </View>
-        <FormField label="Fecha de inicio" value={startDate} onChangeText={setStartDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha de inicio" value={startDate} onChange={setStartDate} maxDate={new Date()} />
         <FormField label="Notas (opcional)" value={foodNotes} onChangeText={setFoodNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
         <Button title="Guardar" onPress={handleSaveFood} loading={savingFood} />
       </BottomSheet>
 
       {/* Treat form */}
-      <BottomSheet visible={showTreatForm} onClose={() => setShowTreatForm(false)} title="Agregar snack">
+      <BottomSheet visible={showTreatForm} onClose={() => { setShowTreatForm(false); resetTreatForm(); }} title={editingTreat ? 'Editar snack' : 'Agregar snack'}>
+        {!editingTreat && treats.length > 0 && (
+          <TouchableOpacity
+            style={styles.duplicateBtn}
+            onPress={() => duplicateFromTreat(treats[0])}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="copy-outline" size={15} color={Colors.accent} />
+            <Text style={styles.duplicateBtnText}>Repetir: {treats[0].name}</Text>
+            <Ionicons name="chevron-forward" size={14} color={Colors.accent} />
+          </TouchableOpacity>
+        )}
         <FormField label="Nombre" value={treatName} onChangeText={setTreatName} placeholder="Ej: Dentastix, hueso..." />
         <FormField label="Marca (opcional)" value={treatBrand} onChangeText={setTreatBrand} placeholder="Marca" />
         <FormField label="Precio (opcional)" value={treatPrice} onChangeText={setTreatPrice} placeholder="0.00" keyboardType="decimal-pad" />
-        <FormField label="Fecha de compra" value={treatDate} onChangeText={setTreatDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha de compra" value={treatDate} onChange={setTreatDate} maxDate={new Date()} />
         <FormField label="Notas (opcional)" value={treatNotes} onChangeText={setTreatNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
         <Button title="Guardar" onPress={handleSaveTreat} loading={savingTreat} />
       </BottomSheet>
@@ -525,6 +589,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },
   itemRow: { flexDirection: 'row', gap: Spacing.sm },
   itemRight: { alignItems: 'flex-end', gap: Spacing.sm },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   itemTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
   itemSub: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   itemStatus: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, marginTop: 2 },
@@ -536,6 +601,22 @@ const styles = StyleSheet.create({
   chartTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink, marginBottom: Spacing.sm },
   // Form
   formRow: { flexDirection: 'row', gap: Spacing.sm },
+  duplicateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.accentLight,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+    marginBottom: Spacing.md,
+  },
+  duplicateBtnText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent,
+  },
   historyGate: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
     backgroundColor: Colors.canvas, borderRadius: Radius.lg, borderWidth: 1,

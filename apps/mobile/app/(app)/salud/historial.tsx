@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabase';
 import { formatDate } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
@@ -21,6 +22,7 @@ export default function HistorialScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingVisit, setEditingVisit] = useState<VetVisit | null>(null);
 
   // Form
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -53,6 +55,20 @@ export default function HistorialScreen() {
     setDate(new Date().toISOString().slice(0, 10));
     setReason(''); setVetName(''); setLocation('');
     setDiagnosis(''); setTreatment(''); setCost(''); setNotes('');
+    setEditingVisit(null);
+  };
+
+  const openEdit = (v: VetVisit) => {
+    setEditingVisit(v);
+    setDate(v.date);
+    setReason(v.reason);
+    setVetName(v.vet_name ?? '');
+    setLocation(v.location ?? '');
+    setDiagnosis(v.diagnosis ?? '');
+    setTreatment(v.treatment ?? '');
+    setCost(v.cost?.toString() ?? '');
+    setNotes(v.notes ?? '');
+    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -61,8 +77,7 @@ export default function HistorialScreen() {
     if (!date) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('vet_visits').insert({
-      pet_id: pet.id,
+    const payload = {
       date,
       reason: reason.trim(),
       vet_name: vetName || null,
@@ -71,7 +86,10 @@ export default function HistorialScreen() {
       treatment: treatment || null,
       cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
-    });
+    };
+    const { error } = editingVisit
+      ? await supabase.from('vet_visits').update(payload).eq('id', editingVisit.id)
+      : await supabase.from('vet_visits').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
     if (error) { Alert.alert('Error', error.message); return; }
@@ -106,7 +124,7 @@ export default function HistorialScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Historial veterinario</Text>
-        <TouchableOpacity onPress={() => setShowForm(true)}>
+        <TouchableOpacity onPress={() => { resetForm(); setShowForm(true); }}>
           <Ionicons name="add-circle" size={28} color={Colors.accent} />
         </TouchableOpacity>
       </View>
@@ -139,40 +157,47 @@ export default function HistorialScreen() {
           </View>
         ) : (
           visits.map(v => (
-            <Card key={v.id}>
-              <View style={styles.visitRow}>
-                <View style={styles.visitInfo}>
-                  <Text style={styles.visitReason}>{v.reason}</Text>
-                  <Text style={styles.visitDate}>{formatDate(v.date)}</Text>
-                  {v.vet_name && <Text style={styles.visitDetail}>Dr. {v.vet_name}</Text>}
-                  {v.location && <Text style={styles.visitDetail}>{v.location}</Text>}
-                  {v.diagnosis && (
-                    <Text style={styles.visitDiagnosis}>Diagnóstico: {v.diagnosis}</Text>
-                  )}
-                  {v.treatment && (
-                    <Text style={styles.visitDetail}>Tratamiento: {v.treatment}</Text>
-                  )}
-                  {v.notes && <Text style={styles.visitNotes}>{v.notes}</Text>}
-                </View>
-                <View style={styles.visitRight}>
-                  {v.cost !== null && v.cost > 0 && (
-                    <View style={styles.costBadge}>
-                      <Text style={styles.costText}>${v.cost}</Text>
+            <TouchableOpacity key={v.id} activeOpacity={0.7} onPress={() => openEdit(v)}>
+              <Card>
+                <View style={styles.visitRow}>
+                  <View style={styles.visitInfo}>
+                    <Text style={styles.visitReason}>{v.reason}</Text>
+                    <Text style={styles.visitDate}>{formatDate(v.date)}</Text>
+                    {v.vet_name && <Text style={styles.visitDetail}>Dr. {v.vet_name}</Text>}
+                    {v.location && <Text style={styles.visitDetail}>{v.location}</Text>}
+                    {v.diagnosis && (
+                      <Text style={styles.visitDiagnosis}>Diagnóstico: {v.diagnosis}</Text>
+                    )}
+                    {v.treatment && (
+                      <Text style={styles.visitDetail}>Tratamiento: {v.treatment}</Text>
+                    )}
+                    {v.notes && <Text style={styles.visitNotes}>{v.notes}</Text>}
+                  </View>
+                  <View style={styles.visitRight}>
+                    {v.cost !== null && v.cost > 0 && (
+                      <View style={styles.costBadge}>
+                        <Text style={styles.costText}>${v.cost}</Text>
+                      </View>
+                    )}
+                    <View style={styles.rowActions}>
+                      <TouchableOpacity onPress={() => openEdit(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
                     </View>
-                  )}
-                  <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                  </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            </Card>
+              </Card>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title="Agregar visita">
+      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingVisit ? 'Editar visita' : 'Agregar visita'}>
         <FormField label="Motivo" value={reason} onChangeText={setReason} placeholder="Ej: Revisión anual, Urgencia..." />
-        <FormField label="Fecha" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha" value={date} onChange={setDate} maxDate={new Date()} />
         <FormField label="Veterinario (opcional)" value={vetName} onChangeText={setVetName} placeholder="Nombre del veterinario" />
         <FormField label="Clínica / Ubicación (opcional)" value={location} onChangeText={setLocation} placeholder="Nombre de la clínica" />
         <FormField label="Diagnóstico (opcional)" value={diagnosis} onChangeText={setDiagnosis} placeholder="Diagnóstico..." multiline style={{ minHeight: 60 }} />
@@ -204,6 +229,7 @@ const styles = StyleSheet.create({
   visitRow: { flexDirection: 'row', gap: Spacing.sm },
   visitInfo: { flex: 1 },
   visitRight: { alignItems: 'flex-end', gap: Spacing.sm },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   visitReason: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
   visitDate: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   visitDetail: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },

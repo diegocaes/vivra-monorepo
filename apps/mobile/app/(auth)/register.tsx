@@ -12,9 +12,15 @@ import {
 } from 'react-native';
 import { Link, useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const PENDING_REF_KEY = 'pending_referral';
 
@@ -27,6 +33,8 @@ export default function RegisterScreen() {
   const [refCode, setRefCode] = useState('');
   const [showRefField, setShowRefField] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   // Pre-fill ref code from deep link or from previously stored pending one
   useEffect(() => {
@@ -58,7 +66,6 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Align with web: minimum 8 characters
     if (password.length < 8) {
       Alert.alert('Error', 'La contraseña debe tener al menos 8 caracteres');
       return;
@@ -98,13 +105,10 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Persist ref code so it survives email confirmation roundtrip
     if (cleanRef) {
       await AsyncStorage.setItem(PENDING_REF_KEY, cleanRef);
     }
 
-    // If Supabase auto-confirmed (rare on mobile), route directly into the app.
-    // Otherwise tell the user to check email and navigate back to login.
     if (signUpData.session) {
       router.replace('/onboarding' as any);
     } else {
@@ -113,6 +117,74 @@ export default function RegisterScreen() {
         'Revisa tu email para confirmar. Después inicia sesión.',
         [{ text: 'OK', onPress: () => router.replace('/(auth)/login' as any) }],
       );
+    }
+  }
+
+  async function handleAppleSignUp() {
+    setAppleLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error('No se recibió el token de Apple');
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) throw error;
+      // _layout.tsx routes automatically: no pets → onboarding, has pets → app
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') return;
+      Alert.alert('Error', error.message ?? 'Error al continuar con Apple');
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
+  async function handleGoogleSignUp() {
+    setGoogleLoading(true);
+    try {
+      const redirectUrl = Linking.createURL('auth/callback');
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) throw error;
+      if (!data.url) throw new Error('No auth URL returned');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (result.type === 'success') {
+        const { params: urlParams, errorCode } = QueryParams.getQueryParams(result.url);
+        if (errorCode) throw new Error(errorCode);
+
+        const accessToken = urlParams['access_token'];
+        const refreshToken = urlParams['refresh_token'];
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Error al continuar con Google');
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -132,6 +204,34 @@ export default function RegisterScreen() {
             <Text style={styles.subtitle}>Crea tu cuenta</Text>
           </View>
 
+          {/* Social sign-up — faster path */}
+          <View style={styles.socialSection}>
+            {Platform.OS === 'ios' && (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={Radius.md}
+                style={styles.appleButton}
+                onPress={handleAppleSignUp}
+              />
+            )}
+            <Button
+              title="Continuar con Google"
+              onPress={handleGoogleSignUp}
+              variant="outline"
+              loading={googleLoading}
+              disabled={appleLoading || loading}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>o con email</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Email / password form */}
           <View style={styles.form}>
             <TextInput
               style={styles.input}
@@ -190,6 +290,7 @@ export default function RegisterScreen() {
               title="Crear cuenta"
               onPress={handleRegister}
               loading={loading}
+              disabled={googleLoading || appleLoading}
             />
           </View>
 
@@ -231,6 +332,28 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: FontSize.lg,
     color: Colors.muted,
+  },
+  socialSection: {
+    gap: Spacing.md,
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.cardBorder,
+  },
+  dividerText: {
+    marginHorizontal: Spacing.md,
+    color: Colors.muted,
+    fontSize: FontSize.sm,
   },
   form: {
     gap: Spacing.md,

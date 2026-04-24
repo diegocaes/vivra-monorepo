@@ -153,7 +153,7 @@ export default function ActividadScreen() {
         </TouchableOpacity>
 
         {/* Grooming */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.navigate('/(app)/salud/grooming' as any)}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/grooming' as any)}>
           <View style={styles.card}>
             <View style={[styles.cardIcon, { backgroundColor: '#8B5CF618' }]}>
               <Ionicons name="cut" size={24} color="#8B5CF6" />

@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
       admin.from('referrals').delete().eq('referrer_id', userId),
       admin.from('referrals').delete().eq('referred_id', userId),
       admin.from('referral_codes').delete().eq('user_id', userId),
+      admin.from('user_subscriptions').delete().eq('user_id', userId),
       admin.from('profiles').delete().eq('id', userId),
     ]);
 

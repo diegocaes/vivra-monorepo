@@ -7,6 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constant
 import { supabase } from '../../../lib/supabase';
 import { formatDate } from '@vivra/shared';
 import { GROOMING_TYPES } from '@vivra/shared';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -25,6 +26,7 @@ export default function GroomingScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingGrooming, setEditingGrooming] = useState<Grooming | null>(null);
 
   // Form
   const [type, setType] = useState('');
@@ -54,6 +56,18 @@ export default function GroomingScreen() {
   const resetForm = () => {
     setType(''); setDate(new Date().toISOString().slice(0, 10));
     setGroomerName(''); setLocation(''); setCost(''); setNotes('');
+    setEditingGrooming(null);
+  };
+
+  const openEdit = (g: Grooming) => {
+    setEditingGrooming(g);
+    setType(g.type);
+    setDate(g.date);
+    setGroomerName(g.groomer_name ?? '');
+    setLocation(g.location ?? '');
+    setCost(g.cost?.toString() ?? '');
+    setNotes(g.notes ?? '');
+    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -62,15 +76,17 @@ export default function GroomingScreen() {
     if (!date) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('groomings').insert({
-      pet_id: pet.id,
+    const payload = {
       type,
       date,
       groomer_name: groomerName || null,
       location: location || null,
       cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
-    });
+    };
+    const { error } = editingGrooming
+      ? await supabase.from('groomings').update(payload).eq('id', editingGrooming.id)
+      : await supabase.from('groomings').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
     if (error) { Alert.alert('Error', error.message); return; }
@@ -132,34 +148,41 @@ export default function GroomingScreen() {
           </View>
         ) : (
           groomings.map(g => (
-            <Card key={g.id}>
-              <View style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemType}>{GROOMING_TYPES[g.type] ?? g.type}</Text>
-                  <Text style={styles.itemDate}>{formatDate(g.date)}</Text>
-                  {g.groomer_name && <Text style={styles.itemDetail}>{g.groomer_name}</Text>}
-                  {g.location && <Text style={styles.itemDetail}>{g.location}</Text>}
-                  {g.notes && <Text style={styles.itemNotes}>{g.notes}</Text>}
-                </View>
-                <View style={styles.itemRight}>
-                  {g.cost !== null && g.cost > 0 && (
-                    <View style={styles.costBadge}>
-                      <Text style={styles.costText}>${g.cost}</Text>
+            <TouchableOpacity key={g.id} activeOpacity={0.7} onPress={() => openEdit(g)}>
+              <Card>
+                <View style={styles.itemRow}>
+                  <View style={styles.itemInfo}>
+                    <Text style={styles.itemType}>{GROOMING_TYPES[g.type] ?? g.type}</Text>
+                    <Text style={styles.itemDate}>{formatDate(g.date)}</Text>
+                    {g.groomer_name && <Text style={styles.itemDetail}>{g.groomer_name}</Text>}
+                    {g.location && <Text style={styles.itemDetail}>{g.location}</Text>}
+                    {g.notes && <Text style={styles.itemNotes}>{g.notes}</Text>}
+                  </View>
+                  <View style={styles.itemRight}>
+                    {g.cost !== null && g.cost > 0 && (
+                      <View style={styles.costBadge}>
+                        <Text style={styles.costText}>${g.cost}</Text>
+                      </View>
+                    )}
+                    <View style={styles.rowActions}>
+                      <TouchableOpacity onPress={() => openEdit(g)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDelete(g.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
                     </View>
-                  )}
-                  <TouchableOpacity onPress={() => handleDelete(g.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                  </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            </Card>
+              </Card>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title="Agregar grooming">
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingGrooming ? 'Editar grooming' : 'Agregar grooming'}>
         <SelectField label="Tipo" value={type} options={GROOMING_OPTIONS} onSelect={setType} />
-        <FormField label="Fecha" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha" value={date} onChange={setDate} maxDate={new Date()} />
         <FormField label="Peluquero (opcional)" value={groomerName} onChangeText={setGroomerName} placeholder="Nombre" />
         <FormField label="Ubicación (opcional)" value={location} onChangeText={setLocation} placeholder="Pet Spa, clínica..." />
         <FormField label="Costo (opcional)" value={cost} onChangeText={setCost} placeholder="0.00" keyboardType="decimal-pad" />
@@ -189,6 +212,7 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', gap: Spacing.sm },
   itemInfo: { flex: 1 },
   itemRight: { alignItems: 'flex-end', gap: Spacing.sm },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   itemType: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
   itemDate: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   itemDetail: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },

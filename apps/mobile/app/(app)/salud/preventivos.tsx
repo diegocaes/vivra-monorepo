@@ -11,6 +11,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { schedulePreventiveReminder } from '../../../hooks/useNotifications';
 import type { PreventiveTreatment } from '../../../types/supabase';
 
@@ -84,6 +85,7 @@ export default function PreventivosScreen() {
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<TreatmentType>('antipulgas');
   const [saving, setSaving] = useState(false);
+  const [editingTreatment, setEditingTreatment] = useState<PreventiveTreatment | null>(null);
 
   // Form
   const [dateApplied, setDateApplied] = useState(new Date().toISOString().slice(0, 10));
@@ -121,12 +123,27 @@ export default function PreventivosScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
-  const openForm = (type: TreatmentType) => {
-    setFormType(type);
+  const resetForm = () => {
     setDateApplied(new Date().toISOString().slice(0, 10));
     setProductName('');
     setCost('');
     setNotes('');
+    setEditingTreatment(null);
+  };
+
+  const openForm = (type: TreatmentType) => {
+    resetForm();
+    setFormType(type);
+    setShowForm(true);
+  };
+
+  const openEdit = (item: PreventiveTreatment) => {
+    setEditingTreatment(item);
+    setFormType(item.type as TreatmentType);
+    setDateApplied(item.date_given);
+    setProductName(item.product_name ?? '');
+    setCost(item.cost?.toString() ?? '');
+    setNotes(item.notes ?? '');
     setShowForm(true);
   };
 
@@ -135,33 +152,36 @@ export default function PreventivosScreen() {
     if (!dateApplied) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('preventive_treatments').insert({
-      pet_id: pet.id,
+    const payload = {
       type: formType,
       date_given: dateApplied,
       product_name: productName || null,
       cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
-    });
+    };
+    const { error } = editingTreatment
+      ? await supabase.from('preventive_treatments').update(payload).eq('id', editingTreatment.id)
+      : await supabase.from('preventive_treatments').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
     if (error) { Alert.alert('Error', error.message); return; }
 
-    // Schedule a local reminder for the next dose (30 days after date_given).
-    // For 'combinado' we schedule under both labels so the user gets one
-    // clear notification covering the combined product.
-    try {
-      const nextDue = new Date(dateApplied + 'T09:00:00');
-      nextDue.setDate(nextDue.getDate() + 30);
-      await schedulePreventiveReminder({
-        petName: pet.name,
-        type: formType,
-        nextDueDate: nextDue,
-      });
-    } catch (e) {
-      console.warn('[Preventivos] schedule reminder failed:', e);
+    // Schedule reminder only on new entries
+    if (!editingTreatment) {
+      try {
+        const nextDue = new Date(dateApplied + 'T09:00:00');
+        nextDue.setDate(nextDue.getDate() + 30);
+        await schedulePreventiveReminder({
+          petName: pet.name,
+          type: formType,
+          nextDueDate: nextDue,
+        });
+      } catch (e) {
+        console.warn('[Preventivos] schedule reminder failed:', e);
+      }
     }
 
+    resetForm();
     setShowForm(false);
     fetchData();
   };
@@ -185,23 +205,30 @@ export default function PreventivosScreen() {
         <Text style={styles.noRecords}>Sin registros</Text>
       ) : (
         items.map(item => (
-          <Card key={item.id}>
-            <View style={styles.itemRow}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemDate}>{formatDate(item.date_given)}</Text>
-                {item.product_name && <Text style={styles.itemProduct}>{item.product_name}</Text>}
-                {item.cost != null && item.cost > 0 && (
-                  <View style={styles.costBadge}>
-                    <Text style={styles.costText}>${item.cost}</Text>
-                  </View>
-                )}
-                {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
+          <TouchableOpacity key={item.id} activeOpacity={0.7} onPress={() => openEdit(item)}>
+            <Card>
+              <View style={styles.itemRow}>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemDate}>{formatDate(item.date_given)}</Text>
+                  {item.product_name && <Text style={styles.itemProduct}>{item.product_name}</Text>}
+                  {item.cost != null && item.cost > 0 && (
+                    <View style={styles.costBadge}>
+                      <Text style={styles.costText}>${item.cost}</Text>
+                    </View>
+                  )}
+                  {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
+                </View>
+                <View style={styles.rowActions}>
+                  <TouchableOpacity onPress={() => openEdit(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-              </TouchableOpacity>
-            </View>
-          </Card>
+            </Card>
+          </TouchableOpacity>
         ))
       )}
     </View>
@@ -248,13 +275,12 @@ export default function PreventivosScreen() {
         {renderList(desparasitante, 'Historial Desparasitante')}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={`Agregar ${formLabel}`}>
-        <FormField
+      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingTreatment ? `Editar ${formLabel}` : `Agregar ${formLabel}`}>
+        <DatePickerField
           label="Fecha de aplicación"
           value={dateApplied}
-          onChangeText={setDateApplied}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setDateApplied}
+          maxDate={new Date()}
         />
         <FormField
           label="Producto (opcional)"
@@ -311,6 +337,7 @@ const styles = StyleSheet.create({
   noRecords: { fontSize: FontSize.sm, color: Colors.muted, fontStyle: 'italic' },
   itemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   itemInfo: { flex: 1 },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   itemDate: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
   itemProduct: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 2 },

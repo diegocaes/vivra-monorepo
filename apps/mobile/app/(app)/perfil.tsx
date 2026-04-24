@@ -16,6 +16,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { BottomSheet } from '../../components/ui/BottomSheet';
 import { FormField } from '../../components/ui/FormField';
+import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
 import { useSubscription } from '../../hooks/useSubscription';
 import { PremiumGate } from '../../components/ui/PremiumGate';
@@ -633,7 +634,7 @@ export default function PerfilScreen() {
       <BottomSheet visible={showEdit} onClose={() => setShowEdit(false)} title="Editar perfil">
         <FormField label="Nombre" value={name} onChangeText={setName} placeholder="Nombre de tu mascota" />
         <FormField label="Raza" value={breed} onChangeText={setBreed} placeholder="Ej: Labrador Retriever" />
-        <FormField label="Fecha de nacimiento" value={birthDate} onChangeText={setBirthDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} maxDate={new Date()} clearable />
         <SelectField label="Género" value={gender} options={GENDER_OPTIONS} onSelect={setGender} />
         <FormField label="Peso (kg)" value={weightKg} onChangeText={setWeightKg} placeholder="Ej: 12.5" keyboardType="decimal-pad" />
         <FormField label="Microchip ID" value={chipId} onChangeText={setChipId} placeholder="Número de chip" />

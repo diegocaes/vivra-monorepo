@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
 import { DOG_BREEDS } from '@vivra/shared';
+import { DatePickerField } from '../components/ui/DatePickerField';
 
 const PENDING_REF_KEY = 'pending_referral';
 
@@ -48,32 +49,11 @@ export default function OnboardingScreen() {
   const [petName, setPetName] = useState('');
   const [breed, setBreed] = useState('');
   const [breedSearch, setBreedSearch] = useState('');
-  const [birthDateDisplay, setBirthDateDisplay] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('');
   const [weightKg, setWeightKg] = useState('');
 
-  const handleDateInput = (text: string) => {
-    // Strip non-digits
-    const digits = text.replace(/\D/g, '');
-    // Auto-format as DD/MM/YYYY
-    let formatted = '';
-    if (digits.length <= 2) formatted = digits;
-    else if (digits.length <= 4) formatted = digits.slice(0, 2) + '/' + digits.slice(2);
-    else formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4, 8);
-    setBirthDateDisplay(formatted);
-  };
-
-  // Convert DD/MM/YYYY display to YYYY-MM-DD for storage
-  const getBirthDateISO = (): string | null => {
-    const parts = birthDateDisplay.split('/');
-    if (parts.length !== 3 || parts[2].length !== 4) return null;
-    const [dd, mm, yyyy] = parts;
-    const d = parseInt(dd, 10), m = parseInt(mm, 10), y = parseInt(yyyy, 10);
-    if (d < 1 || d > 31 || m < 1 || m > 12 || y < 1990 || y > new Date().getFullYear()) return null;
-    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-  };
-
-  const animateProgress = (toStep: number) => {
+const animateProgress = (toStep: number) => {
     Animated.spring(progress, {
       toValue: (toStep + 1) / STEPS.length,
       useNativeDriver: false,
@@ -108,7 +88,7 @@ export default function OnboardingScreen() {
       user_id: user.id,
       name: cleanName,
       breed: breed || null,
-      birth_date: getBirthDateISO() || null,
+      birth_date: birthDate || null,
       gender: gender || null,
       weight_kg: weightKg ? parseFloat(weightKg) : null,
     });
@@ -285,15 +265,12 @@ export default function OnboardingScreen() {
               </View>
 
               {/* Birth date */}
-              <Text style={styles.fieldLabel}>Fecha de nacimiento</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/AAAA (opcional)"
-                placeholderTextColor={Colors.muted}
-                value={birthDateDisplay}
-                onChangeText={handleDateInput}
-                keyboardType="number-pad"
-                maxLength={10}
+              <DatePickerField
+                label="Fecha de nacimiento"
+                value={birthDate}
+                onChange={setBirthDate}
+                maxDate={new Date()}
+                clearable
               />
 
               {/* Weight */}

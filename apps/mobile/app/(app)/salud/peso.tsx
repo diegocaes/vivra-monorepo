@@ -13,6 +13,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { PremiumGate } from '../../../components/ui/PremiumGate';
 import type { WeightRecord } from '../../../types/supabase';
 
@@ -121,6 +122,7 @@ export default function PesoScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<WeightRecord | null>(null);
 
   // Form state
   const [weightKg, setWeightKg] = useState('');
@@ -144,6 +146,21 @@ export default function PesoScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
+  const resetForm = () => {
+    setWeightKg('');
+    setDate(new Date().toISOString().slice(0, 10));
+    setNotes('');
+    setEditingRecord(null);
+  };
+
+  const openEdit = (r: WeightRecord) => {
+    setEditingRecord(r);
+    setWeightKg(r.weight_kg.toString());
+    setDate(r.date);
+    setNotes(r.notes ?? '');
+    setShowForm(true);
+  };
+
   const handleSave = async () => {
     if (!pet) return;
     const kg = parseFloat(weightKg);
@@ -151,12 +168,14 @@ export default function PesoScreen() {
     if (!date) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('weight_records').insert({
-      pet_id: pet.id,
+    const payload = {
       weight_kg: kg,
       date,
       notes: notes || null,
-    });
+    };
+    const { error } = editingRecord
+      ? await supabase.from('weight_records').update(payload).eq('id', editingRecord.id)
+      : await supabase.from('weight_records').insert({ ...payload, pet_id: pet.id });
 
     // Update pet.weight_kg if this is the latest record
     if (!error) {
@@ -169,8 +188,7 @@ export default function PesoScreen() {
     setSaving(false);
     if (error) { Alert.alert('Error', error.message); return; }
 
-    setWeightKg(''); setNotes('');
-    setDate(new Date().toISOString().slice(0, 10));
+    resetForm();
     setShowForm(false);
     fetchData();
   };
@@ -272,23 +290,30 @@ export default function PesoScreen() {
           </View>
         ) : (
           records.map(r => (
-            <Card key={r.id}>
-              <View style={styles.recordRow}>
-                <View style={styles.recordInfo}>
-                  <Text style={styles.recordWeight}>{r.weight_kg} kg</Text>
-                  <Text style={styles.recordDate}>{formatDate(r.date)}</Text>
-                  {r.notes && <Text style={styles.recordNotes}>{r.notes}</Text>}
+            <TouchableOpacity key={r.id} activeOpacity={0.7} onPress={() => openEdit(r)}>
+              <Card>
+                <View style={styles.recordRow}>
+                  <View style={styles.recordInfo}>
+                    <Text style={styles.recordWeight}>{r.weight_kg} kg</Text>
+                    <Text style={styles.recordDate}>{formatDate(r.date)}</Text>
+                    {r.notes && <Text style={styles.recordNotes}>{r.notes}</Text>}
+                  </View>
+                  <View style={styles.rowActions}>
+                    <TouchableOpacity onPress={() => openEdit(r)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDelete(r.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => handleDelete(r.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                </TouchableOpacity>
-              </View>
-            </Card>
+              </Card>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title="Registrar peso">
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingRecord ? 'Editar peso' : 'Registrar peso'}>
         <FormField
           label="Peso (kg)"
           value={weightKg}
@@ -296,12 +321,11 @@ export default function PesoScreen() {
           placeholder="Ej: 12.5"
           keyboardType="decimal-pad"
         />
-        <FormField
+        <DatePickerField
           label="Fecha"
           value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setDate}
+          maxDate={new Date()}
         />
         <FormField
           label="Notas (opcional)"
@@ -409,6 +433,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.sm,
   },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   recordInfo: { flex: 1 },
   recordWeight: {
     fontSize: FontSize.md,

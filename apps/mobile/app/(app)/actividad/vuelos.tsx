@@ -11,6 +11,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
 import type { Flight } from '../../../types/supabase';
 
@@ -275,7 +276,7 @@ export default function VuelosScreen() {
             <FormField label="Destino" value={destination} onChangeText={setDestination} placeholder="Ej: MIA" />
           </View>
         </View>
-        <FormField label="Fecha del vuelo" value={flightDate} onChangeText={setFlightDate} placeholder="YYYY-MM-DD" keyboardType="numbers-and-punctuation" />
+        <DatePickerField label="Fecha del vuelo" value={flightDate} onChange={setFlightDate} />
         <SelectField label="Tipo" value={cabinOrCargo} options={CABIN_OPTIONS} onSelect={setCabinOrCargo} />
         <FormField label="Precio ticket (USD)" value={ticketPrice} onChangeText={setTicketPrice} placeholder="0.00" keyboardType="decimal-pad" />
         <FormField label="Notas (opcional)" value={notes} onChangeText={setNotes} placeholder="Detalles adicionales..." multiline style={{ minHeight: 60 }} />

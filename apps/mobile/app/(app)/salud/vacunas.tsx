@@ -11,6 +11,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
 import type { Vaccine } from '../../../types/supabase';
 
@@ -49,6 +50,7 @@ export default function VacunasScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -75,6 +77,25 @@ export default function VacunasScreen() {
     setRefreshing(false);
   }, [fetchData]);
 
+  const resetForm = () => {
+    setName(''); setCustomName(''); setNextDue(''); setVetName(''); setNotes('');
+    setDateGiven(new Date().toISOString().slice(0, 10));
+    setEditingVaccine(null);
+  };
+
+  const openEdit = (v: Vaccine) => {
+    setEditingVaccine(v);
+    // If the stored name matches a known option, select it; otherwise use "Otra"
+    const knownOption = VACCINE_OPTIONS.find(o => o.key === v.name);
+    setName(knownOption ? v.name : 'Otra');
+    setCustomName(knownOption ? '' : v.name);
+    setDateGiven(v.date_given);
+    setNextDue(v.next_due ?? '');
+    setVetName(v.vet_name ?? '');
+    setNotes(v.notes ?? '');
+    setShowForm(true);
+  };
+
   const handleSave = async () => {
     if (!pet) return;
     const vaccineName = name === 'Otra' ? customName.trim() : name;
@@ -82,21 +103,20 @@ export default function VacunasScreen() {
     if (!dateGiven) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('vaccines').insert({
-      pet_id: pet.id,
+    const payload = {
       name: vaccineName,
       date_given: dateGiven,
       next_due: nextDue || null,
       vet_name: vetName || null,
       notes: notes || null,
-    });
+    };
+    const { error } = editingVaccine
+      ? await supabase.from('vaccines').update(payload).eq('id', editingVaccine.id)
+      : await supabase.from('vaccines').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
     if (error) { Alert.alert('Error', error.message); return; }
-
-    // Reset form
-    setName(''); setCustomName(''); setNextDue(''); setVetName(''); setNotes('');
-    setDateGiven(new Date().toISOString().slice(0, 10));
+    resetForm();
     setShowForm(false);
     fetchData();
   };
@@ -128,7 +148,7 @@ export default function VacunasScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Vacunas</Text>
-        <TouchableOpacity onPress={() => setShowForm(true)}>
+        <TouchableOpacity onPress={() => { resetForm(); setShowForm(true); }}>
           <Ionicons name="add-circle" size={28} color={Colors.accent} />
         </TouchableOpacity>
       </View>
@@ -177,30 +197,37 @@ export default function VacunasScreen() {
           vaccines.map(v => {
             const isOverdue = v.next_due && new Date(v.next_due) < new Date();
             return (
-              <Card key={v.id}>
-                <View style={styles.vaccineRow}>
-                  <View style={styles.vaccineInfo}>
-                    <Text style={styles.vaccineName}>{v.name}</Text>
-                    <Text style={styles.vaccineDate}>{formatDate(v.date_given)}</Text>
-                    {v.next_due && (
-                      <Text style={[styles.vaccineNext, isOverdue && styles.overdue]}>
-                        Próxima: {timeUntil(v.next_due)}
-                      </Text>
-                    )}
-                    {v.vet_name && <Text style={styles.vaccineVet}>Dr. {v.vet_name}</Text>}
+              <TouchableOpacity key={v.id} activeOpacity={0.7} onPress={() => openEdit(v)}>
+                <Card>
+                  <View style={styles.vaccineRow}>
+                    <View style={styles.vaccineInfo}>
+                      <Text style={styles.vaccineName}>{v.name}</Text>
+                      <Text style={styles.vaccineDate}>{formatDate(v.date_given)}</Text>
+                      {v.next_due && (
+                        <Text style={[styles.vaccineNext, isOverdue && styles.overdue]}>
+                          Próxima: {timeUntil(v.next_due)}
+                        </Text>
+                      )}
+                      {v.vet_name && <Text style={styles.vaccineVet}>Dr. {v.vet_name}</Text>}
+                    </View>
+                    <View style={styles.rowActions}>
+                      <TouchableOpacity onPress={() => openEdit(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                  </TouchableOpacity>
-                </View>
-              </Card>
+                </Card>
+              </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
 
-      {/* Add form bottom sheet */}
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title="Agregar vacuna">
+      {/* Add / Edit form bottom sheet */}
+      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingVaccine ? 'Editar vacuna' : 'Agregar vacuna'}>
         <SelectField
           label="Vacuna"
           value={name}
@@ -215,19 +242,17 @@ export default function VacunasScreen() {
             placeholder="Ej: Lyme, Influenza..."
           />
         )}
-        <FormField
+        <DatePickerField
           label="Fecha de aplicación"
           value={dateGiven}
-          onChangeText={setDateGiven}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setDateGiven}
+          maxDate={new Date()}
         />
-        <FormField
+        <DatePickerField
           label="Próxima dosis (opcional)"
           value={nextDue}
-          onChangeText={setNextDue}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setNextDue}
+          clearable
         />
         <FormField
           label="Veterinario (opcional)"
@@ -321,6 +346,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   vaccineInfo: { flex: 1 },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   vaccineName: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,

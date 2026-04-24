@@ -12,6 +12,7 @@ import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { SelectField } from '../../../components/ui/SelectField';
 import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../../../components/ui/DatePickerField';
 
 interface ActivityLog {
   id: string;
@@ -41,6 +42,7 @@ export default function PaseosScreen() {
   // Form state
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingLog, setEditingLog] = useState<ActivityLog | null>(null);
   const [date, setDate] = useState(todayISO());
   const [walks, setWalks] = useState('1');
   const [duration, setDuration] = useState('');
@@ -70,6 +72,16 @@ export default function PaseosScreen() {
     setWalks('1');
     setDuration('');
     setNotes('');
+    setEditingLog(null);
+  };
+
+  const openEdit = (log: ActivityLog) => {
+    setEditingLog(log);
+    setDate(log.date);
+    setWalks(String(log.walks));
+    setDuration(log.duration_minutes?.toString() ?? '');
+    setNotes(log.notes ?? '');
+    setShowForm(true);
   };
 
   const handleSave = async () => {
@@ -82,13 +94,15 @@ export default function PaseosScreen() {
       Alert.alert('Error', 'La duración debe ser mayor a 0 minutos'); return;
     }
     setSaving(true);
-    const { error } = await supabase.from('activity_logs').insert({
-      pet_id: pet.id,
+    const payload = {
       date,
       walks: walksNum,
       duration_minutes: duration ? parseInt(duration, 10) : null,
       notes: notes.trim() || null,
-    });
+    };
+    const { error } = editingLog
+      ? await supabase.from('activity_logs').update(payload).eq('id', editingLog.id)
+      : await supabase.from('activity_logs').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
     if (error) { Alert.alert('Error', error.message); return; }
     resetForm();
@@ -163,7 +177,7 @@ export default function PaseosScreen() {
           logs.map(log => {
             const active = log.walks > 0;
             return (
-              <TouchableOpacity key={log.id} activeOpacity={0.7} onPress={() => handleDelete(log.id)}>
+              <TouchableOpacity key={log.id} activeOpacity={0.7} onPress={() => openEdit(log)}>
                 <Card>
                   <View style={styles.logRow}>
                     <View style={[styles.dot, { backgroundColor: active ? Colors.good : Colors.bad }]} />
@@ -176,7 +190,14 @@ export default function PaseosScreen() {
                       </Text>
                       {log.notes ? <Text style={styles.logNotes} numberOfLines={1}>{log.notes}</Text> : null}
                     </View>
-                    <Ionicons name="trash-outline" size={18} color={Colors.cardBorder} />
+                    <View style={styles.rowActions}>
+                      <TouchableOpacity onPress={() => openEdit(log)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="pencil-outline" size={18} color={Colors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDelete(log.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={18} color={Colors.cardBorder} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </Card>
               </TouchableOpacity>
@@ -185,13 +206,12 @@ export default function PaseosScreen() {
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title="Registrar paseo">
-        <FormField
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingLog ? 'Editar paseo' : 'Registrar paseo'}>
+        <DatePickerField
           label="Fecha"
           value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          keyboardType="numbers-and-punctuation"
+          onChange={setDate}
+          maxDate={new Date()}
         />
         <SelectField label="Paseos" value={walks} options={WALK_OPTIONS} onSelect={setWalks} />
         <FormField
@@ -242,4 +262,5 @@ const styles = StyleSheet.create({
   logDate: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   logDetail: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 1 },
   logNotes: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1, fontStyle: 'italic' },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
 });
