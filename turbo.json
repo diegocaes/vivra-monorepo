@@ -4,7 +4,11 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "build/**"]
+      "outputs": ["dist/**", ".next/**", "build/**", ".vercel/output/**"],
+      "env": [
+        "PUBLIC_SUPABASE_URL",
+        "PUBLIC_SUPABASE_ANON_KEY"
+      ]
     },
     "dev": {
       "cache": false,
