@@ -455,7 +455,7 @@ Si devuelve 500, ver logs: Dashboard → Edge Functions → `delete-account` →
 
 **4.2** Tap "Regístrate" y crear:
 - Email: `demo@vivrapet.com`
-- Password: `VivraDemo2026!` (fuerte pero memorable; anótala)
+- Password: `<REDACTED — rotar post-launch>` (anota localmente, NO commitear)
 
 **4.3** Completar onboarding con datos realistas:
 - Nombre: `Rocky`
@@ -558,16 +558,16 @@ Click "Get Started" / "Set Up App Privacy". Declarar estos data types, todos com
 **5.8 — App Review Information** (sidebar → Version → scroll a "App Review Information")
 - First name / Last name: tu nombre real
 - Phone: tu teléfono
-- Email: `diarcaes@gmail.com`
+- Email: `<your-contact-email>`
 - **Sign-in required: Yes**
-- **Username:** `demo@vivrapet.com`
-- **Password:** `VivraDemo2026!`
+- **Username:** `<demo-account-email>`
+- **Password:** `<REDACTED — see 1Password / private notes>`
 - **Notes:**
 ```
 Vivra is a Spanish-language pet health tracker (dog-focused).
 
 Demo account:
-- demo@vivrapet.com / VivraDemo2026!
+- <demo-account-email> / <password-stored-privately>
 - Has a sample pet "Rocky" (Golden Retriever) with preloaded vaccines,
   weight history, food, grooming, and preventive records.
 
