@@ -38,29 +38,6 @@ const SUPPORT_OPTIONS = [
   { key: 'service', label: 'Service Dog' },
 ];
 
-const FAQ_ITEMS = [
-  {
-    q: '¿Qué es el score de bienestar?',
-    a: 'Un número de 0 a 100 que resume qué tan bien documentado está el cuidado de tu perro. Se calcula con 5 pilares de 20 pts cada uno: peso (vs. rango ideal de la raza), cuidado preventivo (vacunas, vet, antipulgas, desparasitante), raza y edad, actividad (paseos + grooming) y nutrición. No es un diagnóstico médico.',
-  },
-  {
-    q: '¿Un score bajo significa que mi perro está enfermo?',
-    a: 'No. Un score bajo casi siempre significa que faltan datos registrados, no que haya un problema real. Solo refleja lo que está en Vivra. A medida que completes el perfil, el score sube. Si te preocupa algo concreto, siempre consulta al vet.',
-  },
-  {
-    q: '¿Vivra reemplaza al veterinario?',
-    a: 'No. Vivra es un diario digital para organizar la información de tu mascota. Tu veterinario sigue siendo esencial para diagnósticos y tratamientos.',
-  },
-  {
-    q: '¿Puedo tener varias mascotas?',
-    a: 'Sí. Con el plan gratuito puedes tener 1 mascota. Con Vivra Premium puedes agregar hasta 5.',
-  },
-  {
-    q: '¿Mis datos están seguros?',
-    a: 'Sí. Usamos Supabase con encriptación de datos. Solo tú puedes acceder a la información de tus mascotas.',
-  },
-];
-
 export default function PerfilScreen() {
   const { user, signOut } = useAuth();
   const { isPremium } = useSubscription();
@@ -68,8 +45,7 @@ export default function PerfilScreen() {
   const petData = usePetContext();
   const { pet, pets, isOwner, coOwners, setActivePetId, refresh } = petData;
   const [refreshing, setRefreshing] = useState(false);
-  const [showFaq, setShowFaq] = useState(false);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   // Edit form
   const [showEdit, setShowEdit] = useState(false);
@@ -355,53 +331,39 @@ export default function PerfilScreen() {
               </Card>
             )}
 
-            {/* Info cards */}
+            {/* Info cards (collapsible) */}
             <Card>
-              <Text style={styles.sectionTitle}>Datos de {pet.name}</Text>
-              <InfoRow label="Nombre" value={pet.name} />
-              <InfoRow label="Raza" value={pet.breed} />
-              <InfoRow label="Nacimiento" value={pet.birth_date ? formatDate(pet.birth_date) : null} />
-              <InfoRow label="Género" value={pet.gender === 'macho' ? 'Macho' : pet.gender === 'hembra' ? 'Hembra' : null} />
-              <InfoRow label="Peso" value={pet.weight_kg ? `${pet.weight_kg} kg` : null} />
-              <InfoRow label="Microchip" value={pet.chip_id} />
-              <InfoRow label="Color pelaje" value={pet.color} />
-              <InfoRow label="Tipo soporte" value={
-                pet.support_type === 'emotional_support' ? 'ESA' :
-                pet.support_type === 'service' ? 'Service Dog' : null
-              } />
+              <TouchableOpacity
+                onPress={() => setShowInfo(s => !s)}
+                activeOpacity={0.7}
+                style={styles.infoToggle}
+              >
+                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Datos de {pet.name}</Text>
+                <Ionicons
+                  name={showInfo ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={Colors.muted}
+                />
+              </TouchableOpacity>
+              {showInfo && (
+                <View style={styles.infoBody}>
+                  <InfoRow label="Nombre" value={pet.name} />
+                  <InfoRow label="Raza" value={pet.breed} />
+                  <InfoRow label="Nacimiento" value={pet.birth_date ? formatDate(pet.birth_date) : null} />
+                  <InfoRow label="Género" value={pet.gender === 'macho' ? 'Macho' : pet.gender === 'hembra' ? 'Hembra' : null} />
+                  <InfoRow label="Peso" value={pet.weight_kg ? `${pet.weight_kg} kg` : null} />
+                  <InfoRow label="Microchip" value={pet.chip_id} />
+                  <InfoRow label="Color pelaje" value={pet.color} />
+                  <InfoRow label="Tipo soporte" value={
+                    pet.support_type === 'emotional_support' ? 'ESA' :
+                    pet.support_type === 'service' ? 'Service Dog' : null
+                  } />
+                </View>
+              )}
             </Card>
 
             {/* Spending summary */}
             <SpendingSummary petId={pet.id} isPremium={isPremium} />
-
-            {/* Export passport */}
-            {isPremium ? (
-              <TouchableOpacity
-                style={styles.passportBtn}
-                onPress={() => Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.passportTitle}>Exportar pasaporte</Text>
-                  <Text style={styles.passportDesc}>Genera el pasaporte de viaje de {pet.name}</Text>
-                </View>
-                <Ionicons name="open-outline" size={18} color={Colors.accent} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.passportBtn}
-                onPress={() => router.push('/paywall' as any)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="document-text-outline" size={20} color={Colors.muted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.passportTitle}>Exportar pasaporte</Text>
-                  <Text style={styles.passportDesc}>Disponible con Premium</Text>
-                </View>
-                <Ionicons name="lock-closed" size={18} color={Colors.muted} />
-              </TouchableOpacity>
-            )}
 
             {/* Theme color */}
             <Card>
@@ -489,39 +451,18 @@ export default function PerfilScreen() {
               <Button title="Cerrar sesión" onPress={signOut} variant="outline" style={{ marginTop: Spacing.md }} />
             </Card>
 
-            {/* FAQ - minimalist collapsible */}
-            <TouchableOpacity
-              style={styles.faqToggle}
-              onPress={() => setShowFaq(!showFaq)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="help-circle-outline" size={18} color={Colors.muted} />
-              <Text style={styles.faqToggleText}>Preguntas frecuentes</Text>
-              <Ionicons name={showFaq ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.muted} />
-            </TouchableOpacity>
-            {showFaq && (
-              <Card>
-                {FAQ_ITEMS.map((item, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    onPress={() => setExpandedFaq(expandedFaq === i ? null : i)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.faqRow}>
-                      <Text style={styles.faqQuestion}>{item.q}</Text>
-                      <Ionicons name={expandedFaq === i ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.muted} />
-                    </View>
-                    {expandedFaq === i && (
-                      <Text style={styles.faqAnswer}>{item.a}</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </Card>
-            )}
-
             {/* Legal & support */}
             <Card>
               <Text style={styles.sectionTitle}>Legal y soporte</Text>
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => Linking.openURL('https://vivrapet.com/faq')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="help-circle-outline" size={20} color={Colors.accent} />
+                <Text style={styles.legalRowText}>Preguntas frecuentes</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.muted} />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => Linking.openURL('https://vivrapet.com/privacy')}
@@ -701,6 +642,9 @@ const styles = StyleSheet.create({
   completionHint: { fontSize: FontSize.xs, color: Colors.muted, marginTop: Spacing.xs },
   // Info rows
   sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginBottom: Spacing.sm },
+  // Collapsible "Datos de X"
+  infoToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  infoBody: { marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: 1, borderTopColor: Colors.cardBorder },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder },
   infoLabel: { fontSize: FontSize.sm, color: Colors.muted, flexShrink: 0 },
   infoValue: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, color: Colors.ink, flexShrink: 1, textAlign: 'right' as const },
@@ -713,15 +657,6 @@ const styles = StyleSheet.create({
   colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
   colorCircle: { width: 36, height: 36, borderRadius: 18 },
   colorCircleActive: { borderWidth: 3, borderColor: Colors.ink },
-  // FAQ - minimalist
-  faqToggle: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: Spacing.xs, paddingVertical: Spacing.sm,
-  },
-  faqToggleText: { fontSize: FontSize.sm, color: Colors.muted },
-  faqRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder },
-  faqQuestion: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, color: Colors.ink, flex: 1, marginRight: Spacing.sm },
-  faqAnswer: { fontSize: FontSize.sm, color: Colors.muted, lineHeight: 20, paddingVertical: Spacing.sm },
   // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },
@@ -758,12 +693,4 @@ const styles = StyleSheet.create({
   premiumInfo: { flex: 1 },
   premiumTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink },
   premiumDesc: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-  // Passport
-  passportBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md,
-    borderWidth: 1, borderColor: Colors.cardBorder,
-  },
-  passportTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
-  passportDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
 });

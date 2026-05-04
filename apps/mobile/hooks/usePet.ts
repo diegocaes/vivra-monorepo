@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from './useSubscription';
-import { scheduleVaccineReminder, scheduleGroomingReminder, schedulePreventiveReminder } from './useNotifications';
+import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
 
 export interface CoOwner {
@@ -24,7 +24,9 @@ export interface PetData {
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'start_date' | 'created_at'>[];
   vetVisits: { date: string; reason: string }[];
   groomings: { type: string; date: string }[];
+  /** @deprecated — actividad/paseos se eliminó del producto. Siempre `[]`. Mantenido por compat. */
   activityLogs: { date: string; walks: number; duration_minutes: number | null }[];
+  /** @deprecated — aventuras se eliminó del producto. Siempre `[]`. Mantenido por compat. */
   adventures: { date: string }[];
   /** Blood test records sorted by date desc. Used for the vitality score bonus + reminder. */
   bloodTests: { date: string }[];
@@ -49,8 +51,6 @@ export function usePet(): PetData {
   const [foods, setFoods] = useState<PetData['foods']>([]);
   const [vetVisits, setVetVisits] = useState<PetData['vetVisits']>([]);
   const [groomings, setGroomings] = useState<PetData['groomings']>([]);
-  const [activityLogs, setActivityLogs] = useState<PetData['activityLogs']>([]);
-  const [adventures, setAdventures] = useState<PetData['adventures']>([]);
   const [bloodTests, setBloodTests] = useState<PetData['bloodTests']>([]);
   const [preventives, setPreventives] = useState<PreventiveRow[]>([]);
   const [lastAntipulgas, setLastAntipulgas] = useState<PetData['lastAntipulgas']>(null);
@@ -106,8 +106,6 @@ export function usePet(): PetData {
         foodsRes,
         visitsRes,
         groomingsRes,
-        activityRes,
-        adventuresRes,
         bloodTestsRes,
         preventivesRes,
       ] = await Promise.all([
@@ -116,8 +114,6 @@ export function usePet(): PetData {
         supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
         supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
-        supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
         supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
@@ -132,8 +128,6 @@ export function usePet(): PetData {
       setFoods(foodsRes.data ?? []);
       setVetVisits(visitsRes.data ?? []);
       setGroomings(groomingsRes.data ?? []);
-      setActivityLogs(activityRes.data ?? []);
-      setAdventures(adventuresRes.data ?? []);
       setBloodTests(bloodTestsRes.data ?? []);
       setPreventives(allPreventives);
       setLastAntipulgas(lastAnti);
@@ -150,25 +144,33 @@ export function usePet(): PetData {
         setCoOwners([]);
       }
 
-      // Schedule premium-only notifications
+      // Schedule premium-only notifications: vaccines overdue (>1y since given)
       if (isPremium && pet) {
-        // Vaccine reminders (7 days before next dose)
+        // Vaccine reminders — fires 1 year after each vaccine was given
+        // (when "lleva más de un año sin poner vacunas"). Most recent dose
+        // per vaccine name wins because the helper cancels duplicates.
         for (const v of vaccinesRes.data ?? []) {
           if (v.date_given) {
-            const nextDue = new Date(v.date_given);
-            nextDue.setFullYear(nextDue.getFullYear() + 1);
-            scheduleVaccineReminder({ petName: pet.name, vaccineName: v.name, nextDueDate: nextDue });
+            scheduleVaccineReminder({
+              petName: pet.name,
+              vaccineName: v.name,
+              lastGivenDate: new Date(v.date_given + 'T09:00:00'),
+            }).catch(() => {});
           }
         }
-        // Grooming reminder (28 days after last)
-        const lastGroom = groomingsRes.data?.[0];
-        if (lastGroom?.date) {
-          scheduleGroomingReminder({ petName: pet.name, lastGroomingDate: new Date(lastGroom.date + 'T00:00:00') });
+
+        // Weight reminder — fires 30 days after the most recent weight record
+        const lastWeight = weightsRes.data?.[0];
+        if (lastWeight?.date) {
+          scheduleWeightReminder({
+            petName: pet.name,
+            lastWeightDate: new Date(lastWeight.date + 'T09:00:00'),
+          }).catch(() => {});
         }
       }
 
       // Preventive reminders — free + premium, everyone benefits. Schedule
-      // one reminder per "last dose" (antipulgas, desparasitante) 3d before
+      // one reminder per "last dose" (antipulgas, desparasitante) 1 day before
       // the next 30-day due date. For 'combinado', this fires twice (once
       // per type) because both coverage types matter.
       if (pet) {
@@ -221,8 +223,8 @@ export function usePet(): PetData {
     foods,
     vetVisits,
     groomings,
-    activityLogs,
-    adventures,
+    activityLogs: [], // deprecated — actividad eliminada del producto
+    adventures: [],   // deprecated — aventuras eliminadas del producto
     bloodTests,
     preventives,
     lastAntipulgas,

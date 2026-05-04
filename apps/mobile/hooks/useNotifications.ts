@@ -103,14 +103,15 @@ export function useNotifications() {
 
 // ── Local notification helpers ──
 
-/** Schedule a local notification for a preventive treatment reminder */
+/** Schedule a local notification for a preventive treatment reminder.
+ *  Default: alert 1 day before due date. */
 export async function schedulePreventiveReminder(opts: {
   petName: string;
   type: 'antipulgas' | 'desparasitante' | 'combinado';
   nextDueDate: Date;
   daysBeforeAlert?: number;
 }) {
-  const { petName, type, nextDueDate, daysBeforeAlert = 3 } = opts;
+  const { petName, type, nextDueDate, daysBeforeAlert = 1 } = opts;
   const label =
     type === 'antipulgas' ? 'antipulgas'
     : type === 'desparasitante' ? 'desparasitante'
@@ -133,10 +134,11 @@ export async function schedulePreventiveReminder(opts: {
     }
   }
 
+  const dayWord = daysBeforeAlert === 1 ? 'mañana' : `en ${daysBeforeAlert} días`;
   await Notifications.scheduleNotificationAsync({
     content: {
       title: `${petName}: ${label} próximo`,
-      body: `El ${label} de ${petName} vence en ${daysBeforeAlert} días. ¡No lo olvides!`,
+      body: `El ${label} de ${petName} vence ${dayWord}. ¡No lo olvides!`,
       data: { type: 'preventive_reminder', treatmentType: type, petName },
       sound: true,
     },
@@ -157,6 +159,15 @@ export async function scheduleFoodReminder(opts: {
 
   if (daysRemaining > 3 || daysRemaining < 0) return;
 
+  // Cancel any previously scheduled food reminder for this pet to avoid stacking.
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    const d = n.content.data as { type?: string; petName?: string } | undefined;
+    if (d?.type === 'food_reminder' && d.petName === petName) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+
   const alertDate = new Date();
   alertDate.setHours(9, 0, 0, 0); // Next day at 9am
   alertDate.setDate(alertDate.getDate() + 1);
@@ -165,7 +176,7 @@ export async function scheduleFoodReminder(opts: {
     content: {
       title: `${petName}: comida por acabarse`,
       body: `Quedan ~${daysRemaining} días de ${brand}. ¡Hora de comprar más!`,
-      data: { type: 'food_reminder' },
+      data: { type: 'food_reminder', petName },
       sound: true,
     },
     trigger: {
@@ -206,61 +217,36 @@ export async function scheduleBirthdayNotification(opts: {
   });
 }
 
-/** Schedule a daily activity reminder at 7pm — Freemium + Premium */
-export async function scheduleDailyActivityReminder(opts: { petName: string }) {
-  const { petName } = opts;
-
-  // Cancel any existing daily activity reminder before scheduling a new one
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  for (const n of scheduled) {
-    if (n.content.data?.type === 'daily_activity') {
-      await Notifications.cancelScheduledNotificationAsync(n.identifier);
-    }
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `¿Saliste a pasear con ${petName} hoy?`,
-      body: `Registra la actividad diaria de ${petName} en Vivra.`,
-      data: { type: 'daily_activity' },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: 19,
-      minute: 0,
-    },
-  });
-}
-
-/** Cancel daily activity reminder — call after user logs activity today */
-export async function cancelDailyActivityNotification() {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  for (const n of scheduled) {
-    if (n.content.data?.type === 'daily_activity') {
-      await Notifications.cancelScheduledNotificationAsync(n.identifier);
-    }
-  }
-}
-
-/** Schedule a vaccine reminder 7 days before due date — Premium only */
+/** Schedule a vaccine reminder when it's been more than 1 year since the last
+ *  vaccine was given (i.e. on or after the next-due date). */
 export async function scheduleVaccineReminder(opts: {
   petName: string;
   vaccineName: string;
-  nextDueDate: Date;
+  /** Date the vaccine was last given. We schedule the alert for +1 year. */
+  lastGivenDate: Date;
 }) {
-  const { petName, vaccineName, nextDueDate } = opts;
+  const { petName, vaccineName, lastGivenDate } = opts;
 
-  const alertDate = new Date(nextDueDate);
-  alertDate.setDate(alertDate.getDate() - 7);
+  const alertDate = new Date(lastGivenDate);
+  alertDate.setFullYear(alertDate.getFullYear() + 1);
+  alertDate.setHours(9, 0, 0, 0); // 9am of due day
 
   if (alertDate <= new Date()) return;
 
+  // Cancel any prior reminder for this (pet, vaccineName) to avoid stacking.
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    const d = n.content.data as { type?: string; vaccineName?: string; petName?: string } | undefined;
+    if (d?.type === 'vaccine_reminder' && d.vaccineName === vaccineName && d.petName === petName) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `${petName}: vacuna próxima`,
-      body: `💉 La vacuna de ${vaccineName} de ${petName} vence en 7 días.`,
-      data: { type: 'vaccine_reminder', vaccineName },
+      title: `${petName}: vacuna pendiente`,
+      body: `💉 Llevas más de un año sin registrar la vacuna de ${vaccineName} de ${petName}.`,
+      data: { type: 'vaccine_reminder', vaccineName, petName },
       sound: true,
     },
     trigger: {
@@ -270,23 +256,34 @@ export async function scheduleVaccineReminder(opts: {
   });
 }
 
-/** Schedule a grooming/bath reminder 28 days after last session — Premium only */
-export async function scheduleGroomingReminder(opts: {
+/** Schedule a weight log reminder 30 days after the last recorded weight. */
+export async function scheduleWeightReminder(opts: {
   petName: string;
-  lastGroomingDate: Date;
+  /** Date of the last weight record. We schedule alert for +30 days. */
+  lastWeightDate: Date;
 }) {
-  const { petName, lastGroomingDate } = opts;
+  const { petName, lastWeightDate } = opts;
 
-  const alertDate = new Date(lastGroomingDate);
-  alertDate.setDate(alertDate.getDate() + 28);
+  const alertDate = new Date(lastWeightDate);
+  alertDate.setDate(alertDate.getDate() + 30);
+  alertDate.setHours(9, 0, 0, 0);
 
   if (alertDate <= new Date()) return;
 
+  // Cancel any prior weight reminder for this pet to avoid stacking.
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    const d = n.content.data as { type?: string; petName?: string } | undefined;
+    if (d?.type === 'weight_reminder' && d.petName === petName) {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `${petName}: hora del baño`,
-      body: `🛁 Los expertos recomiendan bañar a tu mascota cada 4 semanas. ¡Ya es momento para ${petName}!`,
-      data: { type: 'grooming_reminder' },
+      title: `${petName}: hora de pesar`,
+      body: `⚖️ Llevas más de 30 días sin registrar el peso de ${petName}. Mantener el seguimiento ayuda a detectar cambios.`,
+      data: { type: 'weight_reminder', petName },
       sound: true,
     },
     trigger: {

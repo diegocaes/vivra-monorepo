@@ -31,8 +31,6 @@ const [
   { data: allPreventives },
   { count: weightCount },
   { count: flightCount },
-  { data: activityLogs },
-  { data: adventures },
 ] = await Promise.all([
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
@@ -44,8 +42,6 @@ const [
   supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('weight_records').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
   supabase.from('flights').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
-  supabase.from('activity_logs').select('date, walks, duration_minutes').eq('pet_id', pet.id).order('date', { ascending: false }).limit(60),
-  supabase.from('adventures').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(30),
 ]);
 
 // Split preventives — 'combinado' counts for both
@@ -103,8 +99,6 @@ const vitalityInput: ScoreInput = {
   vaccines: allVaccines ?? [],
   vetVisits: allVetVisits ?? [],
   groomings: (allGroomings ?? []).map(g => ({ date: g.date })),
-  activityLogs: activityLogs ?? [],
-  adventures: (adventures ?? []).map((a: any) => ({ date: a.date })),
   foods: activeFoods,
   bloodTests,
   preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
@@ -116,7 +110,6 @@ const SHORT_PILLAR: Record<string, string> = {
   'Peso': 'Peso',
   'Cuidado preventivo': 'Preventivo',
   'Raza y edad': 'Raza',
-  'Actividad': 'Actividad',
   'Nutrición': 'Nutrición',
 };
 
@@ -232,22 +225,26 @@ try {
     }
   }
 
-  // Antipulgas due (≤3 days left or overdue, notify once per cycle)
-  if (antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3 && !(isSamePet && snapshot?.antipulgasNotified)) {
+  // Antipulgas due (≤1 day left or overdue, notify once per cycle)
+  if (antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 1 && !(isSamePet && snapshot?.antipulgasNotified)) {
     const msg = antipulgasInfo.overdue
       ? `El antipulgas de ${pet.name} ya venció. Aplícalo cuanto antes.`
-      : `Faltan ${antipulgasInfo.daysLeft} día${antipulgasInfo.daysLeft !== 1 ? 's' : ''} para el antipulgas de ${pet.name}`;
+      : antipulgasInfo.daysLeft === 0
+        ? `Hoy toca el antipulgas de ${pet.name}`
+        : `Mañana toca el antipulgas de ${pet.name}`;
     const key = `preventive_due::${msg}`;
     if (!existingSet.has(key)) {
       newNotifications.push({ type: 'preventive_due', title: antipulgasInfo.overdue ? '⚠️ Antipulgas vencido' : '🐛 Antipulgas próximo', message: msg, icon: '🐛', href: '/dashboard' });
     }
   }
 
-  // Desparasitante due (≤3 days left or overdue, notify once per cycle)
-  if (desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 3 && !(isSamePet && snapshot?.desparasitanteNotified)) {
+  // Desparasitante due (≤1 day left or overdue, notify once per cycle)
+  if (desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 1 && !(isSamePet && snapshot?.desparasitanteNotified)) {
     const msg = desparasitanteInfo.overdue
       ? `El desparasitante de ${pet.name} ya venció. Aplícalo cuanto antes.`
-      : `Faltan ${desparasitanteInfo.daysLeft} día${desparasitanteInfo.daysLeft !== 1 ? 's' : ''} para el desparasitante de ${pet.name}`;
+      : desparasitanteInfo.daysLeft === 0
+        ? `Hoy toca el desparasitante de ${pet.name}`
+        : `Mañana toca el desparasitante de ${pet.name}`;
     const key = `preventive_due::${msg}`;
     if (!existingSet.has(key)) {
       newNotifications.push({ type: 'preventive_due', title: desparasitanteInfo.overdue ? '⚠️ Desparasitante vencido' : '💊 Desparasitante próximo', message: msg, icon: '💊', href: '/dashboard' });
@@ -256,59 +253,34 @@ try {
 
   // ── Smart reminders (non-invasive, once per trigger) ──
 
-  // Grooming reminder: no bath/grooming in 60+ days
-  const lastGroomDate = allGroomings?.[0]?.date;
-  if (lastGroomDate) {
-    const daysSinceGroom = Math.floor((Date.now() - new Date(lastGroomDate + 'T00:00:00').getTime()) / 86400000);
-    if (daysSinceGroom >= 60) {
-      const msg = `${pet.name} lleva ${daysSinceGroom} días sin un baño o grooming`;
-      const key = `grooming_reminder::${msg}`;
-      if (!existingSet.has(key)) {
-        newNotifications.push({ type: 'grooming_reminder', title: '✂️ Hora de un baño', message: msg, icon: '✂️', href: '/salud/grooming' });
-      }
-    }
-  }
-
-  // Activity reminder: no walks logged in 7+ days
-  const lastActivityDate = activityLogs?.[0]?.date;
-  if (lastActivityDate) {
-    const daysSinceActivity = Math.floor((Date.now() - new Date(lastActivityDate + 'T00:00:00').getTime()) / 86400000);
-    if (daysSinceActivity >= 7) {
-      const msg = `Llevas ${daysSinceActivity} días sin registrar paseos de ${pet.name}`;
-      const key = `activity_reminder::${msg}`;
-      if (!existingSet.has(key)) {
-        newNotifications.push({ type: 'activity_reminder', title: '🐕 ¿Pasearon hoy?', message: msg, icon: '🐕', href: '/actividad' });
-      }
-    }
-  }
-
-  // Vaccine booster due in ≤2 days
-  const { data: vaccinesNextDue } = await supabase
+  // Vaccine reminder: it's been more than 1 year (365 days) since the most
+  // recent dose for this vaccine — i.e. the user is overdue.
+  const { data: allVaccinesByDate } = await supabase
     .from('vaccines')
-    .select('name, next_due')
+    .select('name, date_given')
     .eq('pet_id', pet.id)
-    .not('next_due', 'is', null);
-  const nowMs = new Date().setHours(0, 0, 0, 0);
-  for (const v of vaccinesNextDue ?? []) {
-    const daysUntilVac = Math.ceil((new Date(v.next_due + 'T00:00:00').getTime() - nowMs) / 86400000);
-    if (daysUntilVac >= 0 && daysUntilVac <= 2) {
-      const msg = daysUntilVac === 0
-        ? `Hoy toca el refuerzo de ${v.name} de ${pet.name}`
-        : `Faltan ${daysUntilVac} día${daysUntilVac !== 1 ? 's' : ''} para el refuerzo de ${v.name}`;
-      const key = `vaccine_due::${msg}`;
+    .order('date_given', { ascending: false });
+  const seenVaccineNames = new Set<string>();
+  for (const v of allVaccinesByDate ?? []) {
+    if (!v.date_given || seenVaccineNames.has(v.name)) continue;
+    seenVaccineNames.add(v.name); // only consider most-recent dose per vaccine
+    const daysSince = Math.floor((Date.now() - new Date(v.date_given + 'T00:00:00').getTime()) / 86400000);
+    if (daysSince > 365) {
+      const msg = `Llevas más de un año sin registrar la vacuna de ${v.name} de ${pet.name}`;
+      const key = `vaccine_overdue::${v.name}`;
       if (!existingSet.has(key)) {
-        newNotifications.push({ type: 'vaccine_due', title: '💉 Vacuna próxima', message: msg, icon: '💉', href: '/salud/vacunas' });
+        newNotifications.push({ type: 'vaccine_due', title: '💉 Vacuna pendiente', message: msg, icon: '💉', href: '/salud/vacunas' });
       }
     }
   }
 
-  // Weight check reminder: no weight recorded in 90+ days
+  // Weight check reminder: no weight recorded in 30+ days
   const lastWeightDate = weightRecords?.[0]?.date;
   if (lastWeightDate) {
     const daysSinceWeight = Math.floor((Date.now() - new Date(lastWeightDate + 'T00:00:00').getTime()) / 86400000);
-    if (daysSinceWeight >= 90) {
+    if (daysSinceWeight >= 30) {
       const msg = `Llevas ${daysSinceWeight} días sin pesar a ${pet.name}`;
-      const key = `weight_reminder::${msg}`;
+      const key = `weight_reminder::${daysSinceWeight}`;
       if (!existingSet.has(key)) {
         newNotifications.push({ type: 'weight_reminder', title: '⚖️ Hora de pesar', message: msg, icon: '⚖️', href: '/salud/peso' });
       }
