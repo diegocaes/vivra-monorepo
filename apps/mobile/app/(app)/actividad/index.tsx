@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -7,16 +7,6 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constant
 import { usePetContext } from '../../../contexts/PetContext';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { evaluateBadges } from '@vivra/shared';
-
-function getWeekStartISO(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = day === 0 ? 6 : day - 1; // Monday-based week
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - diff);
-  monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 10);
-}
 
 export default function ActividadScreen() {
   const router = useRouter();
@@ -30,43 +20,12 @@ export default function ActividadScreen() {
     setRefreshing(false);
   }, [petData.refresh]);
 
-  const weekStart = getWeekStartISO();
-  const weekLogs = petData.activityLogs.filter(l => l.date >= weekStart);
-  const totalWalks = weekLogs.reduce((s, l) => s + l.walks, 0);
-  const totalMinutes = weekLogs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0);
-
-  // Global activity count for the week (paseos + grooming + vuelos)
-  const weekGroomings = petData.groomings.filter(g => g.date >= weekStart).length;
-  const weekFlights = petData.adventures.filter(a => a.date && a.date >= weekStart).length;
-  const totalActivities = totalWalks + weekGroomings + weekFlights;
-
-  // Days with ANY activity this week
-  const walkDates = new Set(weekLogs.filter(l => l.walks > 0).map(l => l.date));
-  const groomDates = new Set(petData.groomings.filter(g => g.date >= weekStart).map(g => g.date));
-  const flightDates = new Set(petData.adventures.filter(a => a.date && a.date >= weekStart).map(a => a.date));
-  const allActiveDates = new Set([...walkDates, ...groomDates, ...flightDates]);
-  const daysActive = allActiveDates.size;
-
-  // All-time totals
-  const allTimeWalks = petData.activityLogs.reduce((s, l) => s + l.walks, 0);
-  const allTimeMinutes = petData.activityLogs.reduce((s, l) => s + (l.duration_minutes ?? 0), 0);
-  const allTimeActivities = allTimeWalks + petData.groomings.length + petData.adventures.length;
-
-  // Show weekly or all-time depending on whether the week has activity
-  const hasWeekData = daysActive > 0;
-  const showWalks = hasWeekData ? totalWalks : allTimeWalks;
-  const showMinutes = hasWeekData ? totalMinutes : allTimeMinutes;
-  const showActivities = hasWeekData ? totalActivities : allTimeActivities;
-  const showDays = hasWeekData ? daysActive : new Set(petData.activityLogs.filter(l => l.walks > 0).map(l => l.date)).size;
-  const statsLabel = hasWeekData ? 'Esta semana' : 'Historico';
-
   const { earnedCount, totalCount } = useMemo(() => {
     const badgeCounts = {
       profileComplete: !!(petData.pet?.name && petData.pet?.breed && petData.pet?.birth_date),
       vaccineCount: petData.vaccines.length,
       visitCount: petData.vetVisits.length,
       weightCount: petData.weightRecords.length,
-      adventureCount: petData.adventures.length,
       flightCount: 0,
       groomingCount: petData.groomings.length,
       foodCount: petData.foods.length,
@@ -75,7 +34,7 @@ export default function ActividadScreen() {
       vaccineNames: petData.vaccines.map(v => v.name),
     };
     return evaluateBadges(badgeCounts);
-  }, [petData.pet?.name, petData.pet?.breed, petData.pet?.birth_date, petData.vaccines, petData.vetVisits.length, petData.weightRecords.length, petData.adventures.length, petData.groomings.length, petData.foods.length, petData.lastAntipulgas, petData.lastDesparasitante]);
+  }, [petData.pet?.name, petData.pet?.breed, petData.pet?.birth_date, petData.vaccines, petData.vetVisits.length, petData.weightRecords.length, petData.groomings.length, petData.foods.length, petData.lastAntipulgas, petData.lastDesparasitante]);
 
   const lastGrooming = petData.groomings[0];
   const groomingDaysAgo = lastGrooming
@@ -83,6 +42,15 @@ export default function ActividadScreen() {
     : null;
 
   const petName = petData.pet?.name ?? 'tu mascota';
+
+  const openPasaporte = useCallback(() => {
+    if (!petData.pet?.id) return;
+    if (!isPremium) {
+      router.push('/paywall' as any);
+      return;
+    }
+    Linking.openURL(`https://vivrapet.com/print?petId=${petData.pet.id}`).catch(() => {});
+  }, [petData.pet?.id, isPremium, router]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -95,63 +63,6 @@ export default function ActividadScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Stats header */}
-        <View style={styles.statsHeader}>
-          <Text style={styles.statsHeaderLabel}>{statsLabel}</Text>
-          {!hasWeekData && allTimeActivities > 0 && (
-            <Text style={styles.statsHeaderHint}>Sin actividad esta semana</Text>
-          )}
-        </View>
-
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{showDays}</Text>
-            <Text style={styles.statLabel}>Días activos</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{showActivities}</Text>
-            <Text style={styles.statLabel}>Actividades</Text>
-          </View>
-          <View style={styles.statBox}>
-            {isPremium ? (
-              <>
-                <Text style={styles.statValue}>{showMinutes}</Text>
-                <Text style={styles.statLabel}>Minutos</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="lock-closed" size={18} color={Colors.muted} />
-                <Text style={styles.statLabel}>Minutos</Text>
-              </>
-            )}
-          </View>
-        </View>
-
-        {/* Paseos */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/paseos' as any)}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: Colors.accent + '18' }]}>
-              <Ionicons name="walk" size={24} color={Colors.accent} />
-            </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Paseos</Text>
-              {petData.activityLogs.length === 0 ? (
-                <Text style={styles.cardCta}>Registra el primer paseo de {petName}</Text>
-              ) : totalWalks > 0 ? (
-                <Text style={styles.cardSub}>
-                  {totalWalks} paseo{totalWalks !== 1 ? 's' : ''} esta semana
-                </Text>
-              ) : (
-                <Text style={styles.cardSub}>
-                  {allTimeWalks} paseo{allTimeWalks !== 1 ? 's' : ''} registrado{allTimeWalks !== 1 ? 's' : ''}
-                </Text>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
-          </View>
-        </TouchableOpacity>
-
         {/* Grooming */}
         <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/grooming' as any)}>
           <View style={styles.card}>
@@ -175,14 +86,14 @@ export default function ActividadScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Vuelos */}
+        {/* Viajes */}
         <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/vuelos' as any)}>
           <View style={styles.card}>
             <View style={[styles.cardIcon, { backgroundColor: '#3B82F618' }]}>
               <Ionicons name="airplane" size={24} color="#3B82F6" />
             </View>
             <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Vuelos</Text>
+              <Text style={styles.cardTitle}>Viajes</Text>
               <Text style={styles.cardSub}>Historial de viajes de {petName}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
@@ -204,6 +115,22 @@ export default function ActividadScreen() {
               )}
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Pasaporte */}
+        <TouchableOpacity activeOpacity={0.7} onPress={openPasaporte}>
+          <View style={styles.card}>
+            <View style={[styles.cardIcon, { backgroundColor: Colors.accent + '18' }]}>
+              <Ionicons name="document-text" size={24} color={Colors.accent} />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text style={styles.cardTitle}>Pasaporte</Text>
+              <Text style={styles.cardSub}>
+                {isPremium ? `Exporta el historial médico de ${petName}` : 'Disponible con Premium'}
+              </Text>
+            </View>
+            <Ionicons name={isPremium ? 'chevron-forward' : 'lock-closed'} size={20} color={Colors.muted} />
           </View>
         </TouchableOpacity>
 
@@ -236,25 +163,6 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
   scroll: { flex: 1 },
   content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
-  // Stats
-  statsHeader: {
-    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
-    marginBottom: Spacing.xs,
-  },
-  statsHeaderLabel: {
-    fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.muted,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  statsHeaderHint: {
-    fontSize: FontSize.xs, color: Colors.accent, fontStyle: 'italic',
-  },
-  statsRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xs },
-  statBox: {
-    flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.cardBorder, padding: Spacing.md, alignItems: 'center',
-  },
-  statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
-  statLabel: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
   // Section cards
   card: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.md,

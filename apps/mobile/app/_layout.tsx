@@ -5,7 +5,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
-import { scheduleDailyActivityReminder } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
@@ -20,7 +19,7 @@ export default function RootLayout() {
   const [hasPets, setHasPets] = useState<boolean | null>(null);
   useNotifications();
 
-  // Check if user has pets & schedule daily activity reminder
+  // Check if user has pets to drive auth routing decision
   useEffect(() => {
     if (!user) {
       setHasPets(null);
@@ -57,9 +56,6 @@ export default function RootLayout() {
         }
         const has = ((ownedRes.count ?? 0) + (sharedRes.count ?? 0)) > 0;
         setHasPets(has);
-        if (ownedRes.data?.[0]?.name) {
-          scheduleDailyActivityReminder({ petName: ownedRes.data[0].name });
-        }
       })
       .then(undefined, (e) => {
         if (cancelled) return;

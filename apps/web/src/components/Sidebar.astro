@@ -11,15 +11,20 @@ const { activePet, pets, unreadCount = 0 } = Astro.props;
 const currentPath = Astro.url.pathname;
 
 const navItems = [
-  { href: '/dashboard',     match: '/dashboard',    label: 'Inicio',     icon: 'home' },
-  { href: '/salud',         match: '/salud',        label: 'Salud',      icon: 'heart' },
-  { href: '/alimentacion',  match: '/alimentacion', label: 'Comida',     icon: 'food' },
-  { href: '/actividad',     match: '/actividad',    label: 'Actividad',  icon: 'activity' },
-  { href: '/calendario',    match: '/calendario',   label: 'Calendario', icon: 'calendar' },
+  { href: '/dashboard',      match: '/dashboard',      label: 'Inicio',     icon: 'home' },
+  { href: '/salud',          match: '/salud',          label: 'Salud',      icon: 'heart' },
+  { href: '/alimentacion',   match: '/alimentacion',   label: 'Comida',     icon: 'food' },
+  { href: '/salud/grooming', match: '/salud/grooming', label: 'Grooming',   icon: 'scissors' },
+  { href: '/calendario',     match: '/calendario',     label: 'Calendario', icon: 'calendar' },
+  { href: '/print',          match: '/print',          label: 'Pasaporte',  icon: 'passport' },
 ];
 
 function isActive(match: string): boolean {
   if (match === '/dashboard') return currentPath === '/dashboard';
+  // Grooming es tab top-level — al estar en /salud/grooming NO debe activar también "Salud"
+  if (match === '/salud') {
+    return currentPath.startsWith('/salud') && !currentPath.startsWith('/salud/grooming');
+  }
   return currentPath.startsWith(match);
 }
 
@@ -323,6 +328,18 @@ function petInitial(name: string) {
   <symbol id="sbi-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/>
     <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>
+  </symbol>
+  <symbol id="sbi-passport" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/>
+    <circle cx="12" cy="10" r="3"/>
+    <path d="M9 17h6"/>
+  </symbol>
+  <symbol id="sbi-scissors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="6" cy="6" r="3"/>
+    <circle cx="6" cy="18" r="3"/>
+    <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+    <line x1="14.47" y1="14.48" x2="20" y2="20"/>
+    <line x1="8.12" y1="8.12" x2="12" y2="12"/>
   </symbol>
 </svg>
 

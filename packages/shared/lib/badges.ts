@@ -15,7 +15,8 @@ export interface BadgeCounts {
   vaccineCount: number;
   visitCount: number;
   weightCount: number;
-  adventureCount: number;
+  /** @deprecated — adventures se eliminó del producto. Campo aceptado por compat. */
+  adventureCount?: number;
   flightCount: number;
   groomingCount: number;
   foodCount: number;

@@ -8,6 +8,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
 import { useSubscription } from '../../hooks/useSubscription';
+import { scheduleFoodReminder } from '../../hooks/useNotifications';
 import { formatDate } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
@@ -160,10 +161,29 @@ export default function AlimentacionScreen() {
 
     if (foodsRes.error) console.warn('[Alimentacion] foods error:', foodsRes.error.message);
     if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
-    setFoods(((foodsRes.data as Food[]) ?? []).map(enrichFood));
+    const enrichedFoods = ((foodsRes.data as Food[]) ?? []).map(enrichFood);
+    setFoods(enrichedFoods);
     setTreats((treatsRes.data as Treat[]) ?? []);
     setLoading(false);
-  }, [pet?.id]);
+
+    // Schedule a "food running low" reminder when active bag has ≤3 days left.
+    // The function cancels any prior reminder for this pet, so it's safe to call
+    // on every refresh — only the most recent state stays scheduled.
+    const active = enrichedFoods[0];
+    if (
+      pet?.name &&
+      active?.brand &&
+      active.daysRemaining != null &&
+      active.daysRemaining >= 0 &&
+      active.daysRemaining <= 3
+    ) {
+      scheduleFoodReminder({
+        petName: pet.name,
+        brand: active.brand,
+        daysRemaining: active.daysRemaining,
+      }).catch(() => {});
+    }
+  }, [pet?.id, pet?.name]);
 
   useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
 

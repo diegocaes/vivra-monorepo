@@ -4,7 +4,7 @@ import Card from '../components/ui/Card.astro';
 import Input from '../components/ui/Input.astro';
 import Button from '../components/ui/Button.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import { DOG_BREEDS, formatCurrency } from '@vivra/shared';
+import { DOG_BREEDS, formatCurrency, calculateAge } from '@vivra/shared';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
@@ -379,7 +379,26 @@ const origin = new URL(Astro.request.url).origin;
   )}
 
   <Card variant="elevated" class="animate-fade-up animate-fade-up-delay-1">
-    <form method="POST" enctype="multipart/form-data" class="space-y-6">
+    <details class="group" open={isNew || errorParam === 'name_required' || !pet}>
+      <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+        <div class="flex items-center gap-3">
+          <img
+            src={pet?.photo_url || '/icons/default-pet.svg'}
+            alt=""
+            class="h-12 w-12 rounded-2xl object-cover border border-card-border shrink-0"
+          />
+          <div>
+            <p class="text-sm font-semibold text-ink">{pet?.name || 'Sin nombre'}</p>
+            <p class="text-xs text-muted">
+              {pet?.breed || 'Sin raza'}
+              {pet?.birth_date && ` · ${calculateAge(pet.birth_date)}`}
+            </p>
+          </div>
+        </div>
+        <svg class="h-4 w-4 text-muted transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+
+      <form method="POST" enctype="multipart/form-data" class="space-y-6 mt-4 pt-4 border-t border-card-border/50">
       <!-- Photo -->
       <div class="flex flex-col items-center gap-3">
         <div class="relative">
@@ -523,59 +542,85 @@ const origin = new URL(Astro.request.url).origin;
         {pet ? 'Guardar cambios' : 'Crear perfil'}
       </Button>
     </form>
+    </details>
   </Card>
 
-  <!-- Owner Profile -->
+  <!-- Owner Profile (collapsible) -->
   <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-    <form method="POST" class="space-y-4">
-      <input type="hidden" name="_action" value="save_owner" />
-
-      <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-        Datos del dueño
-      </div>
-      <p class="text-xs text-muted -mt-2">Tu información personal como responsable de {pet?.name ?? 'tu mascota'}.</p>
-
-      {savedParam === 'owner' && (
-        <div class="rounded-xl bg-accent/10 border border-accent/20 px-4 py-3 text-sm text-accent-dark font-medium">
-          Datos del dueño guardados.
+    <details class="group" open={savedParam === 'owner'}>
+      <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+        <div class="flex items-center gap-3">
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-ink">Datos del dueño</p>
+            <p class="text-xs text-muted">{ownerProfile?.first_name ? `${ownerProfile.first_name}${ownerProfile.last_name ? ' ' + ownerProfile.last_name : ''}` : 'Toca para añadir tu información'}</p>
+          </div>
         </div>
-      )}
+        <svg class="h-4 w-4 text-muted transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input label="Nombre" name="owner_first_name" value={ownerProfile?.first_name || ''} placeholder="Tu nombre" />
-        <Input label="Apellido" name="owner_last_name" value={ownerProfile?.last_name || ''} placeholder="Tu apellido" />
-      </div>
+      <form method="POST" class="space-y-4 mt-4 pt-4 border-t border-card-border/50">
+        <input type="hidden" name="_action" value="save_owner" />
 
-      <Input label="Teléfono" name="owner_phone" type="tel" value={ownerProfile?.phone || ''} placeholder="Ej: +57 300 1234567" />
+        {savedParam === 'owner' && (
+          <div class="rounded-xl bg-accent/10 border border-accent/20 px-4 py-3 text-sm text-accent-dark font-medium">
+            Datos del dueño guardados.
+          </div>
+        )}
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input label="Fecha de nacimiento" name="owner_birth_date" type="date" value={ownerProfile?.birth_date || ''} />
-        <div>
-          <label class="block text-sm font-medium text-ink mb-1.5">Sexo</label>
-          <select name="owner_gender" class="field-input">
-            <option value="" selected={!ownerProfile?.gender}>Seleccionar</option>
-            <option value="masculino" selected={ownerProfile?.gender === 'masculino'}>Masculino</option>
-            <option value="femenino" selected={ownerProfile?.gender === 'femenino'}>Femenino</option>
-            <option value="otro" selected={ownerProfile?.gender === 'otro'}>Otro</option>
-          </select>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Nombre" name="owner_first_name" value={ownerProfile?.first_name || ''} placeholder="Tu nombre" />
+          <Input label="Apellido" name="owner_last_name" value={ownerProfile?.last_name || ''} placeholder="Tu apellido" />
         </div>
-      </div>
 
-      <Button type="submit" variant="primary" size="lg" class="w-full">
-        Guardar datos del dueño
-      </Button>
-    </form>
+        <Input label="Teléfono" name="owner_phone" type="tel" value={ownerProfile?.phone || ''} placeholder="Ej: +57 300 1234567" />
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Fecha de nacimiento" name="owner_birth_date" type="date" value={ownerProfile?.birth_date || ''} />
+          <div>
+            <label class="block text-sm font-medium text-ink mb-1.5">Sexo</label>
+            <select name="owner_gender" class="field-input">
+              <option value="" selected={!ownerProfile?.gender}>Seleccionar</option>
+              <option value="masculino" selected={ownerProfile?.gender === 'masculino'}>Masculino</option>
+              <option value="femenino" selected={ownerProfile?.gender === 'femenino'}>Femenino</option>
+              <option value="otro" selected={ownerProfile?.gender === 'otro'}>Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <Button type="submit" variant="primary" size="lg" class="w-full">
+          Guardar datos del dueño
+        </Button>
+      </form>
+    </details>
   </Card>
 
-  <!-- Co-owner section -->
+  <!-- Co-owner section (collapsible) -->
   {pet && isOwner && (
     <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-      <div class="flex items-center gap-2 text-xs font-semibold text-muted uppercase tracking-widest mb-3">
-        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Co-dueño
-      </div>
+      <details class="group" open={!!pendingInvite || savedParam === 'revoked' || !!inviteTokenParam}>
+        <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+          <div class="flex items-center gap-3">
+            <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-ink">Co-dueño</p>
+              <p class="text-xs text-muted">
+                {coOwners.length > 0
+                  ? (coOwners.length === 1
+                      ? (coOwners[0].name || coOwners[0].email)
+                      : `${coOwners.length} co-dueños`)
+                  : (isPremium ? `Comparte a ${pet.name}` : 'Disponible con Premium')}
+              </p>
+            </div>
+          </div>
+          <svg class="h-4 w-4 text-muted transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
 
+        <div class="mt-4 pt-4 border-t border-card-border/50">
       {isPremium ? (
         <>
           {coOwners.length > 0 ? (
@@ -651,6 +696,8 @@ const origin = new URL(Astro.request.url).origin;
           <svg class="h-4 w-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
         </a>
       )}
+        </div>
+      </details>
     </Card>
   )}
 
@@ -670,91 +717,87 @@ const origin = new URL(Astro.request.url).origin;
     </Card>
   )}
 
-  <!-- Spending summary -->
+  <!-- Spending summary (collapsible) -->
   {pet && (
     <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-      <p class="text-sm font-semibold text-ink mb-3">💰 Resumen de gastos</p>
-      {isPremium ? (
-        spending.total > 0 ? (
-          <div class="space-y-2">
-            {spending.alimento > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">🥫 Alimentos</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.alimento)}</span>
-              </div>
-            )}
-            {spending.vet > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">🩺 Veterinario</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.vet)}</span>
-              </div>
-            )}
-            {spending.grooming > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">✂️ Grooming</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.grooming)}</span>
-              </div>
-            )}
-            {spending.vuelos > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">✈️ Vuelos</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.vuelos)}</span>
-              </div>
-            )}
-            {spending.snacks > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">🦴 Snacks</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.snacks)}</span>
-              </div>
-            )}
-            {spending.preventivos > 0 && (
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-muted">💊 Preventivos</span>
-                <span class="font-semibold text-ink">${formatCurrency(spending.preventivos)}</span>
-              </div>
-            )}
-            <hr class="border-card-border/50 my-2" />
-            <div class="flex items-center justify-between text-sm">
-              <span class="font-semibold text-ink">Total</span>
-              <span class="font-bold text-accent text-base">${formatCurrency(spending.total)}</span>
+      <details class="group">
+        <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+          <div class="flex items-center gap-3">
+            <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
+              <span class="text-base">💰</span>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-ink">Resumen de gastos</p>
+              <p class="text-xs text-muted">
+                {isPremium
+                  ? (spending.total > 0 ? `Total acumulado · $${formatCurrency(spending.total)}` : 'Sin gastos registrados aún')
+                  : 'Disponible con Premium'}
+              </p>
             </div>
           </div>
-        ) : (
-          <p class="text-sm text-muted">Sin gastos registrados aún. Los gastos de alimentos, veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
-        )
-      ) : (
-        <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-          <span class="text-lg">🔒</span>
-          <div>
-            <p class="text-sm font-semibold text-ink">Resumen total de gastos</p>
-            <p class="text-xs text-muted">Disponible con Premium</p>
-          </div>
-        </a>
-      )}
-    </Card>
-  )}
+          <svg class="h-4 w-4 text-muted transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
 
-  <!-- Export passport -->
-  {pet && (
-    <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-      {isPremium ? (
-        <a href="/print" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-          <span class="text-lg">📄</span>
-          <div class="flex-1">
-            <p class="text-sm font-semibold text-ink">Exportar pasaporte</p>
-            <p class="text-xs text-muted">Genera el pasaporte de viaje de {pet.name}</p>
-          </div>
-          <svg class="h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </a>
-      ) : (
-        <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-          <span class="text-lg">🔒</span>
-          <div>
-            <p class="text-sm font-semibold text-ink">Exportar pasaporte</p>
-            <p class="text-xs text-muted">Disponible con Premium</p>
-          </div>
-        </a>
-      )}
+        <div class="mt-4 pt-4 border-t border-card-border/50">
+          {isPremium ? (
+            spending.total > 0 ? (
+              <div class="space-y-2">
+                {spending.alimento > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">🥫 Alimentos</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.alimento)}</span>
+                  </div>
+                )}
+                {spending.vet > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">🩺 Veterinario</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.vet)}</span>
+                  </div>
+                )}
+                {spending.grooming > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">✂️ Grooming</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.grooming)}</span>
+                  </div>
+                )}
+                {spending.vuelos > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">✈️ Vuelos</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.vuelos)}</span>
+                  </div>
+                )}
+                {spending.snacks > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">🦴 Snacks</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.snacks)}</span>
+                  </div>
+                )}
+                {spending.preventivos > 0 && (
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-muted">💊 Preventivos</span>
+                    <span class="font-semibold text-ink">${formatCurrency(spending.preventivos)}</span>
+                  </div>
+                )}
+                <hr class="border-card-border/50 my-2" />
+                <div class="flex items-center justify-between text-sm">
+                  <span class="font-semibold text-ink">Total</span>
+                  <span class="font-bold text-accent text-base">${formatCurrency(spending.total)}</span>
+                </div>
+              </div>
+            ) : (
+              <p class="text-sm text-muted">Los gastos de alimentos, veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
+            )
+          ) : (
+            <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+              <span class="text-lg">🔒</span>
+              <div>
+                <p class="text-sm font-semibold text-ink">Ver el desglose completo</p>
+                <p class="text-xs text-muted">Disponible con Premium</p>
+              </div>
+            </a>
+          )}
+        </div>
+      </details>
     </Card>
   )}
 

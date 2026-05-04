@@ -1,16 +1,19 @@
 /**
  * Vivra Vitality Score Engine
  *
- * Modelo propietario de salud canina — 5 pilares, 0–100 puntos.
+ * Modelo propietario de salud canina — 4 pilares, 0–100 puntos.
  *
  * Fundamentación científica: docs/vitality-score-research.md
  *
- * Pilares:
- *  P1: Peso corporal (20 pts) — WSAVA BCS, VetCompass/Pegram 2021
- *  P2: Cuidado preventivo (20 pts) — GeroScience 2024, AVMA
- *  P3: Raza + Edad (20 pts) — Gough/Thomas, Cornell, Nature 2023
- *  P4: Actividad y bienestar (20 pts) — Dog Aging Project 2023
- *  P5: Nutrición (20 pts) — Purina MER, PMC diet study
+ * Pilares (cada uno 25 pts, total 100):
+ *  P1: Peso corporal — WSAVA BCS, VetCompass/Pegram 2021
+ *  P2: Cuidado preventivo — GeroScience 2024, AVMA
+ *  P3: Raza + Edad — Gough/Thomas, Cornell, Nature 2023
+ *  P5: Nutrición — Purina MER, PMC diet study
+ *
+ * Cada función `scoreXxx` calcula sobre 20 pts internos por compatibilidad
+ * histórica. Al final, `calculateVitalityScore` escala 20→25 (×1.25) para
+ * mantener el total en 0–100 después de eliminar el pilar de actividad.
  *
  * PRINCIPIOS DE DISEÑO:
  *  - Nunca mostrar score hasta tener suficientes datos (mínimo 2 pilares calculables)
@@ -86,8 +89,10 @@ export interface ScoreInput {
   vaccines: VaccineRecord[];
   vetVisits: VetVisit[];
   groomings: GroomingRecord[];
-  activityLogs: ActivityLogRecord[];
-  adventures: AdventureRecord[];
+  /** @deprecated — actividad/paseos se eliminó del score. Campo aceptado por compat con consumers existentes. */
+  activityLogs?: ActivityLogRecord[];
+  /** @deprecated — aventuras se eliminó del score. Campo aceptado por compat con consumers existentes. */
+  adventures?: AdventureRecord[];
   foods: FoodRecord[];
   bloodTests?: BloodTestRecord[];
   /** Registros de antipulgas/desparasitante/combinado. 'combinado' cuenta como ambos. */
@@ -104,7 +109,7 @@ export type DataSufficiency =
   | 'building'     // datos en recolección — score estimado parcial
   | 'too_early';   // demasiado pronto para mostrar score (< 2 pilares)
 
-export type PillarId = 'peso' | 'cuidado' | 'raza' | 'actividad' | 'nutricion';
+export type PillarId = 'peso' | 'cuidado' | 'raza' | 'nutricion';
 
 export interface PillarScore {
   id: PillarId;
@@ -228,7 +233,6 @@ const PILLAR_DESC = {
   peso: 'Compara el peso actual con el rango ideal de la raza. Un peso saludable reduce riesgos articulares y metabólicos.',
   cuidado: 'Evalúa vacunas, visitas al veterinario, antipulgas/desparasitante y exámenes de sangre. La prevención es la base de una vida larga.',
   raza: 'Factores genéticos y de edad que influyen en la salud. Cada raza tiene predisposiciones específicas.',
-  actividad: 'Mide paseos diarios, aventuras y cuidado estético (grooming). Un perro activo es un perro feliz.',
   nutricion: 'Analiza la calidad del alimento y si la porción diaria es adecuada según el peso y la raza.',
 } as const;
 
@@ -543,104 +547,6 @@ function scoreRazaEdad(input: ScoreInput): PillarScore {
   };
 }
 
-// ─── Pilar 4: Actividad y Bienestar ──────────────────────────────────────────
-
-function scoreActividad(input: ScoreInput): PillarScore {
-  const { activityLogs, groomings, adventures } = input;
-  const tips: string[] = [];
-  const hasAnyData = activityLogs.length > 0 || groomings.length > 0 || adventures.length > 0;
-
-  if (!hasAnyData) {
-    return {
-      name: 'Actividad', id: 'actividad' as PillarId, score: 4, max: 20, pct: 20,
-      status: 'Pendiente de registro', description: PILLAR_DESC.actividad,
-      tips: ['Registrar paseos diarios ayuda a visualizar su nivel de actividad'],
-      isEstimated: true,
-    };
-  }
-
-  // Sub-score actividad diaria últimos 30 días (12 pts)
-  const recentLogs = activityLogs.filter(l => daysBetween(l.date) <= 30);
-  const recentAdventures = adventures.filter(a => daysBetween(a.date) <= 30);
-  const totalWalks30d = recentLogs.reduce((s, l) => s + (l.walks || 0), 0);
-  const totalMinutes30d = recentLogs.reduce((s, l) => s + (l.duration_minutes || 0), 0);
-  // Días activos: días con paseo + días de aventura (sin duplicar)
-  const activeDates = new Set([
-    ...recentLogs.map(l => l.date.slice(0, 10)),
-    ...recentAdventures.map(a => a.date.slice(0, 10)),
-  ]);
-  const activeDays30d = activeDates.size;
-  // Cada aventura cuenta como 2 paseos por su impacto en bienestar
-  const effectiveWalks = totalWalks30d + recentAdventures.length * 2;
-
-  let actScore: number;
-  if (activeDays30d >= 20 || effectiveWalks >= 40) {
-    actScore = 12; // muy activo
-  } else if (activeDays30d >= 12 || effectiveWalks >= 24) {
-    actScore = 10;
-  } else if (activeDays30d >= 6 || effectiveWalks >= 12) {
-    actScore = 7;
-  } else if (activeDays30d >= 2) {
-    actScore = 5;
-  } else {
-    actScore = 2;
-    const daysSinceLastActivity = activityLogs[0]
-      ? daysBetween(activityLogs[0].date)
-      : adventures[0]
-        ? daysBetween(adventures[0].date)
-        : null;
-    if (daysSinceLastActivity !== null) {
-      tips.push(`Llevan ${Math.round(daysSinceLastActivity / 7)} semanas sin actividad registrada — ¿hay paseos recientes sin anotar?`);
-    } else {
-      tips.push('Registra los paseos diarios para ver la actividad mensual');
-    }
-  }
-
-  // Bonus por aventuras recientes
-  if (recentAdventures.length >= 2) {
-    actScore = Math.min(12, actScore + 1);
-  }
-
-  // Bonus por duración promedio (si registra minutos)
-  if (recentLogs.length > 0 && totalMinutes30d > 0) {
-    const avgMinPerDay = totalMinutes30d / recentLogs.length;
-    if (avgMinPerDay >= 45) actScore = Math.min(12, actScore + 1);
-    else if (avgMinPerDay < 15 && actScore >= 5) {
-      tips.push('Los paseos cortos suman, pero 30+ min diarios es lo ideal para su bienestar');
-    }
-  }
-
-  // Sub-score grooming (8 pts)
-  const groomDays = groomings[0] ? daysBetween(groomings[0].date) : 999;
-  let groomScore: number;
-  if (groomDays <= 30) {
-    groomScore = 8;
-  } else if (groomDays <= 60) {
-    groomScore = 5;
-  } else if (groomDays <= 90) {
-    groomScore = 2;
-  } else {
-    groomScore = 1;
-    if (groomings.length > 0) {
-      tips.push('Hace un tiempo desde el último grooming registrado');
-    }
-  }
-
-  const total = clamp(actScore + groomScore, 2, 20);
-  let status: string;
-  if (total >= 17) status = 'Muy activo/a y bien cuidado/a';
-  else if (total >= 12) status = 'Buena actividad general';
-  else if (total >= 7) status = 'Actividad moderada';
-  else status = 'Pocos registros de actividad';
-
-  return {
-    name: 'Actividad', id: 'actividad' as PillarId,
-    score: total, max: 20, pct: clamp(total * 5, 10, 100),
-    status, description: PILLAR_DESC.actividad, tips: tips.slice(0, 2),
-    isEstimated: activityLogs.length === 0 && groomings.length === 0 && adventures.length === 0,
-  };
-}
-
 // ─── Pilar 5: Nutrición ───────────────────────────────────────────────────────
 
 function scoreNutricion(input: ScoreInput): PillarScore {
@@ -742,20 +648,20 @@ function evaluateDataSufficiency(input: ScoreInput): {
   pilarsWithData: number;
   missingDataCount: number;
 } {
-  const { pet, weightRecords, vaccines, vetVisits, groomings, foods } = input;
+  const { pet, weightRecords, vaccines, vetVisits, foods } = input;
 
   const hasWeight = !!(weightRecords[0]?.weight_kg ?? pet.weight_kg);
   const hasVaccinesOrVet = vaccines.length > 0 || vetVisits.length > 0;
   const hasBreedOrAge = !!(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') || !!pet.birth_date;
-  const hasActivity = input.activityLogs.length > 0 || groomings.length > 0 || input.adventures.length > 0;
   const hasFood = foods.length > 0;
 
-  const dataPoints = [hasWeight, hasVaccinesOrVet, hasBreedOrAge, hasActivity, hasFood];
+  // 4 pilares ahora — sin actividad. Thresholds: ≥3 = ready, ≥2 = building.
+  const dataPoints = [hasWeight, hasVaccinesOrVet, hasBreedOrAge, hasFood];
   const withData = dataPoints.filter(Boolean).length;
   const missing = dataPoints.filter(b => !b).length;
 
   let sufficiency: DataSufficiency;
-  if (withData >= 4) {
+  if (withData >= 3) {
     sufficiency = 'ready';
   } else if (withData >= 2) {
     sufficiency = 'building';
@@ -936,25 +842,41 @@ const SCORE_CATEGORIES: Array<{
 // ─── Función principal ────────────────────────────────────────────────────────
 
 /**
+ * Escala un pilar de la escala interna 0–20 a la escala pública 0–25.
+ * Necesario porque eliminamos el Pilar 4 (Actividad) y redistribuimos sus 20 pts
+ * entre los 4 pilares restantes (5 pts extra cada uno) para mantener total = 100.
+ */
+function scaleTo25(p: PillarScore): PillarScore {
+  const newScore = Math.min(25, Math.round(p.score * 1.25));
+  return {
+    ...p,
+    score: newScore,
+    max: 25,
+    pct: Math.min(100, Math.round((newScore / 25) * 100)),
+  };
+}
+
+/**
  * Calcula el Vivra Vitality Score completo.
  *
  * Nunca muestra "crítico" — el peor estado visible es "perfil en construcción".
  * Tampoco usa lenguaje médico afirmativo — solo sugerencias y recomendaciones.
  */
 export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
-  const p1 = scorePeso(input);
-  const p2 = scoreCuidado(input);
-  const p3 = scoreRazaEdad(input);
-  const p4 = scoreActividad(input);
-  const p5 = scoreNutricion(input);
+  // Las funciones internas siguen calculando sobre 20 pts por compatibilidad histórica,
+  // y aquí escalamos a 25 pts cada una al cierre.
+  const p1 = scaleTo25(scorePeso(input));
+  const p2 = scaleTo25(scoreCuidado(input));
+  const p3 = scaleTo25(scoreRazaEdad(input));
+  const p5 = scaleTo25(scoreNutricion(input));
 
-  const pillars = [p1, p2, p3, p4, p5];
+  const pillars = [p1, p2, p3, p5];
   const { sufficiency, pilarsWithData, missingDataCount } = evaluateDataSufficiency(input);
 
-  const { pet, weightRecords, vaccines, vetVisits, groomings, foods } = input;
+  const { pet, weightRecords, vaccines, vetVisits, foods } = input;
 
   // ── Áreas pendientes con CTA amigable ─────────────────────────────────────
-  // IMPORTANTE: debe ser exactamente paralelo a los 5 checks de evaluateDataSufficiency
+  // IMPORTANTE: debe ser exactamente paralelo a los 4 checks de evaluateDataSufficiency
   // para que pendingAreas.length == missingDataCount siempre.
   const pendingAreas: PendingArea[] = [];
 
@@ -972,11 +894,6 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
   const hasBreedOrAgePending = !(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') && !pet.birth_date;
   if (hasBreedOrAgePending) {
     pendingAreas.push({ label: 'Completa raza y fecha de nacimiento en el perfil', href: '/perfil' });
-  }
-
-  // Pilar 4: Actividad (paseos, grooming o aventuras)
-  if (input.activityLogs.length === 0 && groomings.length === 0 && input.adventures.length === 0) {
-    pendingAreas.push({ label: 'Registra paseos o sesiones de grooming', href: '/actividad' });
   }
 
   // Pilar 5: Alimentación

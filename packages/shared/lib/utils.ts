@@ -81,22 +81,29 @@ export function timeAgo(isoStr: string): string {
 }
 
 /**
- * Formatea un monto monetario con separador de miles y dos decimales.
+ * Formatea un monto monetario con separador de miles (`,`) y dos decimales (`.`).
  * Evita errores de punto flotante (ej. 255.23999999999998 → "255.24").
  * No incluye el símbolo de moneda — el caller lo antepone según el contexto.
  *
+ * Implementación manual (no usa `toLocaleString`) para garantizar consistencia
+ * en React Native Hermes, que no incluye full ICU locale data por defecto y
+ * puede devolver "1234.50" sin separador de miles. Aquí siempre devolvemos
+ * formato `1,234.56` independiente del runtime.
+ *
  * Ejemplo: formatCurrency(255.23999999999998) → "255.24"
  *          formatCurrency(1234.5)             → "1,234.50"
+ *          formatCurrency(-99.5)              → "-99.50"
  *          formatCurrency(null)               → "0.00"
  */
 export function formatCurrency(value: number | null | undefined): string {
   const n = typeof value === 'number' && isFinite(value) ? value : 0;
-  // Redondeamos primero para normalizar artefactos de float, luego formateamos.
+  // Redondeamos primero para normalizar artefactos de float.
   const rounded = Math.round(n * 100) / 100;
-  return rounded.toLocaleString('es-CO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const sign = rounded < 0 ? '-' : '';
+  const [intPart, decPart] = Math.abs(rounded).toFixed(2).split('.');
+  // Inserta coma cada 3 dígitos desde la derecha (excepto al final).
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${sign}${withCommas}.${decPart}`;
 }
 
 /** Retorna cuánto tiempo falta hasta una fecha */

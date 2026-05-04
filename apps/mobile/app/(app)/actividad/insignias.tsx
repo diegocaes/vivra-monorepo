@@ -79,7 +79,6 @@ export default function InsigniasScreen() {
     vaccineCount: petData.vaccines.length,
     visitCount: petData.vetVisits.length,
     weightCount: petData.weightRecords.length,
-    adventureCount: petData.adventures.length,
     flightCount: 0,
     groomingCount: petData.groomings.length,
     foodCount: petData.foods.length,

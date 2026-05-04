@@ -159,7 +159,7 @@ export default function InviteScreen() {
               <Text style={styles.petBreed}>{invite.petBreed}</Text>
             )}
             <Text style={styles.inviteDesc}>
-              Tendrás acceso completo para ver y registrar vacunas, peso, paseos y toda la información de salud.
+              Tendrás acceso completo para ver y registrar vacunas, peso, alimentación y toda la información de salud.
             </Text>
             <Button
               title={accepting ? 'Aceptando...' : 'Aceptar invitación'}
