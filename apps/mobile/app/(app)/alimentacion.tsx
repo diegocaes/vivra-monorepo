@@ -9,7 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
 import { useSubscription } from '../../hooks/useSubscription';
 import { scheduleFoodReminder } from '../../hooks/useNotifications';
-import { formatDate } from '@vivra/shared';
+import { formatDate, formatDateShort } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -96,6 +96,10 @@ interface FoodWithCalc extends Food {
   daysTotal: number | null;
   daysRemaining: number | null;
   progressPct: number | null;
+  /** ISO date (YYYY-MM-DD) when the bag is projected to / did finish. */
+  endDate: string | null;
+  /** Days since the bag finished. null if still active. */
+  endedDaysAgo: number | null;
 }
 
 function enrichFood(food: Food): FoodWithCalc {
@@ -116,7 +120,20 @@ function enrichFood(food: Food): FoodWithCalc {
   const progressPct = (daysTotal && daysRemaining !== null)
     ? Math.round((daysRemaining / daysTotal) * 100)
     : null;
-  return { ...food, daysTotal, daysRemaining, progressPct };
+
+  // Projected/actual end date: start + total days the bag should last.
+  let endDate: string | null = null;
+  if (bagStart && daysTotal) {
+    const end = new Date(bagStart);
+    end.setDate(end.getDate() + daysTotal);
+    endDate = end.toISOString().slice(0, 10);
+  }
+  // How many days ago the bag finished (>= 0). null while still active.
+  const endedDaysAgo = (daysTotal && daysElapsed !== null && daysElapsed >= daysTotal)
+    ? daysElapsed - daysTotal
+    : null;
+
+  return { ...food, daysTotal, daysRemaining, progressPct, endDate, endedDaysAgo };
 }
 
 export default function AlimentacionScreen() {
@@ -355,16 +372,28 @@ export default function AlimentacionScreen() {
                   <Text style={styles.heroSub}>
                     {FOOD_TYPES[currentFood.food_type ?? currentFood.type ?? ''] ?? ''}
                     {currentFood.daily_grams ? ` · ${currentFood.daily_grams}g/día` : ''}
+                    {currentFood.frequency ? ` · ${currentFood.frequency}` : ''}
                   </Text>
                 </View>
                 {currentFood.daysRemaining !== null && (
                   <View style={styles.heroRight}>
-                    <Text style={styles.heroDays}>≈{currentFood.daysRemaining}</Text>
-                    <Text style={styles.heroDaysLabel}>días</Text>
+                    {currentFood.endedDaysAgo === null ? (
+                      <>
+                        <Text style={styles.heroDays}>≈{currentFood.daysRemaining}</Text>
+                        <Text style={styles.heroDaysLabel}>días</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="alert-circle" size={32} color={Colors.bad} />
+                        <Text style={[styles.heroDaysLabel, { color: Colors.bad, fontWeight: FontWeight.semibold }]}>se acabó</Text>
+                      </>
+                    )}
                   </View>
                 )}
               </View>
-              {currentFood.progressPct !== null && (
+
+              {/* Progress bar — only while bag is active */}
+              {currentFood.progressPct !== null && currentFood.endedDaysAgo === null && (
                 <View style={styles.progressBg}>
                   <View style={[
                     styles.progressFill,
@@ -376,6 +405,47 @@ export default function AlimentacionScreen() {
                   ]} />
                 </View>
               )}
+
+              {/* Date timeline: empezó → termina/terminó */}
+              {currentFood.start_date && currentFood.endDate && (
+                <View style={styles.heroDateRow}>
+                  <View style={styles.heroDateCol}>
+                    <Text style={styles.heroDateLabel}>Empezó</Text>
+                    <Text style={styles.heroDateValue}>{formatDateShort(currentFood.start_date)}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={14} color={Colors.muted} style={{ marginHorizontal: Spacing.sm }} />
+                  <View style={[styles.heroDateCol, { alignItems: 'flex-end' }]}>
+                    <Text style={styles.heroDateLabel}>
+                      {currentFood.endedDaysAgo === null ? 'Termina ~' : 'Terminó'}
+                    </Text>
+                    <Text style={[
+                      styles.heroDateValue,
+                      currentFood.endedDaysAgo !== null && { color: Colors.bad },
+                    ]}>
+                      {formatDateShort(currentFood.endDate)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Smart hint: out-of-stock or running low */}
+              {currentFood.endedDaysAgo !== null ? (
+                <View style={[styles.hintBox, { backgroundColor: 'rgba(239,68,68,0.10)' }]}>
+                  <Ionicons name="cart-outline" size={14} color={Colors.bad} />
+                  <Text style={[styles.hintText, { color: Colors.bad }]}>
+                    {currentFood.endedDaysAgo === 0
+                      ? 'Se acabó hoy. Hora de comprar.'
+                      : `Hace ${currentFood.endedDaysAgo} ${currentFood.endedDaysAgo === 1 ? 'día' : 'días'} que se acabó. Hora de comprar.`}
+                  </Text>
+                </View>
+              ) : currentFood.daysRemaining !== null && currentFood.daysRemaining <= 5 && currentFood.endDate ? (
+                <View style={[styles.hintBox, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+                  <Ionicons name="cart-outline" size={14} color={Colors.warn} />
+                  <Text style={[styles.hintText, { color: Colors.warn }]}>
+                    Compra antes del {formatDateShort(currentFood.endDate)}.
+                  </Text>
+                </View>
+              ) : null}
             </Card>
           </TouchableOpacity>
         ) : (
@@ -445,12 +515,20 @@ export default function AlimentacionScreen() {
                       {food.daysRemaining !== null && (
                         <Text style={[
                           styles.itemStatus,
-                          { color: food.daysRemaining === 0 ? Colors.bad : food.daysRemaining <= 5 ? Colors.warn : Colors.good },
+                          { color: food.endedDaysAgo !== null ? Colors.bad : food.daysRemaining <= 5 ? Colors.warn : Colors.good },
                         ]}>
-                          {food.daysRemaining === 0 ? 'Se terminó' : `${food.daysRemaining}d restantes`}
+                          {food.endedDaysAgo !== null && food.endDate
+                            ? `Terminó el ${formatDateShort(food.endDate)}`
+                            : `${food.daysRemaining}d restantes`}
                         </Text>
                       )}
-                      {food.start_date && <Text style={styles.itemDate}>Desde {formatDate(food.start_date)}</Text>}
+                      {food.start_date && (
+                        <Text style={styles.itemDate}>
+                          {food.endDate
+                            ? `${formatDateShort(food.start_date)} → ${formatDateShort(food.endDate)}`
+                            : `Desde ${formatDate(food.start_date)}`}
+                        </Text>
+                      )}
                     </View>
                     <TouchableOpacity onPress={() => handleDeleteFood(food.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="trash-outline" size={20} color={Colors.muted} />
@@ -583,6 +661,23 @@ const styles = StyleSheet.create({
   heroDaysLabel: { fontSize: FontSize.xs, color: Colors.muted },
   progressBg: { height: 6, backgroundColor: Colors.cardBorder, borderRadius: Radius.full, overflow: 'hidden', marginTop: Spacing.sm },
   progressFill: { height: 6, borderRadius: Radius.full },
+  heroDateRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: Spacing.md, paddingTop: Spacing.sm,
+    borderTopWidth: 1, borderTopColor: Colors.cardBorder,
+  },
+  heroDateCol: { flex: 1 },
+  heroDateLabel: {
+    fontSize: 10, fontWeight: FontWeight.semibold, color: Colors.muted,
+    letterSpacing: 0.5, textTransform: 'uppercase',
+  },
+  heroDateValue: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: 2 },
+  hintBox: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+    borderRadius: Radius.md, marginTop: Spacing.sm,
+  },
+  hintText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, flex: 1 },
   // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },
