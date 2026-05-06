@@ -117,8 +117,23 @@ const animateProgress = (toStep: number) => {
         const { data, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef });
         if (redeemErr) {
           console.warn('[onboarding] redeem_referral failed:', redeemErr.message);
+          // Don't show error toast — user just completed onboarding, don't
+          // confuse them. Failure is logged for debugging.
         } else if (!data?.ok) {
-          console.warn('[onboarding] redeem_referral rejected:', data?.error);
+          // Specific known errors we can ignore silently:
+          //   self_referral, invalid_code → user mistake, no big deal
+          //   already_redeemed → idempotent, fine
+          // Anything else: log loudly so we can debug.
+          const err = data?.error;
+          if (err && !['self_referral', 'invalid_code'].includes(err)) {
+            console.warn('[onboarding] redeem_referral rejected:', err, data);
+          }
+        } else if (data?.referred_trial_days) {
+          // Successful redeem — show a friendly confirmation
+          Alert.alert(
+            '🎉 ¡Premium activado!',
+            `Tenés ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
+          );
         }
         await AsyncStorage.removeItem(PENDING_REF_KEY);
       } else {

@@ -140,6 +140,15 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
                 maxAge: 60 * 60 * 24 * 365,
                 secure: import.meta.env.PROD,
               });
+
+              // Mark that this user joined via invite — dashboard reads this
+              // to show a one-time "descargá la app" banner.
+              cookies.set('incoming_share', '1', {
+                path: '/',
+                sameSite: 'lax',
+                maxAge: 60 * 60 * 24 * 7, // 7 days
+                secure: import.meta.env.PROD,
+              });
             }
           }
         }

@@ -77,6 +77,7 @@ export function useSubscription(): SubscriptionState {
   }, [user]);
 
   const checkSubscription = useCallback(async () => {
+    // 1. Check RevenueCat (paid IAP entitlement)
     try {
       const info = await Purchases.getCustomerInfo();
       const rcPremium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
@@ -88,23 +89,64 @@ export function useSubscription(): SubscriptionState {
       console.error('Check subscription error:', e);
     }
 
-    // Fallback: check Supabase trial/referral premium (not in RevenueCat)
+    if (!user) { setIsPremium(false); return; }
+
+    // 2. Own Supabase subscription row (referral / trial / promo)
     try {
-      if (user) {
-        const { data } = await supabase
-          .from('user_subscriptions')
-          .select('plan, premium_until')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (data?.plan === 'premium' && data?.premium_until) {
-          const daysLeft = Math.ceil((new Date(data.premium_until).getTime() - Date.now()) / 86400000);
-          if (daysLeft > 0) {
-            setIsPremium(true);
-            return;
-          }
+      const { data } = await supabase
+        .from('user_subscriptions')
+        .select('plan, source, premium_until')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (data?.plan === 'premium' && data?.premium_until) {
+        const until = new Date(data.premium_until).getTime();
+        const daysLeft = Math.ceil((until - Date.now()) / 86400000);
+        if (daysLeft > 0) {
+          setIsPremium(true);
+          return;
+        }
+        // On-load expiry defense (R7b): if a non-IAP premium has expired,
+        // demote the row locally so DB stays consistent with reality. The
+        // pg_cron job (R7a) does the same nightly — this is a fallback.
+        if (data.source && ['referral', 'trial', 'promo'].includes(data.source)) {
+          await supabase
+            .from('user_subscriptions')
+            .update({ plan: 'free', source: null, updated_at: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .lt('premium_until', new Date().toISOString());
         }
       }
-    } catch { /* user_subscriptions may not exist */ }
+    } catch { /* user_subscriptions may not exist yet — ignore */ }
+
+    // 3. Co-owner inherited premium: any sharing partner with active premium
+    //    grants this user premium too. Mirrors web's evaluatePremiumWithSharing.
+    try {
+      const [sharedWithMe, myShares] = await Promise.all([
+        supabase.from('pet_shares').select('owner_id').eq('shared_with', user.id),
+        supabase.from('pet_shares').select('shared_with').eq('owner_id', user.id),
+      ]);
+
+      const partnerIds = new Set<string>();
+      sharedWithMe.data?.forEach((s: any) => s.owner_id && partnerIds.add(s.owner_id));
+      myShares.data?.forEach((s: any) => s.shared_with && partnerIds.add(s.shared_with));
+
+      if (partnerIds.size > 0) {
+        const { data: partnerSubs } = await supabase
+          .from('user_subscriptions')
+          .select('plan, premium_until')
+          .in('user_id', [...partnerIds]);
+
+        const now = Date.now();
+        const sharedPremium = (partnerSubs || []).some(
+          (sub: any) => sub.plan === 'premium' && sub.premium_until && new Date(sub.premium_until).getTime() > now,
+        );
+        if (sharedPremium) {
+          setIsPremium(true);
+          return;
+        }
+      }
+    } catch { /* pet_shares may not exist yet — ignore */ }
 
     setIsPremium(false);
   }, [user]);

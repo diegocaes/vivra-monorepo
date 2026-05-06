@@ -112,6 +112,7 @@ export function DatePickerField({
               onChange={handleChange}
               style={styles.picker}
               accentColor={Colors.accent}
+              themeVariant="light"
             />
             {clearable && value ? (
               <TouchableOpacity

@@ -16,6 +16,8 @@ const MILESTONES = [
   { target: 10, label: '10 referidos', reward: '300 días premium' },
 ];
 
+const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
+
 export default function ReferidosScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -23,9 +25,26 @@ export default function ReferidosScreen() {
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  // Block referrals for users who only access shared pets (no pets of their own).
+  // Co-owners already share premium with the owner — they can't double-dip.
+  const [blockedAsCoOwner, setBlockedAsCoOwner] = useState(false);
 
   const fetchReferralData = useCallback(async () => {
     if (!user) return;
+
+    // Check ownership status: if the user has zero owned pets but does have
+    // shared pets, they're a "pure co-owner" — block referrals.
+    const [ownedPetsRes, sharedPetsRes] = await Promise.all([
+      supabase.from('pets').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('pet_shares').select('id', { count: 'exact', head: true }).eq('shared_with', user.id),
+    ]);
+    const ownedCount = ownedPetsRes.count ?? 0;
+    const sharedCount = sharedPetsRes.count ?? 0;
+    if (ownedCount === 0 && sharedCount > 0) {
+      setBlockedAsCoOwner(true);
+      setLoading(false);
+      return;
+    }
 
     // Fetch referral code; use RPC fallback so pet-name prefix matches the web scheme
     const { data: codeData } = await supabase
@@ -49,8 +68,12 @@ export default function ReferidosScreen() {
       const { data: rpcData, error: rpcError } = await supabase.rpc('generate_my_referral_code', {
         p_base: petData?.name || 'PET',
       });
-      if (!rpcError && rpcData?.ok && rpcData.code) {
+      if (rpcError) {
+        console.warn('[referidos] generate_my_referral_code error:', rpcError.message);
+      } else if (rpcData?.ok && rpcData.code) {
         setReferralCode(rpcData.code);
+      } else if (rpcData && !rpcData.ok) {
+        console.warn('[referidos] generate_my_referral_code returned not-ok:', rpcData.error);
       }
     }
 
@@ -67,12 +90,10 @@ export default function ReferidosScreen() {
 
   useEffect(() => { fetchReferralData(); }, [fetchReferralData]);
 
-  const shareLink = referralCode ? `https://vivrapet.com/register?ref=${referralCode}` : '';
-
   const handleCopy = async () => {
-    if (!shareLink) return;
+    if (!referralCode) return;
     try {
-      await Share.share({ message: shareLink });
+      await Share.share({ message: referralCode });
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -81,10 +102,13 @@ export default function ReferidosScreen() {
   };
 
   const handleShare = async () => {
-    if (!shareLink) return;
+    if (!referralCode) return;
     try {
       await Share.share({
-        message: `Registra a tu mascota en Vivra y lleva el control de su salud 🐾 Disponible en web y en iPhone.\n\n${shareLink}`,
+        message:
+          `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\n` +
+          `Descargá la app gratis: ${APP_STORE_URL}\n\n` +
+          `Cuando te registres, usá mi código ${referralCode} y ambos ganamos premium gratis.`,
       });
     } catch {
       // User cancelled share
@@ -104,6 +128,45 @@ export default function ReferidosScreen() {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={Colors.accent} />
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Co-owner without their own pet: can't refer (would double-dip premium)
+  if (blockedAsCoOwner) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name="chevron-back" size={24} color={Colors.ink} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Referidos</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.heroSection}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="people" size={32} color={Colors.accent} />
+            </View>
+            <Text style={styles.heroTitle}>Ya compartís premium</Text>
+            <Text style={styles.heroSubtitle}>
+              Como codueño, ya tenés acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales.
+            </Text>
+          </View>
+          <Card>
+            <Text style={styles.sectionTitle}>¿Querés referir?</Text>
+            <Text style={[styles.howDesc, { marginBottom: Spacing.sm }]}>
+              Registrá tu propia mascota para activar tu código de referido y ganar 30 días premium por cada amigo que invites.
+            </Text>
+            <TouchableOpacity
+              style={styles.shareBtn}
+              onPress={() => router.push('/perfil' as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.shareBtnText}>Ir a Perfil</Text>
+            </TouchableOpacity>
+          </Card>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -133,9 +196,9 @@ export default function ReferidosScreen() {
 
         {/* Referral link section */}
         <Card>
-          <Text style={styles.sectionTitle}>Tu link de referido</Text>
+          <Text style={styles.sectionTitle}>Tu código de referido</Text>
           <View style={styles.linkBox}>
-            <Text style={styles.linkText} numberOfLines={1}>{shareLink}</Text>
+            <Text style={styles.linkText} numberOfLines={1}>{referralCode || '—'}</Text>
           </View>
           <View style={styles.linkActions}>
             <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.7}>

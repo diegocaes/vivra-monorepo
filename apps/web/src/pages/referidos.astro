@@ -3,6 +3,18 @@ import MainLayout from '../layouts/MainLayout.astro';
 
 const { supabase, user } = Astro.locals;
 
+const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
+
+// Block "pure co-owners" (no owned pets, only shared) from referring — they
+// already share premium with the owner. Allow if they own at least one pet.
+const [ownedPetsRes, sharedPetsRes] = await Promise.all([
+  supabase.from('pets').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+  supabase.from('pet_shares').select('id', { count: 'exact', head: true }).eq('shared_with', user.id),
+]);
+const ownedCount = ownedPetsRes.count ?? 0;
+const sharedCount = sharedPetsRes.count ?? 0;
+const blockedAsCoOwner = ownedCount === 0 && sharedCount > 0;
+
 // Get user's referral code
 const { data: refCode } = await supabase
   .from('referral_codes')
@@ -33,8 +45,12 @@ const isPremium = sub?.plan === 'premium' && sub?.premium_until && new Date(sub.
 const premiumDaysLeft = isPremium ? Math.ceil((new Date(sub!.premium_until!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : 0;
 
 const code = refCode?.code ?? '';
-const origin = new URL(Astro.request.url).origin;
-const shareLink = code ? `${origin}/register?ref=${code}` : '';
+// Share message points users to the App Store (not the web register flow)
+// since we want mobile installs. Code is shown separately so the recipient
+// pastes it in the register form.
+const shareMessage = code
+  ? `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\nDescargá la app gratis: ${APP_STORE_URL}\n\nCuando te registres, usá mi código ${code} y ambos ganamos premium gratis.`
+  : '';
 
 // Cumulative rewards (actually matches how the backend grants them:
 // 30 days per completed referral, no tiered bonuses).
@@ -55,6 +71,23 @@ const milestones = [
       <p class="text-sm text-muted mt-0.5">Cada amigo que se une te da 1 mes de premium gratis</p>
     </div>
 
+    <!-- Pure co-owner: blocked from referring (already shares premium) -->
+    {blockedAsCoOwner ? (
+      <div class="rounded-2xl border border-card-border bg-card p-6 text-center">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10">
+          <svg class="h-7 w-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <p class="text-base font-bold text-ink mb-1">Ya compartís premium</p>
+        <p class="text-sm text-muted leading-relaxed mb-4">
+          Como codueño, ya tenés acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales — registrá tu propia mascota para activar tu código.
+        </p>
+        <a href="/perfil" class="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
+          Ir a Perfil
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+        </a>
+      </div>
+    ) : (
+    <>
     <!-- Premium status -->
     {isPremium && (
       <div class="rounded-2xl border border-accent/30 bg-accent/5 px-5 py-4">
@@ -90,17 +123,16 @@ const milestones = [
 
         <button
           id="btn-share"
-          data-link={shareLink}
-          data-text={`Únete a Vivra, el diario digital de tu mascota. Usa mi codigo ${code} para registrarte: ${shareLink}`}
+          data-link={APP_STORE_URL}
+          data-text={shareMessage}
           class="w-full flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-95"
           style="background:#F97316; box-shadow:0 4px 14px rgba(249,115,22,0.35);"
         >
           <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Compartir link de invitacion
+          Compartir invitación
         </button>
 
-        <p class="text-xs text-muted text-center mt-3">O comparte el link directamente:</p>
-        <p class="text-xs text-accent font-medium text-center mt-1 break-all">{shareLink}</p>
+        <p class="text-xs text-muted text-center mt-3">El mensaje incluye el link al App Store y tu código.</p>
       </div>
     ) : (
       <div class="rounded-2xl border border-card-border bg-card p-5 text-center">
@@ -191,6 +223,8 @@ const milestones = [
         </div>
       </div>
     </div>
+    </>
+    )}
 
   </div>
 

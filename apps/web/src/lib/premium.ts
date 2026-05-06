@@ -168,6 +168,30 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
     const ownStatus = evaluatePremium(data as UserSubscription | null);
     if (ownStatus.isPremium) return ownStatus;
 
+    // On-load expiry defense: if a non-IAP premium has expired, demote the
+    // row immediately so analytics queries / admin views stay consistent. The
+    // pg_cron job does the same nightly — this is a fast-path fallback for
+    // users who load the app before the cron runs.
+    if (
+      data &&
+      data.plan === 'premium' &&
+      data.source &&
+      ['referral', 'trial', 'promo'].includes(data.source) &&
+      data.premium_until &&
+      new Date(data.premium_until).getTime() < Date.now()
+    ) {
+      try {
+        const { createSupabaseAdminClient } = await import('./supabase');
+        const admin = createSupabaseAdminClient();
+        await admin
+          .from('user_subscriptions')
+          .update({ plan: 'free', source: null, updated_at: new Date().toISOString() })
+          .eq('user_id', userId);
+      } catch {
+        // ignore — runtime check still returns isPremium=false
+      }
+    }
+
     // Co-owner premium sharing: check if any sharing partner has active premium
     try {
       const { createSupabaseAdminClient } = await import('./supabase');

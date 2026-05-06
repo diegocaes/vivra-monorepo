@@ -78,9 +78,14 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
   const shareLink = async () => {
     if (!inviteToken || !pet) return;
     const url = `https://vivrapet.com/invite/${inviteToken}`;
+    const appStore = 'https://apps.apple.com/app/vivra/id6761087142';
     try {
       await Share.share({
-        message: `¡Hola! Te invito a cuidar juntos a ${pet.name} en Vivra 🐾\n\nPuedes entrar desde la web o descargar la app:\n${url}`,
+        message:
+          `¡Hola! Te invito a cuidar juntos a ${pet.name} en Vivra 🐾\n\n` +
+          `1. Aceptá la invitación: ${url}\n` +
+          `2. Descargá la app gratis: ${appStore}\n\n` +
+          `Tu acceso se sincroniza automáticamente.`,
         url,
       });
     } catch {

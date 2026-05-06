@@ -126,8 +126,16 @@ if (Astro.request.method === 'POST') {
         .maybeSingle();
 
       if (pendingRef && !pendingRef.reward_granted) {
-        const { error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef.code });
-        if (redeemErr) console.warn('[onboarding] redeem failed:', redeemErr.message);
+        const { data: redeemData, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef.code });
+        if (redeemErr) {
+          console.warn('[onboarding] redeem failed:', redeemErr.message);
+        } else if (redeemData && !redeemData.ok) {
+          const err = redeemData.error;
+          // Silently ignore expected user-side errors; log unexpected ones
+          if (err && !['self_referral', 'invalid_code', 'already_redeemed'].includes(err)) {
+            console.warn('[onboarding] redeem rejected:', err, redeemData);
+          }
+        }
       } else {
         // Ensure the user has a user_subscriptions row (free plan default)
         const { data: existingSub } = await admin

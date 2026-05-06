@@ -152,7 +152,6 @@ export interface UserSubscription {
   source: 'referral' | 'iap' | 'promo' | 'trial' | null;
   premium_until: string | null;
   trial_ends_at: string | null;
-  iap_product_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -214,6 +213,8 @@ export interface PetShare {
   pet_id: string;
   owner_id: string;
   shared_with: string;
+  shared_with_email: string | null;
+  shared_with_name: string | null;
   role: 'co_owner';
   created_at: string;
 }
