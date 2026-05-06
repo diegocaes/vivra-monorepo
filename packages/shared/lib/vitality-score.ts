@@ -70,6 +70,10 @@ export interface FoodRecord {
   type: string | null;     // column name in foods table
   /** ISO date — cuándo se empezó a usar este alimento (user-entered) */
   start_date?: string | null;
+  /** ISO date — cuándo se acabó la bolsa (set automáticamente al registrar
+   *  la siguiente, editable manualmente). Si está set, el "log" no se considera
+   *  stale: el dueño cerró formalmente esta bolsa. */
+  end_date?: string | null;
   /** ISO timestamp — cuándo se registró en la app (auto) */
   created_at?: string | null;
 }
@@ -567,10 +571,13 @@ function scoreNutricion(input: ScoreInput): PillarScore {
   // Frescura del registro: el último alimento puede haber sido registrado hace
   // mucho y el usuario haber cambiado. Si el registro es muy antiguo, aplicamos
   // un tope al score para que el indicador refleje la incertidumbre.
-  const foodLogDate = f.start_date ?? f.created_at ?? null;
+  // Si el end_date está set, el "log" deja de envejecer porque la bolsa cerró
+  // formalmente y el usuario logeará una nueva al comprarla. Si no, usamos
+  // start_date/created_at como referencia. Threshold: 90 días (3 meses).
+  const foodLogDate = f.end_date ?? f.start_date ?? f.created_at ?? null;
   const daysSinceFoodLog = foodLogDate ? daysBetween(foodLogDate) : null;
-  const isStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 180;
-  const isVeryStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 365;
+  const isStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 90;
+  const isVeryStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 180;
 
   // Calidad del alimento (10 pts)
   let qualityScore = 5;
@@ -585,10 +592,10 @@ function scoreNutricion(input: ScoreInput): PillarScore {
 
   if (isVeryStaleFood) {
     qualityScore = Math.min(qualityScore, 5);
-    tips.push('El último registro de alimento tiene más de un año — confirma si sigue siendo el mismo');
+    tips.push('Hace más de 6 meses que no registras una bolsa nueva — confirma si sigue siendo el mismo alimento');
   } else if (isStaleFood) {
     qualityScore = Math.min(qualityScore, 7);
-    tips.push('Hace tiempo que no actualizas el alimento — si cambió, vale la pena registrarlo');
+    tips.push('Hace más de 3 meses que no actualizas el alimento — si compraste una bolsa nueva, regístrala para mantener los promedios al día');
   }
 
   // Precisión de porción (10 pts)

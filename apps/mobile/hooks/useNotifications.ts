@@ -149,43 +149,6 @@ export async function schedulePreventiveReminder(opts: {
   });
 }
 
-/** Schedule a local notification for food bag running low */
-export async function scheduleFoodReminder(opts: {
-  petName: string;
-  brand: string;
-  daysRemaining: number;
-}) {
-  const { petName, brand, daysRemaining } = opts;
-
-  if (daysRemaining > 3 || daysRemaining < 0) return;
-
-  // Cancel any previously scheduled food reminder for this pet to avoid stacking.
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  for (const n of scheduled) {
-    const d = n.content.data as { type?: string; petName?: string } | undefined;
-    if (d?.type === 'food_reminder' && d.petName === petName) {
-      await Notifications.cancelScheduledNotificationAsync(n.identifier);
-    }
-  }
-
-  const alertDate = new Date();
-  alertDate.setHours(9, 0, 0, 0); // Next day at 9am
-  alertDate.setDate(alertDate.getDate() + 1);
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `${petName}: comida por acabarse`,
-      body: `Quedan ~${daysRemaining} días de ${brand}. ¡Hora de comprar más!`,
-      data: { type: 'food_reminder', petName },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: alertDate,
-    },
-  });
-}
-
 /** Schedule a birthday notification for the pet */
 export async function scheduleBirthdayNotification(opts: {
   petName: string;

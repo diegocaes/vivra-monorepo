@@ -1,6 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
-import { isBirthday, calculateAge, formatDate } from '@vivra/shared';
+import { isBirthday, calculateAge, formatDate, computeFoodStats, formatCurrency } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -36,7 +36,7 @@ const [
   supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
+  supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, food_type, start_date, end_date, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
   // All preventives (antipulgas, desparasitante, combinado) in one call.
   // 'combinado' rows count as BOTH antipulgas and desparasitante for next-due.
   supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
@@ -62,28 +62,20 @@ const visitCount = allVetVisits?.length ?? 0;
 const groomingCount = allGroomings?.length ?? 0;
 const allVaccineNames = allVaccines ?? [];
 
-// Food insights
-function bagToGrams(size: number, unit: string): number {
-  if (unit === 'kg') return size * 1000;
-  if (unit === 'lb') return size * 453.592;
-  return size;
-}
-
-const activeFoods = (foods ?? []).filter(f => f.daily_grams && f.bag_size);
-const currentFood = activeFoods[0] ?? null;
-
-const totalDays = currentFood
-  ? Math.floor(bagToGrams(currentFood.bag_size, currentFood.bag_unit ?? 'kg') / currentFood.daily_grams)
-  : null;
-
-// Days elapsed since bag was opened (use start_date if set, else created_at)
-const bagStartStr = currentFood?.start_date || currentFood?.created_at || null;
-const daysElapsed = bagStartStr
-  ? Math.floor((Date.now() - new Date(bagStartStr).getTime()) / (1000 * 60 * 60 * 24))
-  : null;
-const daysLeft = totalDays !== null && daysElapsed !== null
-  ? Math.max(0, totalDays - daysElapsed)
-  : null;
+// Food insights — averages across all logged bags. The owner already knows
+// when food runs out; we surface trazabilidad (cost, duration) instead.
+const foodStats = computeFoodStats((foods ?? []).map(f => ({
+  brand: f.brand,
+  food_type: (f as any).food_type ?? f.type,
+  type: f.type,
+  daily_grams: f.daily_grams,
+  bag_size: f.bag_size,
+  bag_unit: f.bag_unit,
+  start_date: f.start_date,
+  end_date: (f as any).end_date,
+  price: f.price,
+  created_at: f.created_at,
+})));
 
 
 // Vitality Score — same full data as /salud for consistent results
@@ -99,7 +91,7 @@ const vitalityInput: ScoreInput = {
   vaccines: allVaccines ?? [],
   vetVisits: allVetVisits ?? [],
   groomings: (allGroomings ?? []).map(g => ({ date: g.date })),
-  foods: activeFoods,
+  foods: (foods ?? []).filter(f => f.daily_grams && f.bag_size),
   bloodTests,
   preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
 };
@@ -214,17 +206,6 @@ try {
     }
   }
 
-  // Food running out (≤5 days left, notify once per cycle)
-  if (daysLeft !== null && daysLeft <= 5 && !(isSamePet && snapshot?.foodNotified)) {
-    const msg = daysLeft === 0
-      ? `La bolsa de ${currentFood?.brand || 'alimento'} ya debería haberse acabado`
-      : `Quedan ~${daysLeft} día${daysLeft !== 1 ? 's' : ''} de ${currentFood?.brand || 'alimento'}`;
-    const key = `food_low::${msg}`;
-    if (!existingSet.has(key)) {
-      newNotifications.push({ type: 'food_low', title: '🍖 Comida por acabarse', message: msg, icon: '🍖', href: '/alimentacion' });
-    }
-  }
-
   // Antipulgas due (≤1 day left or overdue, notify once per cycle)
   if (antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 1 && !(isSamePet && snapshot?.antipulgasNotified)) {
     const msg = antipulgasInfo.overdue
@@ -299,7 +280,6 @@ try {
     badgeCount: badgeResult.earnedCount,
     score: dashScore.total,
     petId: pet.id,
-    foodNotified: daysLeft !== null && daysLeft <= 5,
     antipulgasNotified: antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3,
     desparasitanteNotified: desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 3,
   }), { path: '/', httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, secure: import.meta.env.PROD });
@@ -343,18 +323,6 @@ if (desparasitanteInfo.lastDate && (desparasitanteInfo.overdue || desparasitante
     icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     iconBg: 'bg-accent-light', iconColor: 'text-accent',
     label: 'Registrar desparasitante', detail: 'Primera aplicacion', urgent: false,
-  });
-}
-
-if (daysLeft !== null && daysLeft <= 5) {
-  todoActions.push({
-    href: '/alimentacion',
-    icon: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3v7"/>',
-    iconBg: daysLeft <= 2 ? 'bg-red-50' : 'bg-amber/10',
-    iconColor: daysLeft <= 2 ? 'text-red-500' : 'text-amber-600',
-    label: daysLeft === 0 ? 'Comida agotada' : `${daysLeft}d de comida restante`,
-    detail: currentFood?.brand || 'Comprar alimento',
-    urgent: daysLeft <= 2,
   });
 }
 
@@ -667,20 +635,29 @@ const topActions = todoActions.slice(0, 4);
     </a>
     <a href="/alimentacion" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
       <p class="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Comida</p>
-      {currentFood ? (
+      {foodStats.latestFood ? (
         <>
-          <p class="text-sm font-bold text-ink truncate">{currentFood.brand}</p>
-          {daysLeft !== null && totalDays !== null && (
-            <div class="mt-1.5">
-              <p class="text-[11px] text-muted mb-1">{daysLeft}d restantes</p>
-              <div class="h-1.5 rounded-full bg-card-border overflow-hidden">
-                <div
-                  class="h-1.5 rounded-full transition-all"
-                  style={`width: ${totalDays > 0 ? Math.round((daysLeft / totalDays) * 100) : 0}%; background-color: ${daysLeft <= 5 ? '#EF4444' : daysLeft <= 10 ? '#F59E0B' : '#22C55E'};`}
-                />
-              </div>
-            </div>
-          )}
+          <p class="text-sm font-bold text-ink truncate">{foodStats.latestFood.brand}</p>
+          <div class="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
+            {foodStats.avgPricePerDay !== null && (
+              <p class="text-[11px] text-muted">
+                <span class="font-semibold text-ink">${formatCurrency(foodStats.avgPricePerDay)}</span>/día
+              </p>
+            )}
+            {foodStats.avgDaysPerBag !== null && (
+              <p class="text-[11px] text-muted">
+                <span class="font-semibold text-ink">{foodStats.avgDaysPerBag}d</span>/bolsa
+              </p>
+            )}
+            {foodStats.avgDailyGrams !== null && (
+              <p class="text-[11px] text-muted">
+                <span class="font-semibold text-ink">{foodStats.avgDailyGrams}g</span>/día
+              </p>
+            )}
+            <p class="text-[11px] text-muted">
+              <span class="font-semibold text-ink">{foodStats.totalBags}</span> {foodStats.totalBags === 1 ? 'bolsa' : 'bolsas'}
+            </p>
+          </div>
         </>
       ) : (
         <p class="text-sm text-muted">—</p>

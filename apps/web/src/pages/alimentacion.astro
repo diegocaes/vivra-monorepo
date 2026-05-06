@@ -2,9 +2,7 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import Card from '../components/ui/Card.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import EmptyState from '../components/ui/EmptyState.astro';
-import PremiumGate from '../components/ui/PremiumGate.astro';
-import { formatDate, formatDateShort } from '@vivra/shared';
+import { formatDate, formatDateShort, computeFoodStats, formatCurrency } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { getPremiumStatus } from '../lib/premium';
 import { FOOD_TYPES } from '@vivra/shared';
@@ -17,12 +15,6 @@ if (!pet) return Astro.redirect('/perfil?new=1');
 
 const premium = await getPremiumStatus(supabase, user.id);
 
-function bagToGrams(size: number, unit: string): number {
-  if (unit === 'kg') return size * 1000;
-  if (unit === 'lb') return size * 453.592;
-  return size;
-}
-
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action') as string;
@@ -32,16 +24,38 @@ if (Astro.request.method === 'POST') {
     const fields = {
       brand:       formData.get('brand') as string,
       type:        (formData.get('type') as string) || null,
+      food_type:   (formData.get('type') as string) || null,
       daily_grams: formData.get('daily_grams') ? Number(formData.get('daily_grams')) : null,
       frequency:   (formData.get('frequency') as string) || null,
       bag_size:    formData.get('bag_size') ? Number(formData.get('bag_size')) : null,
       bag_unit:    (formData.get('bag_unit') as string) || 'kg',
       price:       formData.get('price') ? Number(formData.get('price')) : null,
       start_date:  (formData.get('start_date') as string) || null,
+      end_date:    (formData.get('end_date') as string) || null,
       notes:       (formData.get('notes') as string) || null,
     };
 
     if (action === 'add') {
+      // Auto-close the previous still-active bag when the user logs a new one.
+      // Sets previous bag's end_date to the new bag's start_date — only if the
+      // new bag's start_date is on/after the previous one's start_date (avoids
+      // closing the active bag when registering an old one out of order).
+      if (fields.start_date) {
+        const { data: prevFoods } = await supabase
+          .from('foods')
+          .select('id, start_date, created_at')
+          .eq('pet_id', pet.id)
+          .is('end_date', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const prev = prevFoods?.[0];
+        if (prev) {
+          const prevStart = prev.start_date || (prev.created_at ? prev.created_at.slice(0, 10) : null);
+          if (prevStart && fields.start_date >= prevStart) {
+            await supabase.from('foods').update({ end_date: fields.start_date }).eq('id', prev.id);
+          }
+        }
+      }
       const { error } = await supabase.from('foods').insert({ pet_id: pet.id, ...fields });
       if (error) return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent(error.message));
     }
@@ -86,59 +100,47 @@ const { data: rawFoods } = await supabase
   .eq('pet_id', pet.id)
   .order('created_at', { ascending: false });
 
-const foods = (rawFoods ?? []).map(food => {
-  const totalGrams = food.bag_size ? bagToGrams(food.bag_size, food.bag_unit ?? 'kg') : null;
-  const daysTotal  = (totalGrams && food.daily_grams) ? Math.floor(totalGrams / food.daily_grams) : null;
-  const costPerDay = (food.price && daysTotal && daysTotal > 0)
-    ? (food.price / daysTotal).toFixed(2) : null;
-  // Días restantes basado en start_date, con fallback a created_at para filas antiguas.
-  const bagStartStr = food.start_date || food.created_at || null;
-  const bagStart = bagStartStr
-    ? new Date(bagStartStr.length > 10 ? bagStartStr : bagStartStr + 'T00:00:00')
-    : null;
-  const daysElapsed = bagStart
-    ? Math.floor((Date.now() - bagStart.getTime()) / 86400000)
-    : null;
-  const daysRemaining = (daysTotal && daysElapsed !== null)
-    ? Math.max(0, daysTotal - daysElapsed)
-    : null;
-  const progressPct = (daysTotal && daysRemaining !== null)
-    ? Math.round((daysRemaining / daysTotal) * 100)
-    : null;
-  // Fecha en que se acaba la bolsa: start + daysTotal. Es la fecha de "caducidad
-  // de uso" (no de la comida). Cuando endedDaysAgo > 0, ya pasó esa fecha.
-  let endDate: string | null = null;
-  if (bagStart && daysTotal) {
-    const end = new Date(bagStart);
-    end.setDate(end.getDate() + daysTotal);
-    endDate = end.toISOString().slice(0, 10);
+// Anotamos cada food con un `foodType` y un texto de "duración" pre-calculado
+// para el render. La trazabilidad real (promedios) la calcula computeFoodStats.
+type FoodRow = NonNullable<typeof rawFoods>[number] & {
+  foodType: string | null;
+  durationLine: string;
+  isActive: boolean;
+};
+
+const foods: FoodRow[] = (rawFoods ?? []).map(food => {
+  const start = food.start_date ?? (food.created_at ? food.created_at.slice(0, 10) : null);
+  const isActive = !food.end_date;
+  let durationLine = '—';
+  if (food.end_date && start) {
+    const days = Math.max(0, Math.floor(
+      (new Date(food.end_date + 'T00:00:00').getTime() - new Date(start + 'T00:00:00').getTime()) / 86400000
+    ));
+    durationLine = `${formatDateShort(start)} – ${formatDateShort(food.end_date)} (${days} días)`;
+  } else if (start) {
+    durationLine = `${formatDateShort(start)} – actual`;
   }
-  const endedDaysAgo = (daysTotal && daysElapsed !== null && daysElapsed >= daysTotal)
-    ? daysElapsed - daysTotal
-    : null;
-  const foodType = food.type ?? null;
-  return { ...food, totalGrams, daysTotal, costPerDay, daysElapsed, daysRemaining, progressPct, foodType, endDate, endedDaysAgo };
+  return {
+    ...food,
+    foodType: food.food_type ?? food.type ?? null,
+    durationLine,
+    isActive,
+  };
 });
 
-// Analytics
-const currentFood = foods[0] ?? null;
-
-// Pre-compute hint flags for the hero card. Astro's parser can choke on
-// inline `<= 5` ternaries (mistakes them for JSX), so we lift the conditions
-// out of the template.
-const heroEnded = currentFood?.endedDaysAgo !== null && currentFood?.endedDaysAgo !== undefined;
-const heroLowStock = !heroEnded
-  && currentFood?.daysRemaining !== null
-  && currentFood?.daysRemaining !== undefined
-  && currentFood.daysRemaining <= 5
-  && !!currentFood.endDate;
-const heroNotificationHint = !heroEnded && !heroLowStock
-  && !!currentFood?.endDate
-  && currentFood?.daysRemaining !== null
-  && currentFood?.daysRemaining !== undefined;
-const avgDaysPerBag = foods.filter(f => f.daysTotal).length > 0
-  ? Math.round(foods.filter(f => f.daysTotal).reduce((s, f) => s + f.daysTotal!, 0) / foods.filter(f => f.daysTotal).length)
-  : null;
+// Promedios y totales — la pieza informativa central de la página.
+const stats = computeFoodStats(foods.map(f => ({
+  brand: f.brand,
+  food_type: f.food_type ?? f.type,
+  type: f.type,
+  daily_grams: f.daily_grams,
+  bag_size: f.bag_size,
+  bag_unit: f.bag_unit,
+  start_date: f.start_date,
+  end_date: f.end_date,
+  price: f.price,
+  created_at: f.created_at,
+})));
 
 // Fetch treats
 let treats: any[] = [];
@@ -164,155 +166,51 @@ for (let i = 5; i >= 0; i--) {
   monthlySpend.push({ label: MONTH_LABELS[d.getMonth()], total });
 }
 const maxSpend = Math.max(...monthlySpend.map(m => m.total), 1);
-
-function bagStatusText(daysRemaining: number | null, daysElapsed: number | null): string | null {
-  if (daysRemaining === null) return null;
-  if (daysRemaining === 0) return 'Se terminó — hora de reabastecer';
-  if (daysRemaining <= 3) return `Quedan ${daysRemaining} días — ¡casi se acaba!`;
-  return `${daysElapsed} días desde que se abrió`;
-}
 ---
 
 <MainLayout title="Alimentación">
   <SectionHeader title="Alimentación" subtitle={`Dieta y control de comida de ${pet.name}`} />
 
-  {/* ── ANALYTICS ── */}
-  {currentFood ? (
+  {/* ── STATS CARD: averages + total spent. No countdown, no alarm. ── */}
+  {stats.totalBags > 0 ? (
     <div class="mb-5 animate-fade-up">
-      {/* Hero stat */}
-      <div class="rounded-2xl mb-3 px-5 py-4 border border-card-border bg-card">
-        <div class="flex items-center gap-2 mb-1">
-          <p class="text-xs font-semibold text-muted uppercase tracking-widest">Alimento actual</p>
-          {currentFood.endedDaysAgo === null && currentFood.daysTotal && (
-            <span class="inline-flex items-center gap-1 rounded-full bg-green-50 text-green-700 px-2 py-0.5 text-[10px] font-semibold">
-              <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
-              Activa
-            </span>
-          )}
-          {currentFood.endedDaysAgo !== null && (
-            <span class="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-[10px] font-semibold">
-              <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
-              Se acabó
-            </span>
-          )}
+      <div class="rounded-2xl px-5 py-4 border border-card-border bg-card">
+        <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-1">Promedios de alimentación</p>
+        {stats.latestFood && (
+          <p class="text-sm text-muted mb-3">
+            Último: <span class="font-semibold text-ink">{stats.latestFood.brand}</span>
+            {stats.latestFood.type && ` · ${FOOD_TYPES[stats.latestFood.type] || stats.latestFood.type}`}
+          </p>
+        )}
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+            <p class="text-lg font-black text-ink">{stats.avgPricePerDay !== null ? `$${formatCurrency(stats.avgPricePerDay)}` : '—'}</p>
+            <p class="text-[10px] text-muted font-medium mt-0.5">$/día prom.</p>
+          </div>
+          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+            <p class="text-lg font-black text-ink">{stats.avgDaysPerBag !== null ? `${stats.avgDaysPerBag}d` : '—'}</p>
+            <p class="text-[10px] text-muted font-medium mt-0.5">dura/bolsa</p>
+          </div>
+          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+            <p class="text-lg font-black text-ink">{stats.avgDailyGrams !== null ? `${stats.avgDailyGrams}g` : '—'}</p>
+            <p class="text-[10px] text-muted font-medium mt-0.5">g/día prom.</p>
+          </div>
+          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+            <p class="text-lg font-black text-ink">{stats.totalBags}</p>
+            <p class="text-[10px] text-muted font-medium mt-0.5">{stats.totalBags === 1 ? 'bolsa' : 'bolsas'}</p>
+          </div>
         </div>
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-xl font-bold text-ink">{currentFood.brand}</p>
-            <p class="text-sm text-muted">
-              {FOOD_TYPES[currentFood.foodType] || currentFood.foodType || '—'}
-              {currentFood.daily_grams ? ` · ${currentFood.daily_grams}g/día` : ''}
-              {currentFood.frequency && ` · ${currentFood.frequency === '1x' ? '1x/día' : currentFood.frequency === '2x' ? '2x/día' : currentFood.frequency === '3x' ? '3x/día' : 'libre acceso'}`}
-            </p>
-          </div>
-          {currentFood.daysTotal && (
-            <div class="text-right shrink-0">
-              {currentFood.endedDaysAgo !== null ? (
-                <>
-                  <p class="text-2xl font-black text-red-500">⚠</p>
-                  <p class="text-xs text-red-500 font-semibold">se acabó</p>
-                </>
-              ) : currentFood.daysRemaining !== null ? (
-                <>
-                  <p class="text-2xl font-black text-ink">≈{currentFood.daysRemaining}</p>
-                  <p class="text-xs text-muted">días restantes</p>
-                </>
-              ) : (
-                <>
-                  <p class="text-2xl font-black text-ink">≈{currentFood.daysTotal}</p>
-                  <p class="text-xs text-muted">{['barf', 'mixto'].includes(currentFood.foodType ?? '') ? 'días/lote' : 'días/bolsa'}</p>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Progress bar — only when bag is still active */}
-        {currentFood.daysTotal && currentFood.endedDaysAgo === null && (
-          <div class="mt-3">
-            <div class="h-1.5 w-full rounded-full bg-canvas overflow-hidden">
-              <div
-                class="h-full rounded-full transition-all"
-                style={`width: ${currentFood.progressPct ?? 100}%; background-color: ${(currentFood.progressPct ?? 100) < 20 ? '#EF4444' : (currentFood.progressPct ?? 100) < 40 ? '#F59E0B' : '#22C55E'};`}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Date timeline: empezó → termina/terminó */}
-        {currentFood.start_date && currentFood.endDate && (
-          <div class="mt-3 pt-3 border-t border-card-border flex items-center justify-between">
-            <div>
-              <p class="text-[10px] uppercase font-semibold text-muted tracking-wider">Empezó</p>
-              <p class="text-sm font-semibold text-ink">{formatDateShort(currentFood.start_date)}</p>
-            </div>
-            <svg class="h-3.5 w-3.5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
-            <div class="text-right">
-              <p class="text-[10px] uppercase font-semibold text-muted tracking-wider">
-                {currentFood.endedDaysAgo === null ? 'Termina ~' : 'Terminó'}
-              </p>
-              <p class:list={['text-sm font-semibold', currentFood.endedDaysAgo !== null ? 'text-red-500' : 'text-ink']}>
-                {formatDateShort(currentFood.endDate)}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Smart hint: out-of-stock, running low, or just info about notifications */}
-        {heroEnded && (
-          <div class="mt-3 flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
-            <svg class="h-4 w-4 text-red-500 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-red-700">
-                {currentFood.endedDaysAgo === 0 ? 'Se acabó hoy.' : `Hace ${currentFood.endedDaysAgo} ${currentFood.endedDaysAgo === 1 ? 'día' : 'días'} que se acabó.`}
-              </p>
-              <p class="text-xs text-red-600 mt-0.5">Hora de comprar y registrar el nuevo alimento.</p>
-            </div>
-          </div>
-        )}
-        {heroLowStock && (
-          <div class="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5">
-            <svg class="h-4 w-4 text-amber-600 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-amber-700">Compra antes del {formatDateShort(currentFood.endDate!)}.</p>
-              <p class="text-xs text-amber-600 mt-0.5">Quedan {currentFood.daysRemaining} {currentFood.daysRemaining === 1 ? 'día' : 'días'} de la bolsa actual.</p>
-            </div>
-          </div>
-        )}
-        {heroNotificationHint && (
-          <div class="mt-3 flex items-center gap-2 rounded-xl bg-canvas px-3 py-2">
-            <svg class="h-3.5 w-3.5 text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.4-1.4A7 7 0 0 0 19 11.5V8a7 7 0 1 0-14 0v3.5a7 7 0 0 0 .4 2.1L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
-            <p class="text-xs text-muted">
-              Te avisamos por notificación 1 día antes de que se acabe.
-            </p>
-          </div>
+        {stats.totalSpent > 0 && (
+          <p class="mt-3 pt-3 border-t border-card-border text-xs text-muted text-center">
+            Total gastado en alimentación: <span class="font-semibold text-ink">${formatCurrency(stats.totalSpent)}</span>
+          </p>
         )}
       </div>
-
-      {/* Stats row — premium analytics */}
-      {(currentFood.costPerDay || avgDaysPerBag || foods.length > 1) && (
-        <PremiumGate isPremium={premium.isPremium} feature="costAnalysis" title="Analytics de comida" description="Costo por dia, promedios y mas. Refiere un amigo o suscríbete para desbloquear.">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-              <p class="text-lg font-black text-ink">{currentFood.costPerDay ? `$${currentFood.costPerDay}` : '—'}</p>
-              <p class="text-[10px] text-muted font-medium mt-0.5">costo/día</p>
-            </div>
-            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-              <p class="text-lg font-black text-ink">{avgDaysPerBag ?? '—'}</p>
-              <p class="text-[10px] text-muted font-medium mt-0.5">días prom.</p>
-            </div>
-            <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-              <p class="text-lg font-black text-ink">{foods.length}</p>
-              <p class="text-[10px] text-muted font-medium mt-0.5">alimentos</p>
-            </div>
-          </div>
-        </PremiumGate>
-      )}
     </div>
   ) : (
     <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
-      <p class="text-sm font-semibold text-ink mb-1">Sin alimento registrado</p>
-      <p class="text-xs text-muted">Agrega el alimento actual de {pet.name} para ver los análisis</p>
+      <p class="text-sm font-semibold text-ink mb-1">Aún no has registrado comida</p>
+      <p class="text-xs text-muted">Agrega el primer alimento de {pet.name} para empezar a ver promedios de costo y duración</p>
     </div>
   )}
 
@@ -410,9 +308,16 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
               <input type="date" name="start_date" class="field-input" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-ink mb-1">Notas</label>
-              <input type="text" name="notes" placeholder="Alergias, marca anterior..." class="field-input" />
+              <label class="block text-sm font-medium text-ink mb-1">Fecha de fin <span class="text-muted text-xs">(opcional)</span></label>
+              <input type="date" name="end_date" class="field-input" />
             </div>
+          </div>
+          <p class="text-[11px] text-muted/80 -mt-2 italic">
+            La fecha de fin se autocompleta cuando registras la siguiente bolsa. Vacío = bolsa actual.
+          </p>
+          <div>
+            <label class="block text-sm font-medium text-ink mb-1">Notas</label>
+            <textarea name="notes" placeholder="Reacción, dónde la compraste, observaciones..." rows="2" class="field-input w-full"></textarea>
           </div>
           <button type="submit" class="w-full rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
             Registrar alimento
@@ -486,39 +391,25 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
     </div>
   ) : (
     <div class="space-y-3">
-      {foods.slice(0, premium.isPremium ? foods.length : 3).map((food, i) => {
-        const isCurrent = i === 0;
-        const isPast = !isCurrent || food.endedDaysAgo !== null;
-        return (
-        <Card variant="elevated" class:list={['animate-fade-up', i < 5 && `animate-fade-up-delay-${Math.min(i + 1, 5)}`, !isCurrent && 'opacity-90']}>
+      {foods.slice(0, premium.isPremium ? foods.length : 3).map((food, i) => (
+        <Card variant="elevated" class:list={['animate-fade-up', i < 5 && `animate-fade-up-delay-${Math.min(i + 1, 5)}`, !food.isActive && 'opacity-90']}>
 
           {/* ── VIEW ── */}
           <div class="item-view" data-id={food.id}>
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3 flex-1 min-w-0">
-                <div class:list={['shrink-0 rounded-xl p-2.5', isCurrent && food.endedDaysAgo === null ? 'bg-accent/10 text-accent' : 'bg-canvas text-muted']}>
+                <div class:list={['shrink-0 rounded-xl p-2.5', food.isActive ? 'bg-accent/10 text-accent' : 'bg-canvas text-muted']}>
                   <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
-                    {isCurrent && food.endedDaysAgo === null && (
+                    <p class="font-semibold text-ink">{food.brand}</p>
+                    {food.isActive && (
                       <span class="inline-flex items-center gap-1 rounded-full bg-green-50 text-green-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                         <span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
                         Actual
                       </span>
                     )}
-                    {isCurrent && food.endedDaysAgo !== null && (
-                      <span class="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                        <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
-                        Se acabó
-                      </span>
-                    )}
-                    {!isCurrent && (
-                      <span class="inline-flex items-center gap-1 rounded-full bg-canvas text-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                        Anterior
-                      </span>
-                    )}
-                    <p class:list={['font-semibold', isCurrent ? 'text-ink' : 'text-muted']}>{food.brand}</p>
                     {food.foodType && (
                       <span class="rounded-full bg-canvas px-2 py-0.5 text-xs font-medium text-muted">
                         {FOOD_TYPES[food.foodType] || food.foodType}
@@ -526,60 +417,16 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
                     )}
                   </div>
 
-                  {/* CURRENT bag — show progress + days remaining */}
-                  {isCurrent && food.endedDaysAgo === null && food.daysTotal && (
-                    <div class="mt-2.5 mb-2">
-                      <div class="flex items-baseline gap-1.5 mb-1">
-                        {food.daysRemaining !== null ? (
-                          <>
-                            <span class="text-xl font-bold text-ink">≈ {food.daysRemaining}</span>
-                            <span class="text-sm text-muted">días restantes</span>
-                          </>
-                        ) : (
-                          <>
-                            <span class="text-xl font-bold text-ink">≈ {food.daysTotal}</span>
-                            <span class="text-sm text-muted">días por {['barf', 'mixto'].includes(food.foodType ?? '') ? 'lote' : 'bolsa'}</span>
-                          </>
-                        )}
-                      </div>
-                      <div class="h-1.5 w-full rounded-full bg-canvas overflow-hidden">
-                        <div
-                          class="h-full rounded-full bg-accent transition-all"
-                          style={`width: ${food.progressPct ?? 100}%;`}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PAST or ENDED bag — show "Duró X días · Terminó el Y" */}
-                  {(isPast && food.daysTotal) && (
-                    <p class="text-sm text-muted mt-1.5">
-                      Duró <span class="font-semibold text-ink">{food.daysTotal} días</span>
-                      {food.endDate && <> · Terminó el <span class="font-semibold text-ink">{formatDateShort(food.endDate)}</span></>}
-                    </p>
-                  )}
-
                   <div class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
                     {food.daily_grams && <span class="text-xs text-muted">{food.daily_grams}g/día</span>}
                     {food.bag_size && <span class="text-xs text-muted">{food.bag_size} {food.bag_unit ?? 'kg'}</span>}
-                    {food.costPerDay && <span class="text-xs font-semibold text-accent">${food.costPerDay}/día</span>}
-                    {food.price && <span class="text-xs text-muted">${food.price} {['barf', 'mixto'].includes(food.foodType ?? '') ? 'lote' : 'bolsa'}</span>}
+                    {food.price !== null && food.price !== undefined && <span class="text-xs font-semibold text-accent">${formatCurrency(food.price)}</span>}
                     {food.frequency && (
                       <span class="text-xs text-muted">{food.frequency === '1x' ? '1x/día' : food.frequency === '2x' ? '2x/día' : food.frequency === '3x' ? '3x/día' : 'Libre acceso'}</span>
                     )}
                   </div>
-                  {/* For current bag, show start_date. For past bags, the end date is already shown above. */}
-                  {isCurrent && food.start_date && (
-                    <p class="text-xs text-muted mt-1">
-                      {food.endDate
-                        ? <>Empezó el <span class="font-medium">{formatDateShort(food.start_date)}</span> · {food.endedDaysAgo === null ? 'termina ~' : 'terminó el '}<span class:list={['font-medium', food.endedDaysAgo !== null && 'text-red-500']}>{formatDateShort(food.endDate)}</span></>
-                        : <>Desde {formatDate(food.start_date)}</>}
-                    </p>
-                  )}
-                  {!isCurrent && food.start_date && !food.daysTotal && (
-                    <p class="text-xs text-muted mt-1">Desde {formatDate(food.start_date)}</p>
-                  )}
-                  {food.notes && <p class="text-xs text-muted mt-1 italic">{food.notes}</p>}
+                  <p class="text-xs text-muted mt-1">{food.durationLine}</p>
+                  {food.notes && <p class="text-xs text-muted mt-1 italic">"{food.notes}"</p>}
                 </div>
               </div>
               <div class="flex gap-1 shrink-0">
@@ -633,17 +480,23 @@ function bagStatusText(daysRemaining: number | null, daysElapsed: number | null)
               <input type="number" name="price" value={food.price || ''} placeholder="Precio $" step="0.01" class="field-input-sm" />
             </div>
             <div class="grid grid-cols-2 gap-3">
-              <input type="date" name="start_date" value={food.start_date || ''} class="field-input-sm" />
-              <input type="text" name="notes" value={food.notes || ''} placeholder="Notas" class="field-input-sm" />
+              <div>
+                <label class="block text-[10px] font-medium text-muted mb-1 uppercase tracking-wider">Inicio</label>
+                <input type="date" name="start_date" value={food.start_date || ''} class="field-input-sm" />
+              </div>
+              <div>
+                <label class="block text-[10px] font-medium text-muted mb-1 uppercase tracking-wider">Fin (vacío = actual)</label>
+                <input type="date" name="end_date" value={food.end_date || ''} class="field-input-sm" />
+              </div>
             </div>
+            <textarea name="notes" placeholder="Notas (reacción, dónde la compraste...)" class="field-input-sm w-full" rows="2">{food.notes || ''}</textarea>
             <button type="submit" class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
               Guardar cambios
             </button>
           </form>
 
         </Card>
-        );
-      })}
+      ))}
 
       {!premium.isPremium && foods.length > 3 && (
         <div class="mt-3 rounded-2xl border border-card-border bg-canvas px-5 py-4 text-center">

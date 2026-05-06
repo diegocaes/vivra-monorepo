@@ -8,8 +8,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
 import { useSubscription } from '../../hooks/useSubscription';
-import { scheduleFoodReminder } from '../../hooks/useNotifications';
-import { formatDate, formatDateShort } from '@vivra/shared';
+import { formatDateShort, computeFoodStats, formatCurrency } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -86,61 +85,31 @@ function TreatSpendChart({ treats }: { treats: Treat[] }) {
   );
 }
 
-function bagToGrams(size: number, unit: string): number {
-  if (unit === 'kg') return size * 1000;
-  if (unit === 'lb') return size * 453.592;
-  return size;
-}
+/** Compute "duration display" for one bag: real (with end_date), projected
+ *  (from bag_size/daily_grams) or running (active). Used for list cards. */
+function describeFoodDuration(food: Food): { line: string; isActive: boolean } {
+  const start = food.start_date ?? food.created_at?.slice(0, 10) ?? null;
 
-interface FoodWithCalc extends Food {
-  daysTotal: number | null;
-  daysRemaining: number | null;
-  progressPct: number | null;
-  /** ISO date (YYYY-MM-DD) when the bag is projected to / did finish. */
-  endDate: string | null;
-  /** Days since the bag finished. null if still active. */
-  endedDaysAgo: number | null;
-}
-
-function enrichFood(food: Food): FoodWithCalc {
-  const totalGrams = food.bag_size ? bagToGrams(food.bag_size, food.bag_unit ?? 'kg') : null;
-  const daysTotal = (totalGrams && food.daily_grams) ? Math.floor(totalGrams / food.daily_grams) : null;
-  // Use start_date if the user set one; otherwise fall back to created_at so
-  // pets with older rows still show a bag-progress bar instead of an empty state.
-  const bagStartStr = food.start_date || food.created_at || null;
-  const bagStart = bagStartStr
-    ? new Date(bagStartStr.length > 10 ? bagStartStr : bagStartStr + 'T00:00:00')
-    : null;
-  const daysElapsed = bagStart
-    ? Math.floor((Date.now() - bagStart.getTime()) / 86400000)
-    : null;
-  const daysRemaining = (daysTotal && daysElapsed !== null)
-    ? Math.max(0, daysTotal - daysElapsed)
-    : null;
-  const progressPct = (daysTotal && daysRemaining !== null)
-    ? Math.round((daysRemaining / daysTotal) * 100)
-    : null;
-
-  // Projected/actual end date: start + total days the bag should last.
-  let endDate: string | null = null;
-  if (bagStart && daysTotal) {
-    const end = new Date(bagStart);
-    end.setDate(end.getDate() + daysTotal);
-    endDate = end.toISOString().slice(0, 10);
+  if (food.end_date && start) {
+    const days = Math.max(0, Math.floor(
+      (new Date(food.end_date + 'T00:00:00').getTime() - new Date(start + 'T00:00:00').getTime()) / 86400000
+    ));
+    return {
+      line: `${formatDateShort(start)} – ${formatDateShort(food.end_date)} (${days} días)`,
+      isActive: false,
+    };
   }
-  // How many days ago the bag finished (>= 0). null while still active.
-  const endedDaysAgo = (daysTotal && daysElapsed !== null && daysElapsed >= daysTotal)
-    ? daysElapsed - daysTotal
-    : null;
-
-  return { ...food, daysTotal, daysRemaining, progressPct, endDate, endedDaysAgo };
+  if (start) {
+    return { line: `${formatDateShort(start)} – actual`, isActive: true };
+  }
+  return { line: '—', isActive: true };
 }
 
 export default function AlimentacionScreen() {
   const router = useRouter();
   const { pet } = usePetContext();
   const { isPremium } = useSubscription();
-  const [foods, setFoods] = useState<FoodWithCalc[]>([]);
+  const [foods, setFoods] = useState<Food[]>([]);
   const [treats, setTreats] = useState<Treat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,7 +124,9 @@ export default function AlimentacionScreen() {
   const [frequency, setFrequency] = useState('');
   const [bagSize, setBagSize] = useState('');
   const [bagUnit, setBagUnit] = useState('kg');
+  const [foodPrice, setFoodPrice] = useState('');
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(''); // Empty = bag still in use
   const [foodNotes, setFoodNotes] = useState('');
 
   // Treat form
@@ -178,29 +149,10 @@ export default function AlimentacionScreen() {
 
     if (foodsRes.error) console.warn('[Alimentacion] foods error:', foodsRes.error.message);
     if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
-    const enrichedFoods = ((foodsRes.data as Food[]) ?? []).map(enrichFood);
-    setFoods(enrichedFoods);
+    setFoods((foodsRes.data as Food[]) ?? []);
     setTreats((treatsRes.data as Treat[]) ?? []);
     setLoading(false);
-
-    // Schedule a "food running low" reminder when active bag has ≤3 days left.
-    // The function cancels any prior reminder for this pet, so it's safe to call
-    // on every refresh — only the most recent state stays scheduled.
-    const active = enrichedFoods[0];
-    if (
-      pet?.name &&
-      active?.brand &&
-      active.daysRemaining != null &&
-      active.daysRemaining >= 0 &&
-      active.daysRemaining <= 3
-    ) {
-      scheduleFoodReminder({
-        petName: pet.name,
-        brand: active.brand,
-        daysRemaining: active.daysRemaining,
-      }).catch(() => {});
-    }
-  }, [pet?.id, pet?.name]);
+  }, [pet?.id]);
 
   useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
 
@@ -213,7 +165,9 @@ export default function AlimentacionScreen() {
   // Food form helpers
   const resetFoodForm = () => {
     setBrand(''); setFoodType(''); setDailyGrams(''); setFrequency('');
-    setBagSize(''); setBagUnit('kg'); setStartDate(new Date().toISOString().slice(0, 10));
+    setBagSize(''); setBagUnit('kg'); setFoodPrice('');
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setEndDate('');
     setFoodNotes(''); setEditingFood(null);
   };
 
@@ -226,8 +180,10 @@ export default function AlimentacionScreen() {
     setFrequency(food.frequency ?? '');
     setBagSize(food.bag_size?.toString() ?? '');
     setBagUnit(food.bag_unit ?? 'kg');
+    setFoodPrice(food.price?.toString() ?? '');
     setStartDate(new Date().toISOString().slice(0, 10));
-    setFoodNotes(food.notes ?? '');
+    setEndDate(''); // new bag = active
+    setFoodNotes('');
     setEditingFood(null);
   };
 
@@ -247,7 +203,9 @@ export default function AlimentacionScreen() {
     setFrequency(food.frequency ?? '');
     setBagSize(food.bag_size?.toString() ?? '');
     setBagUnit(food.bag_unit ?? 'kg');
+    setFoodPrice(food.price?.toString() ?? '');
     setStartDate(food.start_date ?? new Date().toISOString().slice(0, 10));
+    setEndDate(food.end_date ?? '');
     setFoodNotes(food.notes ?? '');
     setShowFoodForm(true);
   };
@@ -266,9 +224,33 @@ export default function AlimentacionScreen() {
       frequency: frequency || null,
       bag_size: bagSize ? parseFloat(bagSize) : null,
       bag_unit: bagUnit,
+      price: foodPrice ? parseFloat(foodPrice) : null,
       start_date: startDate || null,
+      end_date: endDate || null,
       notes: foodNotes || null,
     };
+
+    // Auto-close the previous still-active bag when the user logs a NEW one.
+    // Strategy: set previous bag's end_date to the new bag's start_date.
+    // Skipped if the new bag is in edit mode, or if its start_date is before
+    // the previous bag's start_date (out-of-order log of an old bag).
+    if (!editingFood && startDate) {
+      const { data: prevFoods } = await supabase
+        .from('foods')
+        .select('id, start_date, created_at')
+        .eq('pet_id', pet.id)
+        .is('end_date', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const prev = prevFoods?.[0];
+      if (prev) {
+        const prevStart = prev.start_date || prev.created_at?.slice(0, 10);
+        if (prevStart && startDate >= prevStart) {
+          await supabase.from('foods').update({ end_date: startDate }).eq('id', prev.id);
+        }
+      }
+    }
 
     const { error } = editingFood
       ? await supabase.from('foods').update(payload).eq('id', editingFood.id)
@@ -344,7 +326,7 @@ export default function AlimentacionScreen() {
     ]);
   };
 
-  const currentFood = foods[0] ?? null;
+  const stats = computeFoodStats(foods);
   const totalTreatSpend = treats.filter(t => t.price).reduce((s, t) => s + (t.price ?? 0), 0);
 
   return (
@@ -361,121 +343,72 @@ export default function AlimentacionScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Active food hero */}
-        {currentFood ? (
-          <TouchableOpacity activeOpacity={0.7} onPress={() => openEditFood(currentFood)}>
-            <Card>
-              <Text style={styles.heroLabel}>ALIMENTO ACTUAL</Text>
-              <View style={styles.heroRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.heroBrand} numberOfLines={1}>{currentFood.brand}</Text>
-                  <Text style={styles.heroSub}>
-                    {FOOD_TYPES[currentFood.food_type ?? currentFood.type ?? ''] ?? ''}
-                    {currentFood.daily_grams ? ` · ${currentFood.daily_grams}g/día` : ''}
-                    {currentFood.frequency ? ` · ${currentFood.frequency}` : ''}
-                  </Text>
-                </View>
-                {currentFood.daysRemaining !== null && (
-                  <View style={styles.heroRight}>
-                    {currentFood.endedDaysAgo === null ? (
-                      <>
-                        <Text style={styles.heroDays}>≈{currentFood.daysRemaining}</Text>
-                        <Text style={styles.heroDaysLabel}>días</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="alert-circle" size={32} color={Colors.bad} />
-                        <Text style={[styles.heroDaysLabel, { color: Colors.bad, fontWeight: FontWeight.semibold }]}>se acabó</Text>
-                      </>
-                    )}
-                  </View>
-                )}
+        {/* Stats card — averages and trazabilidad. No countdown, no alarm. */}
+        {stats.totalBags > 0 ? (
+          <Card>
+            <Text style={styles.heroLabel}>PROMEDIOS DE ALIMENTACIÓN</Text>
+            {stats.latestFood && (
+              <Text style={styles.heroSub}>
+                Último: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.ink }}>{stats.latestFood.brand}</Text>
+                {stats.latestFood.type && ` · ${FOOD_TYPES[stats.latestFood.type] ?? stats.latestFood.type}`}
+              </Text>
+            )}
+            <View style={styles.statsGrid}>
+              <View style={styles.statCell}>
+                <Text style={styles.statCellValue}>
+                  {stats.avgPricePerDay !== null ? `$${formatCurrency(stats.avgPricePerDay)}` : '—'}
+                </Text>
+                <Text style={styles.statCellLabel}>$/día prom.</Text>
               </View>
-
-              {/* Progress bar — only while bag is active */}
-              {currentFood.progressPct !== null && currentFood.endedDaysAgo === null && (
-                <View style={styles.progressBg}>
-                  <View style={[
-                    styles.progressFill,
-                    {
-                      width: `${currentFood.progressPct}%`,
-                      backgroundColor: currentFood.progressPct < 20 ? Colors.bad
-                        : currentFood.progressPct < 40 ? Colors.warn : Colors.good,
-                    },
-                  ]} />
-                </View>
-              )}
-
-              {/* Date timeline: empezó → termina/terminó */}
-              {currentFood.start_date && currentFood.endDate && (
-                <View style={styles.heroDateRow}>
-                  <View style={styles.heroDateCol}>
-                    <Text style={styles.heroDateLabel}>Empezó</Text>
-                    <Text style={styles.heroDateValue}>{formatDateShort(currentFood.start_date)}</Text>
-                  </View>
-                  <Ionicons name="arrow-forward" size={14} color={Colors.muted} style={{ marginHorizontal: Spacing.sm }} />
-                  <View style={[styles.heroDateCol, { alignItems: 'flex-end' }]}>
-                    <Text style={styles.heroDateLabel}>
-                      {currentFood.endedDaysAgo === null ? 'Termina ~' : 'Terminó'}
-                    </Text>
-                    <Text style={[
-                      styles.heroDateValue,
-                      currentFood.endedDaysAgo !== null && { color: Colors.bad },
-                    ]}>
-                      {formatDateShort(currentFood.endDate)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Smart hint: out-of-stock or running low */}
-              {currentFood.endedDaysAgo !== null ? (
-                <View style={[styles.hintBox, { backgroundColor: 'rgba(239,68,68,0.10)' }]}>
-                  <Ionicons name="cart-outline" size={14} color={Colors.bad} />
-                  <Text style={[styles.hintText, { color: Colors.bad }]}>
-                    {currentFood.endedDaysAgo === 0
-                      ? 'Se acabó hoy. Hora de comprar.'
-                      : `Hace ${currentFood.endedDaysAgo} ${currentFood.endedDaysAgo === 1 ? 'día' : 'días'} que se acabó. Hora de comprar.`}
-                  </Text>
-                </View>
-              ) : currentFood.daysRemaining !== null && currentFood.daysRemaining <= 5 && currentFood.endDate ? (
-                <View style={[styles.hintBox, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                  <Ionicons name="cart-outline" size={14} color={Colors.warn} />
-                  <Text style={[styles.hintText, { color: Colors.warn }]}>
-                    Compra antes del {formatDateShort(currentFood.endDate)}.
-                  </Text>
-                </View>
-              ) : null}
-            </Card>
-          </TouchableOpacity>
+              <View style={styles.statCell}>
+                <Text style={styles.statCellValue}>
+                  {stats.avgDaysPerBag !== null ? `${stats.avgDaysPerBag}d` : '—'}
+                </Text>
+                <Text style={styles.statCellLabel}>dura/bolsa</Text>
+              </View>
+              <View style={styles.statCell}>
+                <Text style={styles.statCellValue}>
+                  {stats.avgDailyGrams !== null ? `${stats.avgDailyGrams}g` : '—'}
+                </Text>
+                <Text style={styles.statCellLabel}>g/día prom.</Text>
+              </View>
+              <View style={styles.statCell}>
+                <Text style={styles.statCellValue}>{stats.totalBags}</Text>
+                <Text style={styles.statCellLabel}>{stats.totalBags === 1 ? 'bolsa' : 'bolsas'}</Text>
+              </View>
+            </View>
+            {stats.totalSpent > 0 && (
+              <Text style={styles.totalSpentText}>
+                Total gastado en alimentación: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.ink }}>${formatCurrency(stats.totalSpent)}</Text>
+              </Text>
+            )}
+          </Card>
         ) : (
           <Card>
             <View style={styles.emptyCard}>
               <Ionicons name="restaurant-outline" size={36} color={Colors.cardBorder} />
-              <Text style={styles.emptyTitle}>Sin alimento registrado</Text>
-              <Text style={styles.emptyText}>Agrega el alimento actual para ver progreso</Text>
+              <Text style={styles.emptyTitle}>Aún no has registrado comida</Text>
+              <Text style={styles.emptyText}>Agrega el primer alimento para empezar a ver promedios de costo y duración</Text>
               <Button title="Agregar alimento" onPress={openAddFood} style={{ marginTop: Spacing.sm }} />
             </View>
           </Card>
         )}
 
-        {/* Stats row */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{foods.length}</Text>
-            <Text style={styles.statLabel}>Alimentos</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{treats.length}</Text>
-            <Text style={styles.statLabel}>Snacks</Text>
-          </View>
-          {totalTreatSpend > 0 && (
+        {/* Treats stats — only show if user has logged any */}
+        {treats.length > 0 && (
+          <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statValue} numberOfLines={1}>${totalTreatSpend}</Text>
-              <Text style={styles.statLabel}>En snacks</Text>
+              <Text style={styles.statValue}>{treats.length}</Text>
+              <Text style={styles.statLabel}>Snacks</Text>
             </View>
-          )}
-        </View>
+            {totalTreatSpend > 0 && (
+              <View style={styles.statBox}>
+                <Text style={styles.statValue} numberOfLines={1}>${formatCurrency(totalTreatSpend)}</Text>
+                <Text style={styles.statLabel}>En snacks</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Monthly spend chart (premium) */}
         {isPremium && treats.some(t => t.price) && (
@@ -498,45 +431,46 @@ export default function AlimentacionScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Food history */}
+        {/* Food list — full CRUD, no countdown/alarm UI */}
         {foods.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Historial de alimentos</Text>
-            {(isPremium ? foods : foods.slice(0, 3)).map(food => (
-              <TouchableOpacity key={food.id} activeOpacity={0.7} onPress={() => openEditFood(food)}>
-                <Card>
-                  <View style={styles.itemRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemTitle} numberOfLines={1}>{food.brand}</Text>
-                      <Text style={styles.itemSub}>
-                        {FOOD_TYPES[food.food_type ?? food.type ?? ''] ?? food.type ?? ''}
-                        {food.daily_grams ? ` · ${food.daily_grams}g/día` : ''}
-                      </Text>
-                      {food.daysRemaining !== null && (
-                        <Text style={[
-                          styles.itemStatus,
-                          { color: food.endedDaysAgo !== null ? Colors.bad : food.daysRemaining <= 5 ? Colors.warn : Colors.good },
-                        ]}>
-                          {food.endedDaysAgo !== null && food.endDate
-                            ? `Terminó el ${formatDateShort(food.endDate)}`
-                            : `${food.daysRemaining}d restantes`}
-                        </Text>
-                      )}
-                      {food.start_date && (
-                        <Text style={styles.itemDate}>
-                          {food.endDate
-                            ? `${formatDateShort(food.start_date)} → ${formatDateShort(food.endDate)}`
-                            : `Desde ${formatDate(food.start_date)}`}
-                        </Text>
-                      )}
+            <Text style={styles.sectionTitle}>Tus alimentos</Text>
+            {(isPremium ? foods : foods.slice(0, 3)).map(food => {
+              const dur = describeFoodDuration(food);
+              const typeLabel = FOOD_TYPES[food.food_type ?? food.type ?? ''] ?? food.type ?? '';
+              return (
+                <TouchableOpacity key={food.id} activeOpacity={0.7} onPress={() => openEditFood(food)}>
+                  <Card>
+                    <View style={styles.itemRow}>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.itemTitleRow}>
+                          <Text style={styles.itemTitle} numberOfLines={1}>{food.brand}</Text>
+                          {dur.isActive && (
+                            <View style={styles.activeChip}>
+                              <Text style={styles.activeChipText}>actual</Text>
+                            </View>
+                          )}
+                        </View>
+                        {!!typeLabel && (
+                          <Text style={styles.itemSub}>{typeLabel}</Text>
+                        )}
+                        <View style={styles.itemMetaRow}>
+                          {food.daily_grams != null && <Text style={styles.itemMeta}>{food.daily_grams}g/día</Text>}
+                          {food.bag_size != null && <Text style={styles.itemMeta}>{food.bag_size}{food.bag_unit ?? 'kg'}</Text>}
+                          {food.price != null && <Text style={styles.itemMeta}>${formatCurrency(food.price)}</Text>}
+                          {food.frequency && <Text style={styles.itemMeta}>{food.frequency}</Text>}
+                        </View>
+                        <Text style={styles.itemDate}>{dur.line}</Text>
+                        {food.notes && <Text style={styles.itemNotes}>"{food.notes}"</Text>}
+                      </View>
+                      <TouchableOpacity onPress={() => handleDeleteFood(food.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => handleDeleteFood(food.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                    </TouchableOpacity>
-                  </View>
-                </Card>
-              </TouchableOpacity>
-            ))}
+                  </Card>
+                </TouchableOpacity>
+              );
+            })}
             {!isPremium && foods.length > 3 && (
               <TouchableOpacity
                 style={styles.historyGate}
@@ -562,7 +496,7 @@ export default function AlimentacionScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.itemTitle} numberOfLines={1}>{treat.name}</Text>
                       {treat.brand && <Text style={styles.itemSub}>{treat.brand}</Text>}
-                      {treat.purchase_date && <Text style={styles.itemDate}>{formatDate(treat.purchase_date)}</Text>}
+                      {treat.purchase_date && <Text style={styles.itemDate}>{formatDateShort(treat.purchase_date)}</Text>}
                       {treat.notes && <Text style={styles.itemNotes}>{treat.notes}</Text>}
                     </View>
                     <View style={styles.itemRight}>
@@ -613,8 +547,19 @@ export default function AlimentacionScreen() {
             <SelectField label="Unidad" value={bagUnit} options={UNIT_OPTIONS} onSelect={setBagUnit} />
           </View>
         </View>
+        <FormField label="Precio ($)" value={foodPrice} onChangeText={setFoodPrice} placeholder="Ej: 45.00" keyboardType="decimal-pad" />
         <DatePickerField label="Fecha de inicio" value={startDate} onChange={setStartDate} maxDate={new Date()} />
-        <FormField label="Notas (opcional)" value={foodNotes} onChangeText={setFoodNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
+        <DatePickerField
+          label="Fecha de fin (opcional)"
+          value={endDate}
+          onChange={setEndDate}
+          maxDate={new Date()}
+          clearable
+        />
+        <Text style={styles.formHint}>
+          Vacío = bolsa actual. Se autocompleta cuando registras la siguiente.
+        </Text>
+        <FormField label="Notas (opcional)" value={foodNotes} onChangeText={setFoodNotes} placeholder="Observaciones, reacciones, dónde la compraste..." multiline style={{ minHeight: 60 }} />
         <Button title="Guardar" onPress={handleSaveFood} loading={savingFood} />
       </BottomSheet>
 
@@ -678,6 +623,74 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md, marginTop: Spacing.sm,
   },
   hintText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, flex: 1 },
+  // New stats grid (4-col averages)
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.md,
+    gap: Spacing.xs,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statCellValue: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+  },
+  statCellLabel: {
+    fontSize: 10,
+    color: Colors.muted,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  totalSpentText: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+    textAlign: 'center',
+  },
+  // List item additions
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  activeChip: {
+    backgroundColor: 'rgba(34,197,94,0.12)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  activeChipText: {
+    fontSize: 10,
+    fontWeight: FontWeight.semibold,
+    color: Colors.good,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  itemMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  itemMeta: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+  },
+  formHint: {
+    fontSize: 11,
+    color: Colors.muted,
+    marginTop: -Spacing.xs,
+    marginBottom: Spacing.sm,
+    fontStyle: 'italic',
+  },
   // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },

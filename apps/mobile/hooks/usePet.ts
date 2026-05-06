@@ -21,7 +21,7 @@ export interface PetData {
   coOwners: CoOwner[];
   vaccines: Pick<Vaccine, 'name' | 'date_given'>[];
   weightRecords: Pick<WeightRecord, 'weight_kg' | 'date'>[];
-  foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'start_date' | 'created_at'>[];
+  foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
   vetVisits: { date: string; reason: string }[];
   groomings: { type: string; date: string }[];
   /** @deprecated — actividad/paseos se eliminó del producto. Siempre `[]`. Mantenido por compat. */
@@ -111,7 +111,7 @@ export function usePet(): PetData {
       ] = await Promise.all([
         supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
         supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
+        supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
         supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),

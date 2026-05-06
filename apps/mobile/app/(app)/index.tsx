@@ -11,7 +11,7 @@ import { useVitality } from '../../hooks/useVitality';
 import { useSubscription } from '../../hooks/useSubscription';
 import { PetHeroCard } from '../../components/pet/PetHeroCard';
 import { VitalityWidget } from '../../components/pet/VitalityWidget';
-import { FoodProgressBar } from '../../components/pet/FoodProgressBar';
+import { FoodSummaryCard } from '../../components/pet/FoodSummaryCard';
 import { ReminderCard } from '../../components/pet/ReminderCard';
 import { FunFact } from '../../components/pet/FunFact';
 import { PetSelector } from '../../components/pet/PetSelector';
@@ -101,8 +101,8 @@ export default function DashboardScreen() {
     );
   }
 
-  // Active food for progress bar
-  const activeFood = petData.foods.find(f => f.daily_grams && f.bag_size);
+  // Whether the user has logged any food at all (drives empty-state CTA below)
+  const hasFood = petData.foods.length > 0;
 
   // Preventive critical banner — show if overdue OR never registered
   const preventiveStatus = (() => {
@@ -193,16 +193,10 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Food progress */}
-        {activeFood && activeFood.daily_grams && activeFood.bag_size ? (
+        {/* Food summary — averages and trazabilidad, no countdown */}
+        {hasFood ? (
           <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/alimentacion' as any)}>
-            <FoodProgressBar
-              brand={activeFood.brand ?? 'Alimento'}
-              dailyGrams={activeFood.daily_grams}
-              bagSize={activeFood.bag_size}
-              bagUnit={activeFood.bag_unit ?? 'g'}
-              startDate={activeFood.start_date ?? activeFood.created_at}
-            />
+            <FoodSummaryCard foods={petData.foods} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
