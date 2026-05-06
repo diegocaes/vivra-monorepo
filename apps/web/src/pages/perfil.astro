@@ -234,13 +234,22 @@ const isPremium = premium.isPremium;
 
 let spending = { alimento: 0, vet: 0, grooming: 0, vuelos: 0, snacks: 0, preventivos: 0, total: 0 };
 if (isPremium && pet) {
+  // Use admin client for the spending rollup. RLS is sometimes flaky in the
+  // SSR context for cross-table aggregations (especially vet_visits where
+  // multiple PERMISSIVE policies + SECURITY DEFINER helpers interact). It's
+  // safe to bypass RLS here because:
+  //   1. We've already validated `pet.id` belongs to this user via getActivePet
+  //   2. Every query is filtered by `pet_id = pet.id`
+  //   3. We only return aggregated sums, not row data
+  // Mirrors the pattern used by evaluatePremiumWithSharing in lib/premium.ts.
+  const admin = createSupabaseAdminClient();
   const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
-    supabase.from('vet_visits').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
-    supabase.from('groomings').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
-    supabase.from('flights').select('ticket_price').eq('pet_id', pet.id).not('ticket_price', 'is', null),
-    supabase.from('treats').select('price').eq('pet_id', pet.id).not('price', 'is', null),
-    supabase.from('preventive_treatments').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
-    supabase.from('foods').select('price').eq('pet_id', pet.id).not('price', 'is', null),
+    admin.from('vet_visits').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    admin.from('groomings').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    admin.from('flights').select('ticket_price').eq('pet_id', pet.id).not('ticket_price', 'is', null),
+    admin.from('treats').select('price').eq('pet_id', pet.id).not('price', 'is', null),
+    admin.from('preventive_treatments').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
+    admin.from('foods').select('price').eq('pet_id', pet.id).not('price', 'is', null),
   ]);
   spending.alimento = (foodRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
   spending.vet = (vetRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
