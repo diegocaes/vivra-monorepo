@@ -12,10 +12,12 @@ if (user) {
 const error = Astro.url.searchParams.get('error');
 const success = Astro.url.searchParams.get('success');
 
-// Referral code: from URL param, cookie, or form field
+// Referral code: from URL param, cookie, or form field. We validate against
+// the DB on every render so the user only sees "código aplicado" when the
+// code is real — and we never stash an invalid code in the cookie.
 const refFromUrl = Astro.url.searchParams.get('ref')?.trim().toUpperCase() || '';
 const refFromCookie = Astro.cookies.get('pending_referral')?.value || '';
-const initialRef = refFromUrl || refFromCookie;
+const candidateRef = refFromUrl || refFromCookie;
 
 // Helper: validate referral code exists
 async function validateRefCode(code: string): Promise<boolean> {
@@ -44,6 +46,16 @@ function saveRefCookie(code: string) {
       secure: import.meta.env.PROD,
     });
   }
+}
+
+// Pre-validate the candidate code so the form only shows "applied" when real.
+// If the cookie has a stale invalid code (e.g. from before we tightened the
+// validation), wipe it.
+const initialRefValid = candidateRef ? await validateRefCode(candidateRef) : false;
+const initialRef = initialRefValid ? candidateRef : '';
+const refRejected = !!candidateRef && !initialRefValid;
+if (refFromCookie && !initialRefValid) {
+  Astro.cookies.delete('pending_referral', { path: '/' });
 }
 
 if (Astro.request.method === 'POST') {
@@ -243,7 +255,13 @@ if (refFromUrl) {
                 placeholder="Ej: TINTO2847"
                 class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 uppercase tracking-wider font-mono"
               />
-              <p class="text-xs text-muted mt-1">Si alguien te invito, ingresa su codigo aqui</p>
+              {refRejected ? (
+                <p class="text-xs text-amber-600 mt-1">El código <strong>{candidateRef}</strong> no es válido. Podés continuar sin código.</p>
+              ) : initialRef ? (
+                <p class="text-xs text-accent mt-1">✓ Código aplicado: ambos ganan premium gratis al unirse.</p>
+              ) : (
+                <p class="text-xs text-muted mt-1">Si alguien te invitó, ingresá su código aquí</p>
+              )}
             </div>
 
             <!-- Google OAuth -->

@@ -4,12 +4,12 @@ import { createSupabaseAdminClient } from '../../lib/supabase';
 const { token } = Astro.params;
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
 
-// Only persist the invite cookie if the token is well-formed AND the invite
-// exists in the DB as pending + unexpired. This prevents burning a signup
-// on a bogus token, and avoids us leaking a cookie that could never match.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Persist the invite cookie if the token exists in DB as pending + unexpired.
+// We accept both UUID (new format, post-R6c) and hex (legacy) tokens — the
+// DB lookup is the source of truth, and a basic length sanity check guards
+// against absurd payloads.
 let inviteValid = false;
-if (token && UUID_RE.test(token)) {
+if (token && token.length >= 16 && token.length <= 64 && /^[0-9a-zA-Z-]+$/.test(token)) {
   try {
     const admin = createSupabaseAdminClient();
     const { data } = await admin
@@ -176,7 +176,6 @@ if (inviteValid) {
   <div class="wrapper">
     <!-- Main invite card -->
     <div class="card">
-      <div class="beta-badge">🐾 Beta</div>
       <div class="pet-icon">🐶</div>
       <h1>Te invitaron a compartir una mascota en Vivra</h1>
       <p class="desc">Vivra es el diario digital de tu mascota. Acepta la invitacion para cuidar juntos desde la web o la app.</p>

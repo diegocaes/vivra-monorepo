@@ -141,9 +141,10 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
                 secure: import.meta.env.PROD,
               });
 
-              // Mark that this user joined via invite — dashboard reads this
-              // to show a one-time "descargá la app" banner.
-              cookies.set('incoming_share', '1', {
+              // Mark that this user joined via invite. Stores the pet_id so
+              // the dashboard can render a personalized welcome banner with
+              // the pet name + owner name + App Store CTA.
+              cookies.set('incoming_share', invite.pet_id, {
                 path: '/',
                 sameSite: 'lax',
                 maxAge: 60 * 60 * 24 * 7, // 7 days

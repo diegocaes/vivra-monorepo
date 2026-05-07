@@ -140,9 +140,12 @@ if (Astro.request.method === 'POST') {
   }
 
   if (action === 'delete_account') {
-    if (hasMultiplePets && pet) {
+    // Co-owners can only delete their OWN owned pets (or their account).
+    // The pet they're co-owning belongs to someone else — they should use
+    // 'leave_pet' to remove themselves from the share, not delete the pet.
+    if (hasMultiplePets && pet && isOwner) {
       // Only delete this pet — keep the account and switch to another pet
-      await supabase.from('pets').delete().eq('id', pet.id);
+      await supabase.from('pets').delete().eq('id', pet.id).eq('user_id', user.id);
       const remaining = pets.filter(p => p.id !== pet.id);
       const nextPet = remaining[0];
       Astro.cookies.set('active_pet_id', nextPet.id, {
@@ -153,10 +156,15 @@ if (Astro.request.method === 'POST') {
         secure: import.meta.env.PROD,
       });
       return Astro.redirect('/dashboard?deleted=1');
+    } else if (hasMultiplePets && pet && !isOwner) {
+      // Co-owner clicked "delete pet" but isn't the owner — redirect them
+      // to the leave-pet flow instead.
+      return Astro.redirect('/perfil?error=not_pet_owner');
     } else {
-      // Last pet — delete everything
-      if (pet) {
-        await supabase.from('pets').delete().eq('id', pet.id);
+      // Last pet (or no pet) — delete the user's account entirely.
+      // Only delete the pet if the user owns it.
+      if (pet && isOwner) {
+        await supabase.from('pets').delete().eq('id', pet.id).eq('user_id', user.id);
       }
       try {
         const adminClient = createSupabaseAdminClient();
@@ -167,6 +175,14 @@ if (Astro.request.method === 'POST') {
       await supabase.auth.signOut();
       return Astro.redirect('/');
     }
+  }
+
+  // Edit-pet handler. CRITICAL: only the pet's owner can modify the pet's
+  // core attributes (name, photo, breed, theme, etc.). Co-owners get full
+  // read access and can write into companion tables (vaccines, weight,
+  // visits, etc.) but the pet identity itself is owner-only.
+  if (pet && !isOwner) {
+    return Astro.redirect('/perfil?error=not_pet_owner');
   }
 
   // Resolve breed: if "Other" is selected, use the text input
@@ -203,7 +219,9 @@ if (Astro.request.method === 'POST') {
   let petId = pet?.id;
 
   if (pet) {
-    await supabase.from('pets').update({ ...petData, photo_url }).eq('id', pet.id);
+    // Defensive: scope by owner so even if RLS is misconfigured, a co-owner
+    // can't accidentally hijack the row.
+    await supabase.from('pets').update({ ...petData, photo_url }).eq('id', pet.id).eq('user_id', user.id);
   } else {
     const { data: newPet } = await supabase.from('pets').insert({ ...petData, photo_url }).select('id').single();
     petId = newPet?.id;

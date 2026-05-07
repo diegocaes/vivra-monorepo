@@ -94,9 +94,11 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
   };
 
   const revokeCoOwner = async (shareId: string) => {
+    if (!pet) return;
+    const petId = pet.id;
     Alert.alert(
       'Revocar acceso',
-      '¿Seguro que quieres remover a este co-dueño?',
+      '¿Seguro que quieres remover a este co-dueño? Perderá acceso a la mascota inmediatamente.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -104,8 +106,21 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
           style: 'destructive',
           onPress: async () => {
             setRevoking(true);
-            await supabase.from('pet_shares').delete().eq('id', shareId);
+            // Defensive: scope by pet_id so even if RLS allows broader
+            // deletes, we can't accidentally remove a share for another pet.
+            const { error } = await supabase
+              .from('pet_shares')
+              .delete()
+              .eq('id', shareId)
+              .eq('pet_id', petId);
             setRevoking(false);
+            if (error) {
+              console.warn('[SharePetSheet] revoke error:', error.message);
+              Alert.alert('Error', 'No se pudo revocar el acceso. Intenta de nuevo.');
+              return;
+            }
+            // Full refresh of pet context — re-evaluates premium inheritance,
+            // co-owner list, etc.
             refresh();
           },
         },

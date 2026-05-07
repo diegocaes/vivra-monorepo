@@ -136,21 +136,13 @@ const animateProgress = (toStep: number) => {
           );
         }
         await AsyncStorage.removeItem(PENDING_REF_KEY);
-      } else {
-        // 3. Ensure a user_subscriptions row exists (free plan default)
-        //    RLS lets users read their own row; inserting uses the user's auth.
-        const { data: existingSub } = await supabase
-          .from('user_subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (!existingSub) {
-          await supabase.from('user_subscriptions').insert({
-            user_id: user.id,
-            plan: 'free',
-          });
-        }
       }
+      // We intentionally do NOT pre-insert a user_subscriptions row with
+      // plan='free'. With RLS enabled the authenticated client can't write
+      // to this table directly anyway, and "no row = free" is the default
+      // both in evaluatePremium and getPremiumStatus. Rows are created when
+      // a real subscription event happens: IAP purchase (set_iap_premium),
+      // referral redeem (redeem_referral), or admin promo grant.
     } catch (e) {
       console.warn('[onboarding] post-pet setup error:', e);
     }
@@ -319,6 +311,19 @@ const animateProgress = (toStep: number) => {
           {step === 2 && (
             <TouchableOpacity onPress={handleFinish} style={styles.skipBtn} disabled={saving}>
               <Text style={styles.skipBtnText}>Omitir y crear después</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Always-visible "skip entirely" affordance — co-owners or users
+              who just want to look around shouldn't be forced to create a pet
+              before seeing the app. Dashboard handles the no-pet empty state. */}
+          {step === 0 && (
+            <TouchableOpacity
+              onPress={() => router.replace('/(app)' as any)}
+              style={styles.skipBtn}
+              disabled={saving}
+            >
+              <Text style={styles.skipBtnText}>Saltar — agregar mascota luego</Text>
             </TouchableOpacity>
           )}
         </View>

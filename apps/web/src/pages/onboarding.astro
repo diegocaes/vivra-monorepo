@@ -132,24 +132,15 @@ if (Astro.request.method === 'POST') {
         } else if (redeemData && !redeemData.ok) {
           const err = redeemData.error;
           // Silently ignore expected user-side errors; log unexpected ones
-          if (err && !['self_referral', 'invalid_code', 'already_redeemed'].includes(err)) {
+          if (err && !['self_referral', 'invalid_code', 'already_redeemed', 'pure_co_owner_blocked', 'referrer_rate_limited'].includes(err)) {
             console.warn('[onboarding] redeem rejected:', err, redeemData);
           }
         }
-      } else {
-        // Ensure the user has a user_subscriptions row (free plan default)
-        const { data: existingSub } = await admin
-          .from('user_subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (!existingSub) {
-          await admin.from('user_subscriptions').insert({
-            user_id: user.id,
-            plan: 'free',
-          });
-        }
       }
+      // We intentionally do NOT pre-insert a user_subscriptions row with
+      // plan='free'. "No row = free" is the default in evaluatePremium and
+      // getPremiumStatus. Rows are only created on real subscription events
+      // (set_iap_premium, redeem_referral, admin promo grant).
     } catch (e) {
       console.warn('[onboarding] referral/subscription setup error:', e);
     }

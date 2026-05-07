@@ -169,9 +169,9 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
     if (ownStatus.isPremium) return ownStatus;
 
     // On-load expiry defense: if a non-IAP premium has expired, demote the
-    // row immediately so analytics queries / admin views stay consistent. The
-    // pg_cron job does the same nightly — this is a fast-path fallback for
-    // users who load the app before the cron runs.
+    // row via a SECURITY DEFINER RPC so analytics queries / admin views stay
+    // consistent. The pg_cron job does the same nightly — this is a fast-path
+    // fallback for users who load the app before the cron runs.
     if (
       data &&
       data.plan === 'premium' &&
@@ -181,14 +181,10 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
       new Date(data.premium_until).getTime() < Date.now()
     ) {
       try {
-        const { createSupabaseAdminClient } = await import('./supabase');
-        const admin = createSupabaseAdminClient();
-        await admin
-          .from('user_subscriptions')
-          .update({ plan: 'free', source: null, updated_at: new Date().toISOString() })
-          .eq('user_id', userId);
-      } catch {
-        // ignore — runtime check still returns isPremium=false
+        const { error: rpcError } = await supabase.rpc('expire_my_premium_if_due');
+        if (rpcError) console.warn('[premium] expire_my_premium_if_due failed:', rpcError.message);
+      } catch (e: any) {
+        console.warn('[premium] expire RPC threw:', e?.message ?? e);
       }
     }
 
