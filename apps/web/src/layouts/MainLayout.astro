@@ -3,6 +3,8 @@ import Sidebar from '../components/Sidebar.astro';
 import FormEnhancements from '../components/ui/FormEnhancements.astro';
 import Toast from '../components/ui/Toast.astro';
 import { ClientRouter } from 'astro:transitions';
+import Analytics from '@vercel/analytics/astro';
+import SpeedInsights from '@vercel/speed-insights/astro';
 import { getActivePet } from '../lib/pet';
 import '../styles/global.css';
 
@@ -53,7 +55,7 @@ if (user) {
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>{title} | Vivra</title>
@@ -74,6 +76,10 @@ if (user) {
 
     <Toast />
     <FormEnhancements />
+
+    <!-- Vercel Analytics + Speed Insights — free tier (2.5k events/mo) -->
+    <Analytics />
+    <SpeedInsights />
 
     <script>
       if ('serviceWorker' in navigator) {

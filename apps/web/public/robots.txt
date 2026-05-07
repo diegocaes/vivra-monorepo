@@ -1,0 +1,27 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /privacy
+Allow: /terms
+Allow: /faq
+
+# Authenticated areas — don't index
+Disallow: /dashboard
+Disallow: /salud
+Disallow: /alimentacion
+Disallow: /perfil
+Disallow: /calendario
+Disallow: /referidos
+Disallow: /viajes
+Disallow: /print
+Disallow: /badges
+Disallow: /premium
+Disallow: /notificaciones
+Disallow: /onboarding
+Disallow: /update-password
+Disallow: /forgot-password
+Disallow: /api/
+Disallow: /invite/
+
+Sitemap: https://vivrapet.com/sitemap.xml
