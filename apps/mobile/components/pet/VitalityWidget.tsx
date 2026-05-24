@@ -5,11 +5,14 @@ import { Card } from '../ui/Card';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import type { VitalityScoreResult } from '@vivra/shared';
 
+// The 4 vitality pillars after R1 (activity tracking was removed). The
+// 'Actividad' entry stays here as dead-but-harmless: vitality-score.ts no
+// longer returns that pillar, so this entry is never looked up. Listed only
+// so a future re-introduction has a sensible icon ready.
 const PILLAR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   'Peso': 'scale-outline',
   'Cuidado preventivo': 'shield-checkmark-outline',
   'Raza y edad': 'paw-outline',
-  'Actividad': 'walk-outline',
   'Nutrición': 'restaurant-outline',
 };
 

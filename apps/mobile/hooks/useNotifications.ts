@@ -46,6 +46,50 @@ async function registerForPushNotifications(): Promise<string | null> {
   return tokenData.data;
 }
 
+/**
+ * Cancel any locally-scheduled notifications whose `type` belongs to a feature
+ * we've since removed from the product. Local notifications are persisted in
+ * the iOS device (not in our code), so they keep firing forever until the
+ * user uninstalls the app — even if the code that scheduled them is long
+ * gone. This sweep runs on every app startup and is cheap (only acts on
+ * matches).
+ *
+ * Deprecated types tracked here:
+ *   daily_activity      — 7pm "did you walk your dog?" (removed in R1)
+ *   walk_reminder       — older variant of the same
+ *   activity_reminder   — older variant of the same
+ *   grooming_reminder   — removed in R1 (now in /actividad/grooming)
+ *   adventure_reminder  — adventures feature was dropped entirely
+ *   food_reminder       — decided in R5 not to nag about food
+ */
+const DEPRECATED_NOTIF_TYPES = new Set([
+  'daily_activity',
+  'walk_reminder',
+  'activity_reminder',
+  'grooming_reminder',
+  'adventure_reminder',
+  'food_reminder',
+]);
+
+export async function cancelDeprecatedNotifications() {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    let cancelled = 0;
+    for (const n of scheduled) {
+      const data = n.content.data as { type?: string } | undefined;
+      if (data?.type && DEPRECATED_NOTIF_TYPES.has(data.type)) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+        cancelled++;
+      }
+    }
+    if (cancelled > 0) {
+      console.log(`[notifications] Cancelled ${cancelled} deprecated scheduled notification(s)`);
+    }
+  } catch (e: any) {
+    console.warn('[notifications] cleanup failed:', e?.message ?? e);
+  }
+}
+
 export function useNotifications() {
   const { user } = useAuth();
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
@@ -76,6 +120,12 @@ export function useNotifications() {
 
   useEffect(() => {
     registerToken();
+
+    // Sweep deprecated local notifications scheduled by older app versions.
+    // Critical: notifs persist in the device, not the code — without this,
+    // existing users would keep getting "did you walk your dog?" at 7pm
+    // forever, because that notif was scheduled DAILY in a previous build.
+    cancelDeprecatedNotifications();
 
     // Listen for incoming notifications while app is foregrounded
     notificationListener.current = Notifications.addNotificationReceivedListener((_notification) => {

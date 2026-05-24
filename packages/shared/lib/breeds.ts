@@ -1,4 +1,5 @@
 export const DOG_BREEDS = [
+  'Australian Shepherd',
   'Beagle',
   'Border Collie',
   'Boxer',
@@ -32,6 +33,13 @@ export type DogBreed = (typeof DOG_BREEDS)[number];
 export interface BreedFact { fact: string; }
 
 export const BREED_FACTS: Partial<Record<DogBreed, BreedFact[]>> = {
+  'Australian Shepherd': [
+    { fact: 'A pesar de su nombre, fue desarrollado en Estados Unidos, no en Australia.' },
+    { fact: 'Son uno de los perros más inteligentes del mundo. Necesitan ejercicio mental constante o se aburren.' },
+    { fact: 'Su pelaje merle (manchado) los hace inconfundibles. No hay dos iguales.' },
+    { fact: 'Pueden tener ojos de diferentes colores (heterocromía) — uno azul y uno marrón es común.' },
+    { fact: 'Necesitan al menos 1-2 horas de ejercicio diario. No son perros para personas sedentarias.' },
+  ],
   'Golden Retriever': [
     { fact: 'Son nadadores natos. Aman el agua.' },
     { fact: 'Son el 4° perro más inteligente del mundo.' },

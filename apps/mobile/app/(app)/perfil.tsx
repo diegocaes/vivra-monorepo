@@ -11,7 +11,7 @@ import { Colors, PetThemeColors, Spacing, FontSize, FontWeight, Radius } from '.
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePetContext } from '../../contexts/PetContext';
-import { calculateAge, formatDate } from '@vivra/shared';
+import { calculateAge, formatDate, DOG_BREEDS } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -31,6 +31,12 @@ const GENDER_OPTIONS = [
   { key: 'macho', label: 'Macho' },
   { key: 'hembra', label: 'Hembra' },
 ];
+
+// Map shared DOG_BREEDS into the {key,label} shape SelectField expects.
+// Keeps the breed picker consistent with the onboarding flow + ensures the
+// stored breed string always matches an entry in breed-data (so the
+// Vitality Score finds the right size/lifespan/risks profile).
+const BREED_OPTIONS = DOG_BREEDS.map(b => ({ key: b, label: b }));
 
 const SUPPORT_OPTIONS = [
   { key: '', label: 'No aplica' },
@@ -574,7 +580,19 @@ export default function PerfilScreen() {
       {/* Edit form */}
       <BottomSheet visible={showEdit} onClose={() => setShowEdit(false)} title="Editar perfil">
         <FormField label="Nombre" value={name} onChangeText={setName} placeholder="Nombre de tu mascota" />
-        <FormField label="Raza" value={breed} onChangeText={setBreed} placeholder="Ej: Labrador Retriever" />
+        <SelectField
+          label="Raza"
+          value={breed}
+          /* If the user's stored breed doesn't match a current DOG_BREEDS
+             entry (e.g. legacy free-text input), surface it as the first
+             option so it stays visible until they pick a real one. */
+          options={
+            breed && !BREED_OPTIONS.some(o => o.key === breed)
+              ? [{ key: breed, label: `${breed} (actual)` }, ...BREED_OPTIONS]
+              : BREED_OPTIONS
+          }
+          onSelect={setBreed}
+        />
         <DatePickerField label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} maxDate={new Date()} clearable />
         <SelectField label="Género" value={gender} options={GENDER_OPTIONS} onSelect={setGender} />
         <FormField label="Peso (kg)" value={weightKg} onChangeText={setWeightKg} placeholder="Ej: 12.5" keyboardType="decimal-pad" />

@@ -202,7 +202,10 @@ export default function PreventivosScreen() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{label}</Text>
       {items.length === 0 ? (
-        <Text style={styles.noRecords}>Sin registros</Text>
+        <Text style={styles.noRecords}>
+          Aún no hay registros de {label.toLowerCase()}. Toca el botón
+          {' '}+ arriba para agregar el primero.
+        </Text>
       ) : (
         items.map(item => (
           <TouchableOpacity key={item.id} activeOpacity={0.7} onPress={() => openEdit(item)}>
