@@ -13,10 +13,27 @@ import { PetHeroCard } from '../../components/pet/PetHeroCard';
 import { VitalityWidget } from '../../components/pet/VitalityWidget';
 import { FoodSummaryCard } from '../../components/pet/FoodSummaryCard';
 import { ReminderCard } from '../../components/pet/ReminderCard';
-import { FunFact } from '../../components/pet/FunFact';
+import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { Card } from '../../components/ui/Card';
+
+/**
+ * Compact "time ago" formatter used for the care-card badges.
+ *   < 1 day  → "Hoy"
+ *   < 30d    → "Hace Nd"
+ *   < 12mo   → "Hace Nm"
+ *   else     → "Hace Na"
+ */
+function shortTimeAgo(isoDate: string): string {
+  const diffDays = Math.floor((Date.now() - new Date(isoDate).getTime()) / 86400000);
+  if (diffDays <= 0) return 'Hoy';
+  if (diffDays < 30) return `Hace ${diffDays}d`;
+  const months = Math.floor(diffDays / 30);
+  if (months < 12) return `Hace ${months}m`;
+  const years = Math.floor(diffDays / 365);
+  return `Hace ${years}a`;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -210,9 +227,13 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Preventive reminders */}
-        <View style={styles.reminderRow}>
-          <View style={styles.reminderCol}>
+        {/* Care grid — 2×2 quick access. Each card pulsable, navigates to
+            its own detail screen. Reuses one CareCard component parametrized
+            by icon/badge/subtitle/etc. The preventives still use ReminderCard
+            which owns the 30-day cycle logic but renders via CareCard for
+            visual consistency. */}
+        <View style={styles.careGrid}>
+          <View style={styles.careCol}>
             <ReminderCard
               type="antipulgas"
               lastDate={petData.lastAntipulgas?.date_given ?? null}
@@ -220,7 +241,7 @@ export default function DashboardScreen() {
               onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
           </View>
-          <View style={styles.reminderCol}>
+          <View style={styles.careCol}>
             <ReminderCard
               type="desparasitante"
               lastDate={petData.lastDesparasitante?.date_given ?? null}
@@ -228,10 +249,48 @@ export default function DashboardScreen() {
               onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
           </View>
+          <View style={styles.careCol}>
+            <CareCard
+              icon="cut"
+              iconColor="#3B82F6"
+              badge={
+                petData.groomings[0]?.date
+                  ? { text: shortTimeAgo(petData.groomings[0].date), color: '#3B82F6' }
+                  : null
+              }
+              title="Grooming"
+              subtitle={
+                petData.groomings[0]?.location
+                || petData.groomings[0]?.groomer_name
+                || petData.groomings[0]?.type
+                || null
+              }
+              lastDate={petData.groomings[0]?.date ?? null}
+              emptyText="Sin baños registrados"
+              onPress={() => router.navigate('/(app)/actividad/grooming' as any)}
+            />
+          </View>
+          <View style={styles.careCol}>
+            <CareCard
+              icon="medkit"
+              iconColor="#14B8A6"
+              badge={
+                petData.vetVisits[0]?.date
+                  ? { text: shortTimeAgo(petData.vetVisits[0].date), color: '#14B8A6' }
+                  : null
+              }
+              title="Veterinario"
+              subtitle={
+                petData.vetVisits[0]?.reason
+                || petData.vetVisits[0]?.location
+                || null
+              }
+              lastDate={petData.vetVisits[0]?.date ?? null}
+              emptyText="Sin visitas registradas"
+              onPress={() => router.navigate('/(app)/salud/historial' as any)}
+            />
+          </View>
         </View>
-
-        {/* Fun fact */}
-        <FunFact breed={petData.pet.breed} />
 
         {/* Trial expiring banner */}
         {isTrial && trialDaysLeft !== null && trialDaysLeft <= 1 && (
@@ -339,12 +398,16 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     paddingBottom: Spacing.xxl,
   },
-  reminderRow: {
+  // 2×2 grid of care cards. flexWrap + each card 50%-minus-half-gap so they
+  // wrap into two rows cleanly without needing a separate row container.
+  careGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.sm,
   },
-  reminderCol: {
-    flex: 1,
+  careCol: {
+    flexBasis: '48%',
+    flexGrow: 1,
   },
   foodCta: {
     flexDirection: 'row',

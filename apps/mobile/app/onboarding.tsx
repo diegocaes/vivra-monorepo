@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,8 +21,15 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
-import { DOG_BREEDS } from '@vivra/shared';
+import { calculateAge, DOG_BREEDS } from '@vivra/shared';
 import { DatePickerField } from '../components/ui/DatePickerField';
+
+// Lazy-load native image modules so the bundle doesn't fail if a build
+// somehow ships without them (matches the pattern already used in /perfil).
+let ImagePicker: typeof import('expo-image-picker') | null = null;
+try { ImagePicker = require('expo-image-picker'); } catch { /* unavailable */ }
+let ImageManipulator: typeof import('expo-image-manipulator') | null = null;
+try { ImageManipulator = require('expo-image-manipulator'); } catch { /* unavailable */ }
 
 const PENDING_REF_KEY = 'pending_referral';
 
@@ -35,6 +43,16 @@ const GENDER_OPTIONS = [
   { key: 'macho', label: 'Macho', icon: 'male' as const },
   { key: 'hembra', label: 'Hembra', icon: 'female' as const },
 ];
+
+// Small presentational helper for the success screen stat row.
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statCell}>
+      <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -52,6 +70,88 @@ export default function OnboardingScreen() {
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('');
   const [weightKg, setWeightKg] = useState('');
+
+  // Photo picked locally (before upload). Stored as a file:// URI; uploaded
+  // to the pet-photos bucket inside handleFinish once we have a pet.id.
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  // Once the pet is created and the post-pet setup completes, we set this
+  // and the success screen renders in place of the wizard.
+  const [createdPet, setCreatedPet] = useState<null | {
+    id: string;
+    name: string;
+    breed: string;
+    gender: string;
+    weightKg: string;
+    birthDate: string;
+    photoUrl: string | null;
+  }>(null);
+
+  const pickPhoto = async () => {
+    if (!ImagePicker) {
+      Alert.alert('No disponible', 'La selección de fotos no está disponible en este momento.');
+      return;
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para agregar una foto.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+    setPhotoUri(result.assets[0].uri);
+  };
+
+  /**
+   * Upload the local photoUri to the pet-photos bucket and return the public
+   * URL (with cache-buster). Returns null on any failure — callers should
+   * tolerate that and let the pet exist without a photo. The user can add it
+   * later from /perfil.
+   */
+  const uploadPetPhoto = async (uri: string, userId: string, petId: string): Promise<string | null> => {
+    try {
+      let finalUri = uri;
+      if (ImageManipulator) {
+        try {
+          const manipulated = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: 1080 } }],
+            { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+          );
+          finalUri = manipulated.uri;
+        } catch {
+          // Fall back to original if manipulation fails
+        }
+      }
+
+      const fileName = `${userId}/${petId}.jpg`;
+      const response = await fetch(finalUri);
+      const blob = await response.blob();
+      if (blob.size > 5 * 1024 * 1024) {
+        // Too large — skip but don't block onboarding
+        console.warn('[onboarding] photo too large, skipping upload');
+        return null;
+      }
+      const arrayBuffer = await new Response(blob).arrayBuffer();
+      const { error: uploadError } = await supabase.storage
+        .from('pet-photos')
+        .upload(fileName, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+      if (uploadError) {
+        console.warn('[onboarding] photo upload failed:', uploadError.message);
+        return null;
+      }
+      const { data: urlData } = supabase.storage.from('pet-photos').getPublicUrl(fileName);
+      return urlData.publicUrl + '?t=' + Date.now();
+    } catch (e: any) {
+      console.warn('[onboarding] photo upload threw:', e?.message ?? e);
+      return null;
+    }
+  };
 
 const animateProgress = (toStep: number) => {
     Animated.spring(progress, {
@@ -84,19 +184,35 @@ const animateProgress = (toStep: number) => {
     setSaving(true);
 
     const cleanName = petName.trim();
-    const { error } = await supabase.from('pets').insert({
-      user_id: user.id,
-      name: cleanName,
-      breed: breed || null,
-      birth_date: birthDate || null,
-      gender: gender || null,
-      weight_kg: weightKg ? parseFloat(weightKg) : null,
-    });
+    // Insert + return the new row so we have its id for the photo upload
+    // and for the success card.
+    const { data: insertedPet, error } = await supabase
+      .from('pets')
+      .insert({
+        user_id: user.id,
+        name: cleanName,
+        breed: breed || null,
+        birth_date: birthDate || null,
+        gender: gender || null,
+        weight_kg: weightKg ? parseFloat(weightKg) : null,
+      })
+      .select('id')
+      .single();
 
-    if (error) {
+    if (error || !insertedPet) {
       setSaving(false);
-      Alert.alert('Error', error.message);
+      Alert.alert('Error', error?.message ?? 'No se pudo crear la mascota.');
       return;
+    }
+
+    // Upload the photo (if any) and persist the URL on the pet row. Failure
+    // is non-blocking: the pet exists, the user can add a photo later.
+    let photoUrl: string | null = null;
+    if (photoUri) {
+      photoUrl = await uploadPetPhoto(photoUri, user.id, insertedPet.id);
+      if (photoUrl) {
+        await supabase.from('pets').update({ photo_url: photoUrl }).eq('id', insertedPet.id);
+      }
     }
 
     // ── Post-pet setup: referral code + subscription + pending referral redemption ──
@@ -148,7 +264,17 @@ const animateProgress = (toStep: number) => {
     }
 
     setSaving(false);
-    router.replace('/(app)');
+    // Show the success screen instead of jumping straight into the app.
+    // The user taps "Entrar a Vivra" to navigate from the success screen.
+    setCreatedPet({
+      id: insertedPet.id,
+      name: cleanName,
+      breed,
+      gender,
+      weightKg,
+      birthDate,
+      photoUrl,
+    });
   };
 
   const filteredBreeds = breedSearch
@@ -159,6 +285,82 @@ const animateProgress = (toStep: number) => {
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SUCCESS SCREEN — shown after handleFinish creates the pet. The user taps
+  // "Entrar a Vivra" to navigate into the app. Replaces the immediate
+  // router.replace that used to happen at the end of handleFinish.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (createdPet) {
+    // Compact age for the narrow stat cell: just the leading unit
+    // (e.g. "2 años", "5 meses", "12 días") so it never truncates.
+    // calculateAge returns granular strings like "2 años y 3 meses"; we keep
+    // only the first "<n> <unit>" pair.
+    const fullAge = createdPet.birthDate ? calculateAge(createdPet.birthDate) : '';
+    const ageLabel = fullAge
+      ? (fullAge.match(/^\d+\s+\S+/)?.[0] ?? fullAge)
+      : '—';
+    const weightLabel = createdPet.weightKg ? `${createdPet.weightKg} kg` : '—';
+    const sexLabel =
+      createdPet.gender === 'macho' ? 'Macho'
+      : createdPet.gender === 'hembra' ? 'Hembra'
+      : '—';
+    const breedLabel = createdPet.breed || 'Sin raza';
+
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.successBody}>
+          <View style={styles.successAvatar}>
+            {createdPet.photoUrl ? (
+              <Image source={{ uri: createdPet.photoUrl }} style={styles.successAvatarImg} />
+            ) : photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.successAvatarImg} />
+            ) : (
+              <Ionicons name="paw" size={44} color={Colors.accent} />
+            )}
+            <View style={styles.successCheck}>
+              <Ionicons name="checkmark" size={18} color={Colors.white} />
+            </View>
+          </View>
+
+          <Text style={styles.successTitle}>¡Todo listo!</Text>
+          <Text style={styles.successSubtitle}>
+            El perfil de {createdPet.name} está completo.
+          </Text>
+
+          <View style={styles.profileCard}>
+            <View style={styles.profileHead}>
+              <View style={styles.profileAvatar}>
+                {createdPet.photoUrl ? (
+                  <Image source={{ uri: createdPet.photoUrl }} style={styles.profileAvatarImg} />
+                ) : photoUri ? (
+                  <Image source={{ uri: photoUri }} style={styles.profileAvatarImg} />
+                ) : (
+                  <Ionicons name="paw" size={26} color={Colors.accent} />
+                )}
+              </View>
+              <View style={styles.profileNameWrap}>
+                <Text style={styles.profileName} numberOfLines={1}>{createdPet.name}</Text>
+                <Text style={styles.profileBreed} numberOfLines={1}>{breedLabel}</Text>
+              </View>
+            </View>
+            <View style={styles.profileDivider} />
+            <View style={styles.statRow}>
+              <Stat label="Edad" value={ageLabel} />
+              <View style={styles.statSep} />
+              <Stat label="Peso" value={weightLabel} />
+              <View style={styles.statSep} />
+              <Stat label="Sexo" value={sexLabel} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.bottom}>
+          <Button title="Entrar a Vivra" onPress={() => router.replace('/(app)' as any)} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -197,12 +399,28 @@ const animateProgress = (toStep: number) => {
             <Text style={styles.title}>{STEPS[step].subtitle}</Text>
           </View>
 
-          {/* Step 0: Name */}
+          {/* Step 0: Name + optional photo */}
           {step === 0 && (
             <View style={styles.stepContent}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="paw" size={40} color={Colors.accent} />
-              </View>
+              <TouchableOpacity onPress={pickPhoto} activeOpacity={0.8} style={styles.avatarWrap}>
+                <View style={styles.avatar}>
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.avatarImg} />
+                  ) : (
+                    <Ionicons name="paw" size={40} color={Colors.accent} />
+                  )}
+                </View>
+                <View style={styles.cameraBadge}>
+                  <Ionicons name="camera" size={16} color={Colors.white} />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={pickPhoto} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.addPhoto}>
+                  {photoUri ? 'Cambiar foto' : 'Agregar foto (opcional)'}
+                </Text>
+              </TouchableOpacity>
+
               <Text style={styles.welcomeBadge}>Bienvenido a Vivra</Text>
               <TextInput
                 style={styles.bigInput}
@@ -215,7 +433,7 @@ const animateProgress = (toStep: number) => {
                 maxLength={30}
                 textAlign="center"
               />
-              <Text style={styles.hint}>Este será el nombre principal de tu mascota en Vivra</Text>
+              <Text style={styles.hint}>Así la verás en toda la app</Text>
             </View>
           )}
 
@@ -469,4 +687,158 @@ const styles = StyleSheet.create({
   },
   skipBtn: { alignItems: 'center', paddingVertical: Spacing.xs },
   skipBtnText: { fontSize: FontSize.sm, color: Colors.muted },
+
+  // ── Step 0 avatar with optional photo ──
+  avatarWrap: {
+    alignSelf: 'center',
+    marginBottom: Spacing.sm,
+    width: 100,
+    height: 100,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: 100, height: 100 },
+  cameraBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.accent,
+    borderWidth: 3,
+    borderColor: Colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPhoto: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+
+  // ── Success screen ──
+  successBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  successAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: Colors.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+    marginBottom: Spacing.sm,
+  },
+  successAvatarImg: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  successCheck: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.good,
+    borderWidth: 3,
+    borderColor: Colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    fontSize: FontSize.xxl,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: FontSize.md,
+    color: Colors.muted,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  profileCard: {
+    width: '100%',
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  profileHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  profileAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarImg: { width: 52, height: 52 },
+  profileNameWrap: { flex: 1, minWidth: 0 },
+  profileName: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+  },
+  profileBreed: {
+    fontSize: FontSize.sm,
+    color: Colors.muted,
+    marginTop: 1,
+  },
+  profileDivider: {
+    height: 1,
+    backgroundColor: Colors.cardBorder,
+    marginVertical: Spacing.md,
+  },
+  statRow: { flexDirection: 'row' },
+  statSep: {
+    width: 1,
+    backgroundColor: Colors.cardBorder,
+    marginVertical: 2,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  statValue: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+  },
+  statLabel: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: 3,
+  },
 });

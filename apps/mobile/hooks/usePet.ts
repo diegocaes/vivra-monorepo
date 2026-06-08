@@ -22,8 +22,8 @@ export interface PetData {
   vaccines: Pick<Vaccine, 'name' | 'date_given'>[];
   weightRecords: Pick<WeightRecord, 'weight_kg' | 'date'>[];
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
-  vetVisits: { date: string; reason: string }[];
-  groomings: { type: string; date: string }[];
+  vetVisits: { date: string; reason: string; location: string | null }[];
+  groomings: { type: string; date: string; location: string | null; groomer_name: string | null }[];
   /** @deprecated — actividad/paseos se eliminó del producto. Siempre `[]`. Mantenido por compat. */
   activityLogs: { date: string; walks: number; duration_minutes: number | null }[];
   /** @deprecated — aventuras se eliminó del producto. Siempre `[]`. Mantenido por compat. */
@@ -112,8 +112,8 @@ export function usePet(): PetData {
         supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
         supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-        supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
+        supabase.from('vet_visits').select('date, reason, location').eq('pet_id', pet.id).order('date', { ascending: false }),
+        supabase.from('groomings').select('type, date, location, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
