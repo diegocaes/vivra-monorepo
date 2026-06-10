@@ -95,13 +95,15 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'delete_flight') {
     const flightId = formData.get('flight_id') as string;
-    // Verify the flight belongs to this pet before deleting anything
+    // Verify the flight belongs to this pet before deleting anything.
+    // maybeSingle: 0 rows is an expected outcome (stale form, already
+    // deleted), not an error condition.
     const { data: ownedFlight } = await supabase
       .from('flights')
       .select('id')
       .eq('id', flightId)
       .eq('pet_id', pet.id)
-      .single();
+      .maybeSingle();
     if (ownedFlight) {
       const { data: docs } = await supabase
         .from('flight_documents')
@@ -109,9 +111,15 @@ if (Astro.request.method === 'POST') {
         .eq('flight_id', flightId);
       if (docs && docs.length > 0) {
         const paths = docs.map((d) => {
-          const url = new URL(d.file_url);
-          const parts = url.pathname.split('/storage/v1/object/public/flight-docs/');
-          return parts[1] || '';
+          // new URL() throws on malformed strings — a single bad file_url in
+          // the DB must not 500 the whole delete. Skip unparseable entries.
+          try {
+            const url = new URL(d.file_url);
+            const parts = url.pathname.split('/storage/v1/object/public/flight-docs/');
+            return parts[1] || '';
+          } catch {
+            return '';
+          }
         }).filter(Boolean);
         if (paths.length > 0) {
           await supabase.storage.from('flight-docs').remove(paths);
@@ -158,14 +166,14 @@ if (Astro.request.method === 'POST') {
       .from('flight_documents')
       .select('id, flight_id')
       .eq('id', docId)
-      .single();
+      .maybeSingle();
     if (doc) {
       const { data: flight } = await supabase
         .from('flights')
         .select('id')
         .eq('id', doc.flight_id)
         .eq('pet_id', pet.id)
-        .single();
+        .maybeSingle();
       if (flight) {
         try {
           const url = new URL(fileUrl);

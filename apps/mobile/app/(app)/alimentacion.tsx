@@ -8,7 +8,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
 import { useSubscription } from '../../hooks/useSubscription';
-import { formatDateShort, computeFoodStats, formatCurrency } from '@vivra/shared';
+import { formatDateShort, computeFoodStats, formatCurrency, friendlyError } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -257,7 +257,11 @@ export default function AlimentacionScreen() {
       : await supabase.from('foods').insert(payload);
 
     setSavingFood(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[alimentacion] food save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
     resetFoodForm();
     setShowFoodForm(false);
     fetchData();
@@ -308,7 +312,11 @@ export default function AlimentacionScreen() {
       ? await supabase.from('treats').update(payload).eq('id', editingTreat.id)
       : await supabase.from('treats').insert({ ...payload, pet_id: pet.id });
     setSavingTreat(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[alimentacion] treat save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
     resetTreatForm();
     setShowTreatForm(false);
     fetchData();

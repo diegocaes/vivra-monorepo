@@ -26,6 +26,11 @@ if (Astro.request.method === 'POST') {
     }
     const weightKg = Number(formData.get('weight_kg'));
     const recordDate = formData.get('date') as string;
+    // Guard against NaN / nonsense values (manual POST or browser quirk
+    // bypassing the type=number input). 0.1–150 kg covers every dog breed.
+    if (!Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 150 || !recordDate) {
+      return Astro.redirect('/salud/peso?toast_error=' + encodeURIComponent('Peso inválido. Ingresa un valor entre 0.1 y 150 kg.'));
+    }
     await supabase.from('weight_records').insert({
       pet_id: pet.id,
       weight_kg: weightKg,

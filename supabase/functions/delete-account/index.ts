@@ -67,6 +67,32 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    // Storage cleanup BEFORE deleting pets rows: pet photos live under
+    // pet-photos/{userId}/... — list the folder and remove every object.
+    // GDPR requires removing the actual files, not just the DB pointers.
+    try {
+      const { data: photoFiles } = await admin.storage.from('pet-photos').list(userId);
+      if (photoFiles && photoFiles.length > 0) {
+        const paths = photoFiles.map((f) => `${userId}/${f.name}`);
+        await admin.storage.from('pet-photos').remove(paths);
+      }
+    } catch (e) {
+      console.warn('[delete-account] pet-photos cleanup soft-fail:', e);
+    }
+    // Flight documents live under flight-docs/{userId}/{flightId}/... —
+    // list is not recursive, so walk one level of flight folders.
+    try {
+      const { data: flightFolders } = await admin.storage.from('flight-docs').list(userId);
+      for (const folder of flightFolders ?? []) {
+        const { data: docs } = await admin.storage.from('flight-docs').list(`${userId}/${folder.name}`);
+        if (docs && docs.length > 0) {
+          await admin.storage.from('flight-docs').remove(docs.map((d) => `${userId}/${folder.name}/${d.name}`));
+        }
+      }
+    } catch (e) {
+      console.warn('[delete-account] flight-docs cleanup soft-fail:', e);
+    }
+
     // Delete user-owned rows. Child tables (vaccines, foods, etc.) cascade
     // through `pet_id`, so removing `pets` propagates those automatically.
     // Every row where this user appears as owner, grantee, inviter, or
@@ -83,6 +109,11 @@ Deno.serve(async (req) => {
       admin.from('referral_codes').delete().eq('user_id', userId),
       admin.from('user_subscriptions').delete().eq('user_id', userId),
       admin.from('profiles').delete().eq('id', userId),
+      // Device push tokens + in-app notifications — without these, "zombie"
+      // rows survive account deletion (GDPR gap + skewed analytics).
+      admin.from('push_tokens').delete().eq('user_id', userId),
+      admin.from('notifications').delete().eq('user_id', userId),
+      admin.from('owner_profiles').delete().eq('user_id', userId),
     ]);
 
     // Log non-critical delete errors but keep going — missing tables are OK

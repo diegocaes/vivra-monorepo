@@ -8,6 +8,65 @@ import { usePetContext } from '../../../contexts/PetContext';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { evaluateBadges } from '@vivra/shared';
 
+/**
+ * Activity hub — 2×2 grid of visually rich shortcut cards (Grooming, Viajes,
+ * Insignias, Pasaporte). Each card: big tinted icon, title, a live stat line,
+ * and an optional accent footer. Replaces the old flat list rows.
+ */
+
+interface HubCardProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+  title: string;
+  /** Big stat line (e.g. "Hace 22d", "5/10"). Falls back to '—'. */
+  stat?: string | null;
+  /** Small context line under the stat. */
+  sub?: string | null;
+  /** Accent CTA shown instead of stat when there's no data yet. */
+  cta?: string | null;
+  locked?: boolean;
+  onPress: () => void;
+  accessibilityLabel: string;
+}
+
+function HubCard({ icon, tint, title, stat, sub, cta, locked, onPress, accessibilityLabel }: HubCardProps) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      onPress={onPress}
+      style={styles.hubCardWrap}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <View style={styles.hubCard}>
+        <View style={styles.hubTopRow}>
+          <View style={[styles.hubIcon, { backgroundColor: tint + '16' }]}>
+            <Ionicons name={icon} size={26} color={tint} />
+          </View>
+          {locked ? (
+            <View style={styles.lockBadge}>
+              <Ionicons name="lock-closed" size={11} color={Colors.muted} />
+            </View>
+          ) : (
+            <Ionicons name="chevron-forward" size={16} color={Colors.cardBorder} />
+          )}
+        </View>
+
+        <Text style={styles.hubTitle} numberOfLines={1}>{title}</Text>
+
+        {cta ? (
+          <Text style={[styles.hubCta, { color: tint }]} numberOfLines={2}>{cta}</Text>
+        ) : (
+          <>
+            <Text style={[styles.hubStat, { color: tint }]} numberOfLines={1}>{stat ?? '—'}</Text>
+            {sub ? <Text style={styles.hubSub} numberOfLines={1}>{sub}</Text> : null}
+          </>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function ActividadScreen() {
   const router = useRouter();
   const petData = usePetContext();
@@ -52,6 +111,14 @@ export default function ActividadScreen() {
     Linking.openURL(`https://vivrapet.com/print?petId=${petData.pet.id}`).catch(() => {});
   }, [petData.pet?.id, isPremium, router]);
 
+  const groomingStat = groomingDaysAgo === null
+    ? null
+    : groomingDaysAgo === 0 ? 'Hoy'
+    : `Hace ${groomingDaysAgo}d`;
+  const groomingSub = groomingDaysAgo !== null && groomingDaysAgo > 28
+    ? 'Recomendado: cada 4 sem'
+    : lastGrooming?.type ?? 'Último baño';
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
@@ -63,76 +130,48 @@ export default function ActividadScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Grooming */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/grooming' as any)}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: '#8B5CF618' }]}>
-              <Ionicons name="cut" size={24} color="#8B5CF6" />
-            </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Grooming</Text>
-              {groomingDaysAgo === null ? (
-                <Text style={styles.cardCta}>¿Cuándo fue el último baño?</Text>
-              ) : (
-                <Text style={styles.cardSub}>
-                  {groomingDaysAgo === 0
-                    ? 'Último baño hoy'
-                    : `Último hace ${groomingDaysAgo} día${groomingDaysAgo !== 1 ? 's' : ''}`}
-                  {groomingDaysAgo > 28 ? ' · Recomendado: cada 4 semanas' : ''}
-                </Text>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Viajes */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/vuelos' as any)}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: '#3B82F618' }]}>
-              <Ionicons name="airplane" size={24} color="#3B82F6" />
-            </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Viajes</Text>
-              <Text style={styles.cardSub}>Historial de viajes de {petName}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Insignias */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(app)/actividad/insignias' as any)}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: Colors.warn + '18' }]}>
-              <Ionicons name="ribbon" size={24} color={Colors.warn} />
-            </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Insignias</Text>
-              {earnedCount === 0 ? (
-                <Text style={styles.cardCta}>Completa el perfil de {petName} para ganar tu primera insignia</Text>
-              ) : (
-                <Text style={styles.cardSub}>{earnedCount} de {totalCount} ganadas</Text>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Pasaporte */}
-        <TouchableOpacity activeOpacity={0.7} onPress={openPasaporte}>
-          <View style={styles.card}>
-            <View style={[styles.cardIcon, { backgroundColor: Colors.accent + '18' }]}>
-              <Ionicons name="document-text" size={24} color={Colors.accent} />
-            </View>
-            <View style={styles.cardInfo}>
-              <Text style={styles.cardTitle}>Pasaporte</Text>
-              <Text style={styles.cardSub}>
-                {isPremium ? `Exporta el historial médico de ${petName}` : 'Disponible con Premium'}
-              </Text>
-            </View>
-            <Ionicons name={isPremium ? 'chevron-forward' : 'lock-closed'} size={20} color={Colors.muted} />
-          </View>
-        </TouchableOpacity>
+        <View style={styles.grid}>
+          <HubCard
+            icon="cut"
+            tint="#8B5CF6"
+            title="Grooming"
+            stat={groomingStat}
+            sub={groomingSub}
+            cta={groomingDaysAgo === null ? '¿Cuándo fue el último baño?' : null}
+            onPress={() => router.push('/(app)/actividad/grooming' as any)}
+            accessibilityLabel={`Grooming de ${petName}`}
+          />
+          <HubCard
+            icon="airplane"
+            tint="#3B82F6"
+            title="Viajes"
+            stat="Vuelos"
+            sub={`Historial de ${petName}`}
+            onPress={() => router.push('/(app)/actividad/vuelos' as any)}
+            accessibilityLabel={`Viajes de ${petName}`}
+          />
+          <HubCard
+            icon="ribbon"
+            tint={Colors.warn}
+            title="Insignias"
+            stat={earnedCount > 0 ? `${earnedCount}/${totalCount}` : null}
+            sub={earnedCount > 0 ? 'ganadas' : null}
+            cta={earnedCount === 0 ? `Completa el perfil de ${petName} para tu primera insignia` : null}
+            onPress={() => router.push('/(app)/actividad/insignias' as any)}
+            accessibilityLabel="Insignias ganadas"
+          />
+          <HubCard
+            icon="document-text"
+            tint={Colors.accent}
+            title="Pasaporte"
+            stat={isPremium ? 'PDF' : null}
+            sub={isPremium ? 'Exportar historial' : null}
+            cta={!isPremium ? 'Disponible con Premium' : null}
+            locked={!isPremium}
+            onPress={openPasaporte}
+            accessibilityLabel="Pasaporte de viaje en PDF"
+          />
+        </View>
 
         {/* Premium upsell for notifications */}
         {!isPremium && (
@@ -140,6 +179,8 @@ export default function ActividadScreen() {
             style={styles.premiumBanner}
             onPress={() => router.push('/paywall' as any)}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Activar recordatorios inteligentes con Premium"
           >
             <Ionicons name="notifications" size={18} color={Colors.accent} />
             <View style={styles.premiumInfo}>
@@ -162,28 +203,80 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
   scroll: { flex: 1 },
-  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
-  // Section cards
-  card: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.md,
-    backgroundColor: Colors.card, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.cardBorder,
+  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.xxl },
+
+  // 2×2 hub grid
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  hubCardWrap: {
+    flexBasis: '48%',
+    flexGrow: 1,
+  },
+  hubCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
     padding: Spacing.md,
+    minHeight: 140,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  cardIcon: {
-    width: 48, height: 48, borderRadius: Radius.md,
-    alignItems: 'center', justifyContent: 'center',
+  hubTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
   },
-  cardInfo: { flex: 1 },
-  cardTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
-  cardSub: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-  cardCta: { fontSize: FontSize.sm, color: Colors.accent, marginTop: 2 },
+  hubIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hubTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+  },
+  hubStat: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    marginTop: 2,
+  },
+  hubSub: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: 1,
+  },
+  hubCta: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    marginTop: 4,
+    lineHeight: 16,
+  },
+
   // Premium banner
   premiumBanner: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     backgroundColor: Colors.accentLight, borderRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.accent + '30',
-    padding: Spacing.md, marginTop: Spacing.xs,
+    padding: Spacing.md,
   },
   premiumInfo: { flex: 1 },
   premiumTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },

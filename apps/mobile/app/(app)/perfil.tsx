@@ -11,7 +11,7 @@ import { Colors, PetThemeColors, Spacing, FontSize, FontWeight, Radius } from '.
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePetContext } from '../../contexts/PetContext';
-import { calculateAge, formatDate, DOG_BREEDS } from '@vivra/shared';
+import { calculateAge, formatDate, DOG_BREEDS, friendlyError } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -51,7 +51,6 @@ export default function PerfilScreen() {
   const petData = usePetContext();
   const { pet, pets, isOwner, coOwners, setActivePetId, refresh } = petData;
   const [refreshing, setRefreshing] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
 
   // Edit form
   const [showEdit, setShowEdit] = useState(false);
@@ -110,7 +109,11 @@ export default function PerfilScreen() {
     }
 
     setSaving(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[perfil] pet save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
     setShowEdit(false);
     refresh();
   };
@@ -337,43 +340,26 @@ export default function PerfilScreen() {
               </Card>
             )}
 
-            {/* Info cards (collapsible) */}
-            <Card>
-              <TouchableOpacity
-                onPress={() => setShowInfo(s => !s)}
-                activeOpacity={0.7}
-                style={styles.infoToggle}
-              >
-                <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Datos de {pet.name}</Text>
-                <Ionicons
-                  name={showInfo ? 'chevron-up' : 'chevron-down'}
-                  size={18}
-                  color={Colors.muted}
-                />
-              </TouchableOpacity>
-              {showInfo && (
-                <View style={styles.infoBody}>
-                  <InfoRow label="Nombre" value={pet.name} />
-                  <InfoRow label="Raza" value={pet.breed} />
-                  <InfoRow label="Nacimiento" value={pet.birth_date ? formatDate(pet.birth_date) : null} />
-                  <InfoRow label="Género" value={pet.gender === 'macho' ? 'Macho' : pet.gender === 'hembra' ? 'Hembra' : null} />
-                  <InfoRow label="Peso" value={pet.weight_kg ? `${pet.weight_kg} kg` : null} />
-                  <InfoRow label="Microchip" value={pet.chip_id} />
-                  <InfoRow label="Color pelaje" value={pet.color} />
-                  <InfoRow label="Tipo soporte" value={
-                    pet.support_type === 'emotional_support' ? 'ESA' :
-                    pet.support_type === 'service' ? 'Service Dog' : null
-                  } />
-                </View>
-              )}
-            </Card>
+            {/* Info card (collapsed by default — keeps the screen light) */}
+            <CollapsibleCard title={`Datos de ${pet.name}`}>
+              <InfoRow label="Nombre" value={pet.name} />
+              <InfoRow label="Raza" value={pet.breed} />
+              <InfoRow label="Nacimiento" value={pet.birth_date ? formatDate(pet.birth_date) : null} />
+              <InfoRow label="Género" value={pet.gender === 'macho' ? 'Macho' : pet.gender === 'hembra' ? 'Hembra' : null} />
+              <InfoRow label="Peso" value={pet.weight_kg ? `${pet.weight_kg} kg` : null} />
+              <InfoRow label="Microchip" value={pet.chip_id} />
+              <InfoRow label="Color pelaje" value={pet.color} />
+              <InfoRow label="Tipo soporte" value={
+                pet.support_type === 'emotional_support' ? 'ESA' :
+                pet.support_type === 'service' ? 'Service Dog' : null
+              } />
+            </CollapsibleCard>
 
             {/* Spending summary */}
             <SpendingSummary petId={pet.id} isPremium={isPremium} />
 
-            {/* Theme color */}
-            <Card>
-              <Text style={styles.sectionTitle}>Color del perfil</Text>
+            {/* Theme color (collapsed — set once, rarely changed) */}
+            <CollapsibleCard title="Color del perfil">
               {isPremium ? (
                 <View style={styles.colorGrid}>
                   {THEME_COLORS.map(({ key, hex }) => (
@@ -385,13 +371,15 @@ export default function PerfilScreen() {
                         pet.theme_color === key && styles.colorCircleActive,
                       ]}
                       onPress={() => handleSetTheme(key)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Tema de color ${key}`}
                     />
                   ))}
                 </View>
               ) : (
                 <PremiumGate feature="Los temas de color" />
               )}
-            </Card>
+            </CollapsibleCard>
 
             {/* Premium upsell */}
             {!isPremium && (
@@ -457,9 +445,8 @@ export default function PerfilScreen() {
               <Button title="Cerrar sesión" onPress={signOut} variant="outline" style={{ marginTop: Spacing.md }} />
             </Card>
 
-            {/* Legal & support */}
-            <Card>
-              <Text style={styles.sectionTitle}>Legal y soporte</Text>
+            {/* Legal & support (collapsed — rarely needed) */}
+            <CollapsibleCard title="Legal y soporte">
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => Linking.openURL('https://vivrapet.com/faq')}
@@ -505,11 +492,10 @@ export default function PerfilScreen() {
                 <Text style={styles.legalRowText}>Calificar Vivra en la App Store</Text>
                 <Ionicons name="open-outline" size={16} color={Colors.muted} />
               </TouchableOpacity>
-            </Card>
+            </CollapsibleCard>
 
-            {/* Danger zone */}
-            <Card>
-              <Text style={[styles.sectionTitle, { color: Colors.bad }]}>Zona de peligro</Text>
+            {/* Danger zone (collapsed — destructive actions shouldn't be one tap away) */}
+            <CollapsibleCard title="Zona de peligro" titleColor={Colors.bad}>
               {petData.isOwner ? (
                 <TouchableOpacity style={styles.dangerBtn} onPress={handleDeletePet}>
                   <Ionicons name="trash-outline" size={16} color={Colors.bad} />
@@ -539,7 +525,7 @@ export default function PerfilScreen() {
                 <Ionicons name="warning-outline" size={16} color={Colors.bad} />
                 <Text style={styles.dangerText}>Eliminar mi cuenta</Text>
               </TouchableOpacity>
-            </Card>
+            </CollapsibleCard>
 
             {/* Add pet button (if only 1 pet) */}
             {pets.length === 1 && (
@@ -613,6 +599,42 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={[styles.infoValue, !value && styles.infoEmpty]} numberOfLines={1}>{value ?? '—'}</Text>
     </View>
+  );
+}
+
+/**
+ * Card with a tappable header that expands/collapses its children. The perfil
+ * screen stacks many sections — collapsing the rarely-used ones (theme color,
+ * legal, danger zone) keeps the screen scannable without hiding anything.
+ */
+function CollapsibleCard({
+  title,
+  titleColor,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  titleColor?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card>
+      <TouchableOpacity
+        onPress={() => setOpen(o => !o)}
+        activeOpacity={0.7}
+        style={styles.infoToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${open ? 'Cerrar' : 'Abrir'} sección ${title}`}
+      >
+        <Text style={[styles.sectionTitle, { marginBottom: 0 }, titleColor ? { color: titleColor } : null]}>
+          {title}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.muted} />
+      </TouchableOpacity>
+      {open && <View style={styles.infoBody}>{children}</View>}
+    </Card>
   );
 }
 

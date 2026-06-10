@@ -21,8 +21,9 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
-import { calculateAge, DOG_BREEDS } from '@vivra/shared';
+import { calculateAge, DOG_BREEDS, friendlyError } from '@vivra/shared';
 import { DatePickerField } from '../components/ui/DatePickerField';
+import { requestPushPermissionAndRegister } from '../hooks/useNotifications';
 
 // Lazy-load native image modules so the bundle doesn't fail if a build
 // somehow ships without them (matches the pattern already used in /perfil).
@@ -201,7 +202,8 @@ const animateProgress = (toStep: number) => {
 
     if (error || !insertedPet) {
       setSaving(false);
-      Alert.alert('Error', error?.message ?? 'No se pudo crear la mascota.');
+      if (error) console.warn('[onboarding] pet insert error:', error.message);
+      Alert.alert('Error', error ? friendlyError(error) : 'No se pudo crear la mascota.');
       return;
     }
 
@@ -356,7 +358,18 @@ const animateProgress = (toStep: number) => {
         </View>
 
         <View style={styles.bottom}>
-          <Button title="Entrar a Vivra" onPress={() => router.replace('/(app)' as any)} />
+          <Button
+            title="Entrar a Vivra"
+            onPress={async () => {
+              // Moment of value: the user just created their pet's profile —
+              // ask for notification permission HERE (not at cold start) so
+              // the reminders (vacunas, preventivos, peso) can do their job.
+              // Fire the iOS dialog before navigating; if denied we proceed
+              // anyway, the app works fine without push.
+              await requestPushPermissionAndRegister();
+              router.replace('/(app)' as any);
+            }}
+          />
         </View>
       </SafeAreaView>
     );

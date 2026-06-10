@@ -5,14 +5,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate } from '@vivra/shared';
+import { formatDate, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
-import { schedulePreventiveReminder } from '../../../hooks/useNotifications';
+import { schedulePreventiveReminder, requestPushPermissionAndRegister } from '../../../hooks/useNotifications';
 import type { PreventiveTreatment } from '../../../types/supabase';
 
 type TreatmentType = 'antipulgas' | 'desparasitante' | 'combinado';
@@ -164,11 +164,19 @@ export default function PreventivosScreen() {
       : await supabase.from('preventive_treatments').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[preventivos] save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
 
     // Schedule reminder only on new entries
     if (!editingTreatment) {
       try {
+        // Moment of value: the user just logged a preventive — the reminder
+        // IS the benefit. If they haven't granted notification permission
+        // yet (e.g. skipped at onboarding), ask now with full context.
+        await requestPushPermissionAndRegister();
         const nextDue = new Date(dateApplied + 'T09:00:00');
         nextDue.setDate(nextDue.getDate() + 30);
         await schedulePreventiveReminder({

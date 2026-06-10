@@ -19,6 +19,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
+import { friendlyError } from '@vivra/shared';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -100,7 +101,8 @@ export default function RegisterScreen() {
       if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
         Alert.alert('Este email ya tiene cuenta', 'Inicia sesión en lugar de crear una nueva.');
       } else {
-        Alert.alert('Error', error.message);
+        console.warn('[register] email sign-up error:', error.message);
+        Alert.alert('Error', friendlyError(error));
       }
       return;
     }
@@ -143,7 +145,8 @@ export default function RegisterScreen() {
       // _layout.tsx routes automatically: no pets → onboarding, has pets → app
     } catch (error: any) {
       if (error.code === 'ERR_REQUEST_CANCELED') return;
-      Alert.alert('Error', error.message ?? 'Error al continuar con Apple');
+      console.warn('[register] Apple sign-up error:', error?.message);
+      Alert.alert('Error', friendlyError(error));
     } finally {
       setAppleLoading(false);
     }
@@ -182,7 +185,8 @@ export default function RegisterScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error al continuar con Google');
+      console.warn('[register] Google sign-up error:', error?.message);
+      Alert.alert('Error', friendlyError(error));
     } finally {
       setGoogleLoading(false);
     }

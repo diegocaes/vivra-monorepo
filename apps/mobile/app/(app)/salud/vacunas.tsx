@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, timeUntil } from '@vivra/shared';
+import { formatDate, timeUntil, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -115,7 +115,11 @@ export default function VacunasScreen() {
       : await supabase.from('vaccines').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[vacunas] save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
     resetForm();
     setShowForm(false);
     fetchData();

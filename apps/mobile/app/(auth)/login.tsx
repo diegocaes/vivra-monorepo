@@ -18,6 +18,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/Button';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
+import { friendlyError } from '@vivra/shared';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -42,7 +43,8 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      console.warn('[login] email sign-in error:', error.message);
+      Alert.alert('Error', friendlyError(error));
     }
   }
 
@@ -69,7 +71,8 @@ export default function LoginScreen() {
     } catch (error: any) {
       // User cancellation is not an error worth surfacing.
       if (error.code === 'ERR_REQUEST_CANCELED') return;
-      Alert.alert('Error', error.message ?? 'Error al iniciar sesión con Apple');
+      console.warn('[login] Apple sign-in error:', error?.message);
+      Alert.alert('Error', friendlyError(error));
     } finally {
       setAppleLoading(false);
     }
@@ -116,7 +119,8 @@ export default function LoginScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Error al iniciar sesión con Google');
+      console.warn('[login] Google sign-in error:', error?.message);
+      Alert.alert('Error', friendlyError(error));
     } finally {
       setGoogleLoading(false);
     }

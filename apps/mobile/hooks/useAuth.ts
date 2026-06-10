@@ -1,7 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { clearRevenueCatUser } from './useSubscription';
+
+/**
+ * Clear per-user device state on sign-out:
+ *  - RevenueCat cached appUserID (entitlements must not leak between accounts)
+ *  - ALL locally-scheduled notifications. They mention the previous user's
+ *    pet by name ("Firulais: antipulgas próximo") — on a shared device the
+ *    next account would keep receiving them. Privacy + confusion bug.
+ * Imported expo-notifications directly (not via useNotifications) to avoid
+ * a module cycle: useNotifications already imports useAuth.
+ */
+function clearPerUserDeviceState() {
+  clearRevenueCatUser();
+  Notifications.cancelAllScheduledNotificationsAsync().catch((e) => {
+    console.warn('[auth] failed to cancel scheduled notifications on signOut:', e?.message ?? e);
+  });
+}
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -23,12 +40,8 @@ export function useAuth() {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      // When the user signs out, also clear the cached RevenueCat
-      // configuration. Without this, switching accounts on the same device
-      // would leave RC pointing at the old user's appUserID until the next
-      // app restart, leaking entitlements between sessions.
       if (event === 'SIGNED_OUT') {
-        clearRevenueCatUser();
+        clearPerUserDeviceState();
       }
     });
 
@@ -37,9 +50,9 @@ export function useAuth() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    // Defensive: clear RC user immediately too, in case the auth listener
-    // fires later or the SIGNED_OUT event is missed.
-    clearRevenueCatUser();
+    // Defensive: also clear immediately, in case the auth listener fires
+    // later or the SIGNED_OUT event is missed.
+    clearPerUserDeviceState();
   };
 
   return { session, user, loading, signOut };

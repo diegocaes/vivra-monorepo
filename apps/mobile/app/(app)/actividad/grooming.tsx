@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate } from '@vivra/shared';
+import { formatDate, friendlyError } from '@vivra/shared';
 import { GROOMING_TYPES } from '@vivra/shared';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { usePetContext } from '../../../contexts/PetContext';
@@ -89,7 +89,11 @@ export default function GroomingScreen() {
       : await supabase.from('groomings').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[grooming] save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
     resetForm();
     setShowForm(false);
     fetchData();

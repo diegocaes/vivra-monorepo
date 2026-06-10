@@ -7,7 +7,7 @@ import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient, Stop } 
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { useSubscription } from '../../../hooks/useSubscription';
-import { formatDate } from '@vivra/shared';
+import { formatDate, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -186,7 +186,11 @@ export default function PesoScreen() {
     }
 
     setSaving(false);
-    if (error) { Alert.alert('Error', error.message); return; }
+    if (error) {
+      console.warn('[peso] save error:', error.message);
+      Alert.alert('Error', friendlyError(error));
+      return;
+    }
 
     resetForm();
     setShowForm(false);

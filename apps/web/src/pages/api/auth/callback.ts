@@ -146,6 +146,7 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
               // the pet name + owner name + App Store CTA.
               cookies.set('incoming_share', invite.pet_id, {
                 path: '/',
+                httpOnly: true, // consumed server-side only (dashboard.astro)
                 sameSite: 'lax',
                 maxAge: 60 * 60 * 24 * 7, // 7 days
                 secure: import.meta.env.PROD,

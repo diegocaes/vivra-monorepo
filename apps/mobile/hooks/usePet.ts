@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from './useSubscription';
@@ -213,7 +213,11 @@ export function usePet(): PetData {
     fetchPetData().then(() => setLoading(false), () => setLoading(false));
   }, [pet?.id]);
 
-  return {
+  // Memoize the context value: PetProvider passes this object straight into
+  // <PetContext.Provider value={...}>. Without memo, every render of the
+  // provider creates a fresh object and forces ALL consumers (dashboard
+  // cards, tabs, headers) to re-render even when nothing they read changed.
+  return useMemo(() => ({
     pet,
     pets,
     isOwner,
@@ -223,8 +227,8 @@ export function usePet(): PetData {
     foods,
     vetVisits,
     groomings,
-    activityLogs: [], // deprecated — actividad eliminada del producto
-    adventures: [],   // deprecated — aventuras eliminadas del producto
+    activityLogs: [] as PetData['activityLogs'], // deprecated — actividad eliminada del producto
+    adventures: [] as PetData['adventures'],     // deprecated — aventuras eliminadas del producto
     bloodTests,
     preventives,
     lastAntipulgas,
@@ -233,5 +237,22 @@ export function usePet(): PetData {
     error,
     refresh,
     setActivePetId,
-  };
+  }), [
+    pet,
+    pets,
+    isOwner,
+    coOwners,
+    vaccines,
+    weightRecords,
+    foods,
+    vetVisits,
+    groomings,
+    bloodTests,
+    preventives,
+    lastAntipulgas,
+    lastDesparasitante,
+    loading,
+    error,
+    refresh,
+  ]);
 }

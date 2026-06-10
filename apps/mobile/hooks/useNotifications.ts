@@ -17,18 +17,25 @@ Notifications.setNotificationHandler({
   }),
 });
 
-async function registerForPushNotifications(): Promise<string | null> {
+/**
+ * Get the Expo push token. By default this is SILENT: it only returns a token
+ * if the user already granted notification permission. Pass
+ * `promptIfNeeded: true` to show the iOS permission dialog — only do that at
+ * a moment of value (after onboarding, after saving a reminder-worthy
+ * record), never at cold start. Permission prompts without context get
+ * rejected ~60% of the time and iOS won't let us re-ask.
+ */
+async function registerForPushNotifications(promptIfNeeded = false): Promise<string | null> {
   if (!Device.isDevice) {
     // Push notifications don't work on simulator
     return null;
   }
 
-  // Check existing permissions
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
-  // Request permission if not granted
   if (existingStatus !== 'granted') {
+    if (!promptIfNeeded) return null; // silent mode: never show the dialog
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
@@ -44,6 +51,38 @@ async function registerForPushNotifications(): Promise<string | null> {
   });
 
   return tokenData.data;
+}
+
+/**
+ * Ask for notification permission (showing the iOS dialog if needed) and
+ * persist the push token. Call this from moments of value:
+ *   - Onboarding success screen ("Entrar a Vivra" tap)
+ *   - After saving the first preventive/vaccine (reminders are the benefit)
+ * Safe to call repeatedly — if permission was already granted or denied,
+ * no dialog appears (iOS only shows it once per install).
+ */
+export async function requestPushPermissionAndRegister(): Promise<boolean> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const token = await registerForPushNotifications(true);
+    if (!token) return false;
+
+    await supabase.from('push_tokens').upsert(
+      {
+        user_id: user.id,
+        token,
+        platform: Platform.OS as 'ios' | 'android',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,token' },
+    );
+    return true;
+  } catch (e: any) {
+    console.warn('[notifications] permission request failed:', e?.message ?? e);
+    return false;
+  }
 }
 
 /**
@@ -95,12 +134,15 @@ export function useNotifications() {
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
-  // Register push token and save to Supabase
+  // Register push token and save to Supabase. SILENT: never shows the
+  // permission dialog — only refreshes the token for users who already
+  // granted. The dialog is triggered at moments of value via
+  // requestPushPermissionAndRegister() (onboarding success, first reminder).
   const registerToken = useCallback(async () => {
     if (!user) return;
 
     try {
-      const token = await registerForPushNotifications();
+      const token = await registerForPushNotifications(false);
       if (!token) return;
 
       // Upsert token in Supabase
