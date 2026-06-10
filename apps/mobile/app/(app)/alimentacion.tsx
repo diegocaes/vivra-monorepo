@@ -33,45 +33,67 @@ const FREQUENCY_OPTIONS = [
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-function TreatSpendChart({ treats }: { treats: Treat[] }) {
+/**
+ * Monthly food + treat spend, stacked bars over the last 6 months.
+ * Answers the real question — "¿cuánto me cuesta alimentar a mi perro?" —
+ * in one glance: orange = food bags (attributed to their start month),
+ * amber = snacks (attributed to purchase month). Premium analytics.
+ */
+function FoodSpendChart({ foods, treats }: { foods: Food[]; treats: Treat[] }) {
   const monthly = useMemo(() => {
     const now = new Date();
-    const months: { label: string; total: number }[] = [];
+    const months: { label: string; food: number; treats: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const total = treats
+      const foodTotal = foods
+        .filter(f => f.price && (f.start_date ?? f.created_at ?? '').startsWith(key))
+        .reduce((s, f) => s + (f.price ?? 0), 0);
+      const treatTotal = treats
         .filter(t => t.price && t.purchase_date?.startsWith(key))
         .reduce((s, t) => s + (t.price ?? 0), 0);
-      months.push({ label: MONTH_LABELS[d.getMonth()], total });
+      months.push({ label: MONTH_LABELS[d.getMonth()], food: foodTotal, treats: treatTotal });
     }
     return months;
-  }, [treats]);
+  }, [foods, treats]);
 
-  const maxVal = Math.max(...monthly.map(m => m.total), 1);
+  const maxVal = Math.max(...monthly.map(m => m.food + m.treats), 1);
+  const avgMonthly = monthly.reduce((s, m) => s + m.food + m.treats, 0) / 6;
   const W = 320;
-  const H = 140;
-  const PAD = { top: 12, bottom: 24, left: 8, right: 8 };
+  const H = 150;
+  const PAD = { top: 16, bottom: 24, left: 8, right: 8 };
   const barW = 32;
   const gap = (W - PAD.left - PAD.right - barW * 6) / 5;
+  const plotH = H - PAD.top - PAD.bottom;
 
   return (
     <Card>
-      <Text style={styles.chartTitle}>Gasto en snacks (últimos 6 meses)</Text>
+      <View style={styles.chartHeader}>
+        <Text style={styles.chartTitle}>Gasto en alimentación</Text>
+        {avgMonthly > 0 && (
+          <Text style={styles.chartAvg}>~${Math.round(avgMonthly)}/mes</Text>
+        )}
+      </View>
       <Svg width={W} height={H}>
         <Line x1={PAD.left} y1={H - PAD.bottom} x2={W - PAD.right} y2={H - PAD.bottom} stroke={Colors.cardBorder} strokeWidth={1} />
         {monthly.map((m, i) => {
           const x = PAD.left + i * (barW + gap);
-          const barH = maxVal > 0 ? (m.total / maxVal) * (H - PAD.top - PAD.bottom) : 0;
-          const y = H - PAD.bottom - barH;
+          const total = m.food + m.treats;
+          const foodH = maxVal > 0 ? (m.food / maxVal) * plotH : 0;
+          const treatH = maxVal > 0 ? (m.treats / maxVal) * plotH : 0;
+          const foodY = H - PAD.bottom - foodH;
+          const treatY = foodY - treatH;
           return (
             <G key={i}>
-              {m.total > 0 && (
-                <Rect x={x} y={y} width={barW} height={barH} rx={4} fill={Colors.accent} opacity={0.8} />
+              {m.food > 0 && (
+                <Rect x={x} y={foodY} width={barW} height={foodH} rx={3} fill={Colors.accent} opacity={0.85} />
               )}
-              {m.total > 0 && (
-                <SvgText x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={9} fill={Colors.ink}>
-                  ${m.total}
+              {m.treats > 0 && (
+                <Rect x={x} y={treatY} width={barW} height={treatH} rx={3} fill={Colors.warn} opacity={0.85} />
+              )}
+              {total > 0 && (
+                <SvgText x={x + barW / 2} y={treatY - 4} textAnchor="middle" fontSize={9} fill={Colors.ink}>
+                  ${Math.round(total)}
                 </SvgText>
               )}
               <SvgText x={x + barW / 2} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={10} fill={Colors.muted}>
@@ -81,6 +103,16 @@ function TreatSpendChart({ treats }: { treats: Treat[] }) {
           );
         })}
       </Svg>
+      <View style={styles.chartLegend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.accent }]} />
+          <Text style={styles.legendText}>Comida</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.warn }]} />
+          <Text style={styles.legendText}>Snacks</Text>
+        </View>
+      </View>
     </Card>
   );
 }
@@ -418,9 +450,9 @@ export default function AlimentacionScreen() {
           </View>
         )}
 
-        {/* Monthly spend chart (premium) */}
-        {isPremium && treats.some(t => t.price) && (
-          <TreatSpendChart treats={treats} />
+        {/* Monthly spend chart — food + treats stacked (premium analytics) */}
+        {isPremium && (foods.some(f => f.price) || treats.some(t => t.price)) && (
+          <FoodSpendChart foods={foods} treats={treats} />
         )}
 
         {/* Add buttons row */}
@@ -735,6 +767,24 @@ const styles = StyleSheet.create({
   costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
   // Chart
   chartTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink, marginBottom: Spacing.sm },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  chartAvg: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.accent,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: FontSize.xs, color: Colors.muted },
   // Form
   formRow: { flexDirection: 'row', gap: Spacing.sm },
   duplicateBtn: {

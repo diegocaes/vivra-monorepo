@@ -3,8 +3,26 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+
+/**
+ * Map a notification's `href` (web-style route set by the server push
+ * dispatcher or local schedulers) to the mobile route. Falls back to the
+ * dashboard so a tap always lands somewhere sensible.
+ */
+function hrefToMobileRoute(href: string | undefined): string {
+  if (!href) return '/(app)';
+  if (href.includes('preventivos')) return '/(app)/salud/preventivos';
+  if (href.includes('vacunas')) return '/(app)/salud/vacunas';
+  if (href.includes('peso')) return '/(app)/salud/peso';
+  if (href.includes('alimentacion')) return '/(app)/alimentacion';
+  if (href.includes('grooming')) return '/(app)/actividad/grooming';
+  if (href.includes('perfil')) return '/(app)/perfil';
+  if (href.includes('salud')) return '/(app)/salud';
+  return '/(app)';
+}
 
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -174,10 +192,24 @@ export function useNotifications() {
       // Notification received in foreground — handler above controls display
     });
 
-    // Listen for user tapping on a notification
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((_response) => {
-      // Could navigate to specific screen based on notification data
-      // const data = response.notification.request.content.data;
+    // Listen for user tapping on a notification → deep-link to the screen
+    // the notification is about (server pushes set data.href; local
+    // schedulers set data.type which we also map).
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as
+        | { href?: string; type?: string }
+        | undefined;
+      let route = hrefToMobileRoute(data?.href);
+      if (route === '/(app)' && data?.type) {
+        // Local notifications don't carry href — infer from type.
+        if (data.type === 'preventive_reminder') route = '/(app)/salud/preventivos';
+        else if (data.type === 'vaccine_reminder') route = '/(app)/salud/vacunas';
+        else if (data.type === 'weight_reminder') route = '/(app)/salud/peso';
+      }
+      // Small delay: on cold start the router isn't ready immediately.
+      setTimeout(() => {
+        try { router.push(route as any); } catch { /* router not ready — dashboard shows anyway */ }
+      }, 400);
     });
 
     return () => {

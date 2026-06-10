@@ -73,7 +73,49 @@ export default function SaludScreen() {
         }
       >
 
-        {vitality && <VitalityWidget vitality={vitality} />}
+        {vitality && (
+          <VitalityWidget
+            vitality={vitality}
+            onNavigate={(route) => router.push(route as any)}
+          />
+        )}
+
+        {/* Active score suggestions — the engine's flags, rendered as
+            actionable cards. Each one says what's off and links to the
+            screen where the user can fix it. */}
+        {vitality && vitality.flags.length > 0 && (
+          <View style={styles.flagsWrap}>
+            {vitality.flags.slice(0, 3).map(flag => {
+              const flagColor =
+                flag.severity === 'suggestion' ? Colors.accent
+                : flag.severity === 'reminder' ? '#3B82F6'
+                : Colors.warn;
+              // Engine hrefs are web routes; map to the mobile equivalents.
+              const mobileRoute =
+                flag.href.includes('peso') ? '/(app)/salud/peso'
+                : flag.href.includes('preventivos') ? '/(app)/salud/preventivos'
+                : flag.href.includes('vacunas') ? '/(app)/salud/vacunas'
+                : flag.href.includes('alimentacion') ? '/(app)/alimentacion'
+                : flag.href.includes('perfil') ? '/(app)/perfil'
+                : '/(app)/salud';
+              return (
+                <TouchableOpacity
+                  key={flag.id}
+                  style={[styles.flagCard, { borderLeftColor: flagColor }]}
+                  onPress={() => router.push(mobileRoute as any)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={flag.message}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.flagMessage}>{flag.message}</Text>
+                    <Text style={[styles.flagAction, { color: flagColor }]}>{flag.action} →</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Quick stats */}
         <View style={styles.statsRow}>
@@ -246,6 +288,28 @@ const styles = StyleSheet.create({
   premiumBannerInfo: { flex: 1 },
   premiumBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   premiumBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  flagsWrap: { gap: Spacing.xs },
+  flagCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    borderLeftWidth: 3,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
+  },
+  flagMessage: {
+    fontSize: FontSize.xs,
+    color: Colors.ink,
+    lineHeight: 17,
+  },
+  flagAction: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    marginTop: 2,
+  },
   disclaimer: {
     fontSize: 11,
     color: Colors.muted,
