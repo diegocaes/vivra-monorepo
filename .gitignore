@@ -44,3 +44,7 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Claude Code project guides — local only, not shipped with the repo
+CLAUDE.md
+**/CLAUDE.md
