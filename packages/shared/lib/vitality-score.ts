@@ -9,7 +9,8 @@
  *  P1: Peso corporal — WSAVA BCS, VetCompass/Pegram 2021
  *  P2: Cuidado preventivo — GeroScience 2024, AVMA
  *  P3: Raza + Edad — Gough/Thomas, Cornell, Nature 2023
- *  P5: Nutrición — Purina MER, PMC diet study
+ *  P5: Nutrición — registro y trazabilidad del alimento (NO juzga la porción:
+ *      la ración correcta la define el vet/nutricionista, no este score)
  *
  * Cada función `scoreXxx` calcula sobre 20 pts internos por compatibilidad
  * histórica. Al final, `calculateVitalityScore` escala 20→25 (×1.25) para
@@ -205,39 +206,13 @@ function isCoreVaccine(name: string): boolean {
   return CORE_VACCINE_KEYWORDS.some(v => n.includes(v));
 }
 
-/**
- * MER (Metabolic Energy Requirement) — Purina para perros adultos activos:
- * MER (kcal/día) = 132 × peso_kg^0.75
- */
-function estimateDailyKcalNeed(weightKg: number): number {
-  return 132 * Math.pow(weightKg, 0.75);
-}
-
-const FOOD_TYPE_KCAL_PER_G: Record<string, number> = {
-  croquetas: 3.3,
-  premium: 3.8,
-  veterinario: 3.8,
-  raw: 1.8,
-  humedo: 1.0,
-  casero: 1.5,
-};
-
-function getFoodKcalPerG(foodType: string | null): number {
-  if (!foodType) return 3.3;
-  const t = foodType.toLowerCase();
-  for (const [key, val] of Object.entries(FOOD_TYPE_KCAL_PER_G)) {
-    if (t.includes(key)) return val;
-  }
-  return 3.3;
-}
-
 // ─── Descripciones de pilares (para tooltips) ───────────────────────────────
 
 const PILLAR_DESC = {
   peso: 'Compara el peso actual con el rango ideal de la raza. Un peso saludable reduce riesgos articulares y metabólicos.',
   cuidado: 'Evalúa vacunas, visitas al veterinario, antipulgas/desparasitante y exámenes de sangre. La prevención es la base de una vida larga.',
   raza: 'Factores genéticos y de edad que influyen en la salud. Cada raza tiene predisposiciones específicas.',
-  nutricion: 'Analiza la calidad del alimento y si la porción diaria es adecuada según el peso y la raza.',
+  nutricion: 'Refleja si llevas el registro del alimento al día: marca, tipo y ración. Tener esta información organizada ayuda a tu veterinario. No evalúa si la porción es la correcta — esa la define tu vet o nutricionista.',
 } as const;
 
 // ─── Pilar 1: Peso Corporal ──────────────────────────────────────────────────
@@ -554,87 +529,61 @@ function scoreRazaEdad(input: ScoreInput): PillarScore {
 // ─── Pilar 5: Nutrición ───────────────────────────────────────────────────────
 
 function scoreNutricion(input: ScoreInput): PillarScore {
-  const { pet, weightRecords, foods } = input;
+  const { foods } = input;
   const tips: string[] = [];
 
   if (foods.length === 0) {
     return {
       name: 'Nutrición', id: 'nutricion' as PillarId, score: 4, max: 20, pct: 20,
       status: 'Pendiente de registro', description: PILLAR_DESC.nutricion,
-      tips: ['Registra el alimento actual para obtener un análisis nutricional personalizado'],
+      tips: ['Registra el alimento de tu mascota para completar este indicador'],
       isEstimated: true,
     };
   }
 
   const f = foods[0];
 
-  // Frescura del registro: el último alimento puede haber sido registrado hace
-  // mucho y el usuario haber cambiado. Si el registro es muy antiguo, aplicamos
-  // un tope al score para que el indicador refleje la incertidumbre.
-  // Si el end_date está set, el "log" deja de envejecer porque la bolsa cerró
-  // formalmente y el usuario logeará una nueva al comprarla. Si no, usamos
-  // start_date/created_at como referencia. Threshold: 90 días (3 meses).
+  // IMPORTANTE: este pilar NO juzga si la porción es la correcta. La ración
+  // adecuada la define el veterinario o nutricionista, no un score de bienestar
+  // — estimarla con una fórmula genérica generaba mensajes alarmantes ("tu
+  // ración difiere del estimado…") sobre porciones recomendadas por un profesional.
+  // En su lugar medimos algo objetivo y honesto: ¿está el alimento registrado y
+  // con sus datos al día? Registrar ya suma; completar marca/tipo/ración suma más.
+  let pts = 14; // base: hay un alimento registrado
+  if (f.brand) pts += 2;
+  if (f.type) pts += 2;
+  if (f.daily_grams) pts += 2;
+  pts = Math.min(20, pts);
+
+  // Nudges de completitud — siempre de "dato faltante", nunca de "porción mal".
+  if (!f.daily_grams) {
+    tips.push('Agrega la ración diaria (g) para un registro más completo');
+  }
+  if (!f.type) {
+    tips.push('Indica el tipo de alimento para completar el registro');
+  }
+
+  // Frescura del registro: si el end_date está set, la bolsa cerró formalmente.
+  // Si no, usamos start_date/created_at. Solo es un recordatorio de re-registrar
+  // si cambió de alimento — nunca una alarma.
   const foodLogDate = f.end_date ?? f.start_date ?? f.created_at ?? null;
   const daysSinceFoodLog = foodLogDate ? daysBetween(foodLogDate) : null;
   const isStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 90;
   const isVeryStaleFood = daysSinceFoodLog !== null && daysSinceFoodLog > 180;
 
-  // Calidad del alimento (10 pts)
-  let qualityScore = 5;
-  if (f.brand) qualityScore += 2;
-  if (f.type) {
-    const t = f.type.toLowerCase();
-    if (t.includes('veterinario') || t.includes('premium')) qualityScore += 3;
-    else if (t.includes('croquetas') || t.includes('kibble')) qualityScore += 2;
-    else qualityScore += 1;
-  }
-  qualityScore = Math.min(10, qualityScore);
-
   if (isVeryStaleFood) {
-    qualityScore = Math.min(qualityScore, 5);
-    tips.push('Hace más de 6 meses que no registras una bolsa nueva — confirma si sigue siendo el mismo alimento');
+    pts = Math.min(pts, 12);
+    tips.unshift('Hace más de 6 meses que no registras una bolsa — si cambiaste de alimento, regístralo');
   } else if (isStaleFood) {
-    qualityScore = Math.min(qualityScore, 7);
-    tips.push('Hace más de 3 meses que no actualizas el alimento — si compraste una bolsa nueva, regístrala para mantener los promedios al día');
+    pts = Math.min(pts, 16);
+    tips.unshift('Si ya compraste una bolsa nueva, regístrala para mantener los promedios al día');
   }
 
-  // Precisión de porción (10 pts)
-  let portionScore = 0;
-  const latestWeight = weightRecords[0]?.weight_kg ?? pet.weight_kg;
-
-  if (f.daily_grams && latestWeight) {
-    const kcalNeed = estimateDailyKcalNeed(latestWeight);
-    const kcalPerG = getFoodKcalPerG(f.type);
-    const kcalProvided = f.daily_grams * kcalPerG;
-    const deviation = Math.abs(1 - kcalProvided / kcalNeed) * 100;
-
-    if (deviation <= 10) {
-      portionScore = 10;
-    } else if (deviation <= 20) {
-      portionScore = 8;
-    } else if (deviation <= 35) {
-      portionScore = 5;
-      const idealG = Math.round(kcalNeed / kcalPerG);
-      tips.push(`La ración estimada sería ~${idealG} g/día según su peso. Puede ajustarse con el vet`);
-    } else {
-      portionScore = 3;
-      const idealG = Math.round(kcalNeed / kcalPerG);
-      tips.push(`La ración actual difiere del estimado (~${idealG} g/día) — vale la pena revisarla`);
-    }
-  } else if (f.daily_grams) {
-    portionScore = 6;
-    tips.push('Registra el peso actual para calcular si la ración es adecuada');
-  } else {
-    portionScore = 2;
-    tips.push('Agrega los gramos diarios para validar la porción');
-  }
-
-  const total = clamp(qualityScore + portionScore, 2, 20);
+  const total = clamp(pts, 2, 20);
   let status: string;
-  if (total >= 17) status = 'Nutrición muy bien documentada';
-  else if (total >= 12) status = `${f.brand ?? 'Alimento'} registrado`;
-  else if (total >= 7) status = 'Alimentación con datos parciales';
-  else status = 'Alimentación comenzando a registrarse';
+  if (total >= 18) status = `${f.brand ?? 'Alimento'} · registro completo`;
+  else if (total >= 14) status = `${f.brand ?? 'Alimento'} registrado`;
+  else status = 'Alimentación registrada';
 
   return {
     name: 'Nutrición', id: 'nutricion' as PillarId,

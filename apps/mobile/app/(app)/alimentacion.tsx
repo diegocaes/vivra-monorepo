@@ -60,8 +60,9 @@ function FoodSpendChart({ foods, treats }: { foods: Food[]; treats: Treat[] }) {
   const maxVal = Math.max(...monthly.map(m => m.food + m.treats), 1);
   const avgMonthly = monthly.reduce((s, m) => s + m.food + m.treats, 0) / 6;
   const W = 320;
-  const H = 150;
-  const PAD = { top: 16, bottom: 24, left: 8, right: 8 };
+  const H = 172;
+  // top padding reserves room for the $ total above each bar so it never clips
+  const PAD = { top: 30, bottom: 26, left: 8, right: 8 };
   const barW = 32;
   const gap = (W - PAD.left - PAD.right - barW * 6) / 5;
   const plotH = H - PAD.top - PAD.bottom;
@@ -92,7 +93,14 @@ function FoodSpendChart({ foods, treats }: { foods: Food[]; treats: Treat[] }) {
                 <Rect x={x} y={treatY} width={barW} height={treatH} rx={3} fill={Colors.warn} opacity={0.85} />
               )}
               {total > 0 && (
-                <SvgText x={x + barW / 2} y={treatY - 4} textAnchor="middle" fontSize={9} fill={Colors.ink}>
+                <SvgText
+                  x={x + barW / 2}
+                  y={Math.max(PAD.top - 8, treatY - 6)}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontWeight="600"
+                  fill={Colors.ink}
+                >
                   ${Math.round(total)}
                 </SvgText>
               )}

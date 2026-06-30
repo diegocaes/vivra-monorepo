@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
@@ -104,12 +104,10 @@ export default function ActividadScreen() {
 
   const openPasaporte = useCallback(() => {
     if (!petData.pet?.id) return;
-    if (!isPremium) {
-      router.push('/paywall' as any);
-      return;
-    }
-    Linking.openURL(`https://vivrapet.com/print?petId=${petData.pet.id}`).catch(() => {});
-  }, [petData.pet?.id, isPremium, router]);
+    // Passport VIEW is free (stickiness + appeal); only PDF export is premium,
+    // gated inside the passport screen itself.
+    router.push('/(app)/actividad/pasaporte' as any);
+  }, [petData.pet?.id, router]);
 
   const groomingStat = groomingDaysAgo === null
     ? null
@@ -164,12 +162,10 @@ export default function ActividadScreen() {
             icon="document-text"
             tint={Colors.accent}
             title="Pasaporte"
-            stat={isPremium ? 'PDF' : null}
-            sub={isPremium ? 'Exportar historial' : null}
-            cta={!isPremium ? 'Disponible con Premium' : null}
-            locked={!isPremium}
+            stat="Ver"
+            sub="Identidad, vacunas y viajes"
             onPress={openPasaporte}
-            accessibilityLabel="Pasaporte de viaje en PDF"
+            accessibilityLabel={`Pasaporte de ${petName}`}
           />
         </View>
 
