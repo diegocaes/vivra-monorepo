@@ -250,7 +250,7 @@ const animateProgress = (toStep: number) => {
           // Successful redeem — show a friendly confirmation
           Alert.alert(
             '🎉 ¡Premium activado!',
-            `Tenés ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
+            `Tienes ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
           );
         }
         await AsyncStorage.removeItem(PENDING_REF_KEY);

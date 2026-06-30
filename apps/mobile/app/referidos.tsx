@@ -107,8 +107,8 @@ export default function ReferidosScreen() {
       await Share.share({
         message:
           `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\n` +
-          `Descargá la app gratis: ${APP_STORE_URL}\n\n` +
-          `Cuando te registres, usá mi código ${referralCode} y ambos ganamos premium gratis.`,
+          `Descarga la app gratis: ${APP_STORE_URL}\n\n` +
+          `Cuando te registres, usa mi código ${referralCode} y ambos ganamos premium gratis.`,
       });
     } catch {
       // User cancelled share
@@ -148,15 +148,15 @@ export default function ReferidosScreen() {
             <View style={styles.heroIconWrap}>
               <Ionicons name="people" size={32} color={Colors.accent} />
             </View>
-            <Text style={styles.heroTitle}>Ya compartís premium</Text>
+            <Text style={styles.heroTitle}>Ya compartes premium</Text>
             <Text style={styles.heroSubtitle}>
-              Como codueño, ya tenés acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales.
+              Como codueño, ya tienes acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales.
             </Text>
           </View>
           <Card>
-            <Text style={styles.sectionTitle}>¿Querés referir?</Text>
+            <Text style={styles.sectionTitle}>¿Quieres referir?</Text>
             <Text style={[styles.howDesc, { marginBottom: Spacing.sm }]}>
-              Registrá tu propia mascota para activar tu código de referido y ganar 30 días premium por cada amigo que invites.
+              Registra tu propia mascota para activar tu código de referido y ganar 30 días premium por cada amigo que invites.
             </Text>
             <TouchableOpacity
               style={styles.shareBtn}

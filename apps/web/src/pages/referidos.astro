@@ -49,7 +49,7 @@ const code = refCode?.code ?? '';
 // since we want mobile installs. Code is shown separately so the recipient
 // pastes it in the register form.
 const shareMessage = code
-  ? `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\nDescargá la app gratis: ${APP_STORE_URL}\n\nCuando te registres, usá mi código ${code} y ambos ganamos premium gratis.`
+  ? `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\nDescarga la app gratis: ${APP_STORE_URL}\n\nCuando te registres, usa mi código ${code} y ambos ganamos premium gratis.`
   : '';
 
 // Cumulative rewards (actually matches how the backend grants them:
@@ -77,9 +77,9 @@ const milestones = [
         <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10">
           <svg class="h-7 w-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <p class="text-base font-bold text-ink mb-1">Ya compartís premium</p>
+        <p class="text-base font-bold text-ink mb-1">Ya compartes premium</p>
         <p class="text-sm text-muted leading-relaxed mb-4">
-          Como codueño, ya tenés acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales — registrá tu propia mascota para activar tu código.
+          Como codueño, ya tienes acceso premium gracias al dueño principal de la mascota. El programa de referidos está disponible para dueños principales — registra tu propia mascota para activar tu código.
         </p>
         <a href="/perfil" class="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
           Ir a Perfil
