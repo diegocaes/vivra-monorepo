@@ -7,7 +7,7 @@ import PremiumGate from '../../components/ui/PremiumGate.astro';
 import WeightChart from '../../components/WeightChart.tsx';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
-import { getPremiumStatus, isAtLimit } from '../../lib/premium';
+import { getPremiumStatus, isAtLimit, canAccess } from '../../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
@@ -87,7 +87,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
           )}
         </div>
         {records.length >= 2 && (
-          <PremiumGate isPremium={premium.isPremium} feature="weightChart" title="Grafica de peso" description="Graficas detalladas del peso. Refiere un amigo o suscríbete para desbloquear.">
+          <PremiumGate isPremium={canAccess('weightChart', premium)} feature="weightChart" title="Grafica de peso" description="Graficas detalladas del peso. Refiere un amigo o suscríbete para desbloquear.">
             <WeightChart records={records} client:load />
           </PremiumGate>
         )}

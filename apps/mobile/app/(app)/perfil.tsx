@@ -19,7 +19,6 @@ import { FormField } from '../../components/ui/FormField';
 import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
 import { useSubscription } from '../../hooks/useSubscription';
-import { PremiumGate } from '../../components/ui/PremiumGate';
 import { FREE_LIMITS } from '../../constants/revenueCat';
 import { SpendingSummary } from '../../components/pet/SpendingSummary';
 import { SharePetSheet } from '../../components/pet/SharePetSheet';
@@ -242,15 +241,9 @@ export default function PerfilScreen() {
   };
 
   const handleAddPet = () => {
-    if (!isPremium && pets.length >= FREE_LIMITS.MAX_PETS) {
-      Alert.alert(
-        'Mascota adicional',
-        'Con el plan gratuito puedes tener 1 mascota. Actualiza a Premium para agregar más.',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Ver Premium', onPress: () => router.push('/paywall' as any) },
-        ],
-      );
+    // Multi-mascota es free — solo un tope de cordura para evitar abuso
+    if (pets.length >= FREE_LIMITS.MAX_PETS) {
+      Alert.alert('Límite alcanzado', `Puedes tener hasta ${FREE_LIMITS.MAX_PETS} mascotas por cuenta.`);
       return;
     }
     router.push('/onboarding' as any);
@@ -360,25 +353,21 @@ export default function PerfilScreen() {
 
             {/* Theme color (collapsed — set once, rarely changed) */}
             <CollapsibleCard title="Color del perfil">
-              {isPremium ? (
-                <View style={styles.colorGrid}>
-                  {THEME_COLORS.map(({ key, hex }) => (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.colorCircle,
-                        { backgroundColor: hex },
-                        pet.theme_color === key && styles.colorCircleActive,
-                      ]}
-                      onPress={() => handleSetTheme(key)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Tema de color ${key}`}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <PremiumGate feature="Los temas de color" />
-              )}
+              <View style={styles.colorGrid}>
+                {THEME_COLORS.map(({ key, hex }) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.colorCircle,
+                      { backgroundColor: hex },
+                      pet.theme_color === key && styles.colorCircleActive,
+                    ]}
+                    onPress={() => handleSetTheme(key)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Tema de color ${key}`}
+                  />
+                ))}
+              </View>
             </CollapsibleCard>
 
             {/* Premium upsell */}
@@ -389,7 +378,7 @@ export default function PerfilScreen() {
                 </View>
                 <View style={styles.premiumInfo}>
                   <Text style={styles.premiumTitle}>Vivra Premium</Text>
-                  <Text style={styles.premiumDesc}>Estadísticas, PDF, mascotas ilimitadas y más</Text>
+                  <Text style={styles.premiumDesc}>Agrega un co-dueño y ve el desglose de tus gastos</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
               </TouchableOpacity>
@@ -407,7 +396,7 @@ export default function PerfilScreen() {
                   style={styles.coOwnerRow}
                   onPress={() => {
                     if (isPremium) setShowShareSheet(true);
-                    else router.push('/premium' as any);
+                    else router.push('/paywall' as any);
                   }}
                   activeOpacity={0.7}
                 >
@@ -532,7 +521,6 @@ export default function PerfilScreen() {
               <TouchableOpacity style={styles.addPetBtn} onPress={handleAddPet}>
                 <Ionicons name="add-circle-outline" size={20} color={Colors.accent} />
                 <Text style={styles.addPetText}>Agregar otra mascota</Text>
-                {!isPremium && <PremiumGate feature="" compact />}
               </TouchableOpacity>
             )}
           </>

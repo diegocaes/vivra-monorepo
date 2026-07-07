@@ -483,7 +483,7 @@ export default function AlimentacionScreen() {
         {foods.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Tus alimentos</Text>
-            {(isPremium ? foods : foods.slice(0, 3)).map(food => {
+            {foods.map(food => {
               const dur = describeFoodDuration(food);
               const typeLabel = FOOD_TYPES[food.food_type ?? food.type ?? ''] ?? food.type ?? '';
               return (
@@ -519,17 +519,6 @@ export default function AlimentacionScreen() {
                 </TouchableOpacity>
               );
             })}
-            {!isPremium && foods.length > 3 && (
-              <TouchableOpacity
-                style={styles.historyGate}
-                onPress={() => router.push('/premium' as any)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="lock-closed-outline" size={16} color={Colors.accent} />
-                <Text style={styles.historyGateText}>+{foods.length - 3} alimentos · Ver historial completo</Text>
-                <Ionicons name="chevron-forward" size={16} color={Colors.accent} />
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
@@ -811,10 +800,4 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     color: Colors.accent,
   },
-  historyGate: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.canvas, borderRadius: Radius.lg, borderWidth: 1,
-    borderColor: Colors.cardBorder, padding: Spacing.md, marginTop: Spacing.xs,
-  },
-  historyGateText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.accent },
 });

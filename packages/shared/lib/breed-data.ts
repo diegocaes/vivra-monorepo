@@ -761,7 +761,30 @@ export const BREED_DATA: Record<string, BreedProfile> = {
     obesityRisk: 'medium',
     seniorAgeYears: 9,
   },
+  // Gato doméstico genérico — Vivra no maneja razas de gatos, solo la especie.
+  // Rangos según AAFP/AAHA feline life stage guidelines (peso ideal 3.5–5.5 kg).
+  cat: {
+    displayName: 'Gato',
+    idealWeightKgMin: 3.5,
+    idealWeightKgMax: 5.5,
+    sizeCategory: 'small',
+    lifespanYears: 15,
+    risks: [],
+    dentalRisk: 'medium',
+    cardiacRisk: 'low',
+    obesityRisk: 'high',
+    seniorAgeYears: 11,
+  },
 };
+
+/**
+ * Perfil según especie: los gatos usan el perfil genérico felino
+ * (sin razas); los perros resuelven por raza como siempre.
+ */
+export function getSpeciesProfile(species: string | null | undefined, breed: string | null | undefined): BreedProfile {
+  if (species === 'cat') return BREED_DATA['cat'];
+  return getBreedProfile(breed);
+}
 
 /**
  * Normaliza el nombre de raza del usuario a la clave del mapa.

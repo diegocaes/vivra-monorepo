@@ -305,7 +305,7 @@ export default function DashboardScreen() {
                 Tu Premium gratis vence {trialDaysLeft === 0 ? 'hoy' : 'mañana'}
               </Text>
               <Text style={styles.trialExpiringDesc}>
-                Sin Premium perderás compartir mascota con co-dueño y funciones avanzadas
+                Sin Premium perderás el co-dueño y el desglose de gastos
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#DC2626" />
@@ -316,7 +316,7 @@ export default function DashboardScreen() {
         {isTrial && trialDaysLeft !== null && trialDaysLeft > 1 && (
           <TouchableOpacity
             style={styles.trialBanner}
-            onPress={() => router.push('/premium' as any)}
+            onPress={() => router.push('/paywall' as any)}
             activeOpacity={0.8}
           >
             <Ionicons name="star" size={18} color={Colors.accent} />
@@ -337,8 +337,8 @@ export default function DashboardScreen() {
           >
             <Ionicons name="star" size={18} color={Colors.accent} />
             <View style={styles.premiumBannerInfo}>
-              <Text style={styles.premiumBannerTitle}>Desbloquea estadísticas avanzadas</Text>
-              <Text style={styles.premiumBannerDesc}>Gráficos, tendencias, exportar PDF y más</Text>
+              <Text style={styles.premiumBannerTitle}>Vivra Premium</Text>
+              <Text style={styles.premiumBannerDesc}>Agrega un co-dueño y ve el desglose de tus gastos</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
           </TouchableOpacity>

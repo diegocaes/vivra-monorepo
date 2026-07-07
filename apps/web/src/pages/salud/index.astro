@@ -3,7 +3,7 @@ import MainLayout from '../../layouts/MainLayout.astro';
 
 import PremiumGate from '../../components/ui/PremiumGate.astro';
 import { getActivePet } from '../../lib/pet';
-import { getPremiumStatus } from '../../lib/premium';
+import { getPremiumStatus, canAccess } from '../../lib/premium';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
 
@@ -46,6 +46,7 @@ try {
 
 const scoreInput: ScoreInput = {
   pet: {
+    species: (pet as any).species ?? 'dog',
     breed: pet.breed ?? null,
     birth_date: pet.birth_date ?? null,
     weight_kg: pet.weight_kg ?? null,
@@ -148,8 +149,8 @@ if (Astro.request.method === 'POST') {
         <p class="text-xs text-muted mt-0.5 text-center max-w-xs">{score.subline}</p>
       </div>
 
-      {/* Pillar breakdown bars — premium */}
-      <PremiumGate isPremium={premium.isPremium} feature="vitalityDetails" title="Desglose detallado" description="Score por pilar, flags y recomendaciones. Refiere un amigo o suscríbete.">
+      {/* Pillar breakdown bars */}
+      <PremiumGate isPremium={canAccess('vitalityDetails', premium)} feature="vitalityDetails" title="Desglose detallado" description="Score por pilar, flags y recomendaciones. Refiere un amigo o suscríbete.">
         <div class="pt-3 border-t border-card-border space-y-1">
           {score.pillars.map(pillar => (
             <div class="pillar-row">
@@ -316,8 +317,8 @@ if (Astro.request.method === 'POST') {
     </a>
   </div>
 
-  {/* ── INSIGHTS / RECOMENDACIONES — premium ── */}
-  {score.showScore && premium.isPremium && score.pillars.some(p => p.tips.length > 0) && (
+  {/* ── INSIGHTS / RECOMENDACIONES ── */}
+  {score.showScore && score.pillars.some(p => p.tips.length > 0) && (
     <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
       <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
         <div class="flex items-center gap-2.5 px-4 py-3.5 border-b border-card-border">
@@ -348,8 +349,8 @@ if (Astro.request.method === 'POST') {
     </div>
   )}
 
-  {/* ── AVISOS — premium, solo cuando hay score ── */}
-  {score.showScore && premium.isPremium && score.flags.length > 0 && (
+  {/* ── AVISOS — solo cuando hay score ── */}
+  {score.showScore && score.flags.length > 0 && (
     <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
       <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Para tener en cuenta</p>
       <div class="space-y-2">

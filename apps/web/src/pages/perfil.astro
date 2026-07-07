@@ -250,8 +250,9 @@ const isOtherBreed = pet?.breed && !breedInList;
 const premium = await getPremiumStatus(supabase, user.id);
 const isPremium = premium.isPremium;
 
+// El TOTAL de gastos es visible para todos; el desglose por categoría es premium.
 let spending = { alimento: 0, vet: 0, grooming: 0, vuelos: 0, snacks: 0, preventivos: 0, total: 0 };
-if (isPremium && pet) {
+if (pet) {
   // Use admin client for the spending rollup. RLS is sometimes flaky in the
   // SSR context for cross-table aggregations (especially vet_visits where
   // multiple PERMISSIVE policies + SECURITY DEFINER helpers interact). It's
@@ -757,9 +758,7 @@ const origin = new URL(Astro.request.url).origin;
             <div>
               <p class="text-sm font-semibold text-ink">Resumen de gastos</p>
               <p class="text-xs text-muted">
-                {isPremium
-                  ? (spending.total > 0 ? `Total acumulado · $${formatCurrency(spending.total)}` : 'Sin gastos registrados aún')
-                  : 'Disponible con Premium'}
+                {spending.total > 0 ? `Total acumulado · $${formatCurrency(spending.total)}` : 'Sin gastos registrados aún'}
               </p>
             </div>
           </div>
@@ -816,13 +815,19 @@ const origin = new URL(Astro.request.url).origin;
               <p class="text-sm text-muted">Los gastos de alimentos, veterinario, grooming, vuelos, snacks y preventivos se suman aquí.</p>
             )
           ) : (
-            <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-              <span class="text-lg">🔒</span>
-              <div>
-                <p class="text-sm font-semibold text-ink">Ver el desglose completo</p>
-                <p class="text-xs text-muted">Disponible con Premium</p>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between text-sm">
+                <span class="font-semibold text-ink">Total</span>
+                <span class="font-bold text-accent text-base">${formatCurrency(spending.total)}</span>
               </div>
-            </a>
+              <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
+                <span class="text-lg">🔒</span>
+                <div>
+                  <p class="text-sm font-semibold text-ink">Ver el desglose por categoría</p>
+                  <p class="text-xs text-muted">Vet, alimento, grooming y más — con Premium</p>
+                </div>
+              </a>
+            </div>
           )}
         </div>
       </details>

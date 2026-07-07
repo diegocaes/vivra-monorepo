@@ -23,11 +23,11 @@ if (!isAddMode && hasPet) {
   return Astro.redirect('/dashboard');
 }
 
-// Multi-pet limit: if in add mode, check premium limit
+// Multi-pet: free para todos — solo un tope de cordura (maxPets) para evitar abuso
 if (isAddMode) {
   const premium = await getPremiumStatus(supabase, user.id);
   if (isAtLimit('maxPets', existingPets?.length ?? 0, premium)) {
-    return Astro.redirect('/premium?toast_error=' + encodeURIComponent('Para agregar otra mascota necesitas Premium. Refiere un amigo o suscríbete para desbloquear.'));
+    return Astro.redirect('/perfil?toast_error=' + encodeURIComponent('Alcanzaste el límite de mascotas por cuenta.'));
   }
 }
 
@@ -53,9 +53,11 @@ try {
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
 
+  const species = (formData.get('species') as string) === 'cat' ? 'cat' : 'dog';
   const breedSelect = formData.get('breed') as string;
   const breedOther = formData.get('breed_other') as string;
-  const breed = breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null;
+  // Gatos: sin razas — se registran solo como 'cat'
+  const breed = species === 'cat' ? null : (breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null);
 
   const newWeight = formData.get('weight_kg') ? Number(formData.get('weight_kg')) : null;
 
@@ -68,6 +70,7 @@ if (Astro.request.method === 'POST') {
   const petData = {
     user_id: user.id,
     name: rawName,
+    species,
     breed: breed?.slice(0, 100) || null,
     birth_date: (formData.get('birth_date') as string) || null,
     gender: (formData.get('gender') as string) || null,
@@ -257,6 +260,27 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
           </div>
 
           <div class="space-y-5">
+            <!-- Species picker -->
+            <div>
+              <label class="block text-sm font-medium text-ink mb-2">¿Quién es?</label>
+              <div class="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  data-species="dog"
+                  class="species-pill rounded-2xl border-2 border-accent bg-accent text-white px-4 py-3.5 text-sm font-semibold transition-all active:scale-95"
+                >
+                  🐶 Perro
+                </button>
+                <button
+                  type="button"
+                  data-species="cat"
+                  class="species-pill rounded-2xl border-2 border-card-border bg-white px-4 py-3.5 text-sm font-semibold text-ink transition-all hover:border-accent active:scale-95"
+                >
+                  🐱 Gato
+                </button>
+              </div>
+            </div>
+
             <!-- Photo picker -->
             <div class="flex flex-col items-center gap-2">
               <div class="relative">
@@ -472,7 +496,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
                     <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                     <p class="text-sm font-bold">7 días Premium activados</p>
                   </div>
-                  <p class="text-xs text-white/70 leading-relaxed">Gráficas de peso, score detallado, inventario de comida y más — todo desbloqueado.</p>
+                  <p class="text-xs text-white/70 leading-relaxed">Agrega un co-dueño y ve el desglose de tus gastos — todo desbloqueado.</p>
                 </div>
               )}
 
@@ -492,6 +516,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
     <!-- Hidden form — populated by JS before final submit -->
     <form id="final-form" method="POST" enctype="multipart/form-data" class="hidden">
       <input type="hidden" name="name" id="ff-name" />
+      <input type="hidden" name="species" id="ff-species" />
       <input type="hidden" name="breed" id="ff-breed" />
       <input type="hidden" name="breed_other" id="ff-breed-other" />
       <input type="hidden" name="birth_date" id="ff-birth-date" />
@@ -507,6 +532,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
     <script>
       // ── State ──
       let selectedGender = '';
+      let selectedSpecies = 'dog';
       let photoFileRef: File | null = null;
       const store: Record<string, string> = {};
 
@@ -578,6 +604,21 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
         }
       });
 
+      // ── Species pills — gatos no piden raza ──
+      document.querySelectorAll('.species-pill').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.species-pill').forEach((b) => {
+            b.classList.remove('bg-accent', 'text-white', 'border-accent');
+            b.classList.add('border-card-border', 'text-ink', 'bg-white');
+          });
+          btn.classList.add('bg-accent', 'text-white', 'border-accent');
+          btn.classList.remove('border-card-border', 'text-ink', 'bg-white');
+          selectedSpecies = (btn as HTMLElement).dataset.species || 'dog';
+          const breedSection = document.getElementById('breed-section') as HTMLElement;
+          breedSection.classList.toggle('hidden', selectedSpecies === 'cat');
+        });
+      });
+
       // ── Breed select + fun facts ──
       const breedSelect = document.getElementById('ob-breed-select') as HTMLSelectElement;
       const breedOtherInput = document.getElementById('ob-breed-other') as HTMLInputElement;
@@ -623,8 +664,9 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
         nameError.classList.add('hidden');
 
         store.name = nameInput.value.trim();
-        store.breed = breedSelect?.value || '';
-        store.breedOther = breedOtherInput?.value.trim() || '';
+        store.species = selectedSpecies;
+        store.breed = selectedSpecies === 'cat' ? '' : (breedSelect?.value || '');
+        store.breedOther = selectedSpecies === 'cat' ? '' : (breedOtherInput?.value.trim() || '');
 
         // Update celebration screen title
         const celebTitle = document.getElementById('celebration-title');
@@ -685,6 +727,7 @@ const breedFactsB64 = Buffer.from(JSON.stringify(BREED_FACTS)).toString('base64'
       // ── Final submit (from celebration screen) ──
       function submitFinal() {
         (document.getElementById('ff-name') as HTMLInputElement).value = store.name || '';
+        (document.getElementById('ff-species') as HTMLInputElement).value = store.species || 'dog';
         (document.getElementById('ff-breed') as HTMLInputElement).value = store.breed || '';
         (document.getElementById('ff-breed-other') as HTMLInputElement).value = store.breedOther || '';
         (document.getElementById('ff-birth-date') as HTMLInputElement).value = store.birthDate || '';

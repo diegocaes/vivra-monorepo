@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { useSubscription } from '../../../hooks/useSubscription';
 import { formatDate, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
@@ -14,7 +13,6 @@ import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
-import { PremiumGate } from '../../../components/ui/PremiumGate';
 import type { WeightRecord } from '../../../types/supabase';
 
 // Mini weight chart
@@ -116,7 +114,6 @@ function WeightChart({ records }: { records: WeightRecord[] }) {
 export default function PesoScreen() {
   const router = useRouter();
   const { pet } = usePetContext();
-  const { isPremium } = useSubscription();
   const [records, setRecords] = useState<WeightRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -251,22 +248,11 @@ export default function PesoScreen() {
           </Card>
         )}
 
-        {/* Weight chart — premium feature */}
-        {isPremium ? (
-          <WeightChart records={records} />
-        ) : records.length >= 2 ? (
-          <Card>
-            <View style={styles.chartLocked}>
-              <Ionicons name="stats-chart" size={32} color={Colors.cardBorder} />
-              <Text style={styles.chartLockedTitle}>Gráfico de evolución</Text>
-              <Text style={styles.chartLockedDesc}>Ve tendencias de peso con el tiempo</Text>
-              <PremiumGate feature="Los gráficos de peso" compact />
-            </View>
-          </Card>
-        ) : null}
+        {/* Weight chart — free para todos */}
+        <WeightChart records={records} />
 
-        {/* Advanced stats — premium */}
-        {isPremium && records.length >= 3 && (
+        {/* Advanced stats */}
+        {records.length >= 3 && (
           <Card>
             <Text style={styles.chartTitle}>Estadísticas</Text>
             <View style={styles.statsRow}>
@@ -395,21 +381,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     color: Colors.ink,
     marginBottom: Spacing.sm,
-  },
-  chartLocked: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  chartLockedTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
-    color: Colors.ink,
-    marginTop: Spacing.xs,
-  },
-  chartLockedDesc: {
-    fontSize: FontSize.sm,
-    color: Colors.muted,
   },
   statsRow: {
     flexDirection: 'row',

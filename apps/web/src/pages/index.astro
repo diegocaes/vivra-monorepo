@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import Analytics from '@vercel/analytics/astro';
+import Track from '../components/Track.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import { createSupabaseClient } from '../lib/supabase';
 
@@ -27,9 +28,9 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
     <meta name="color-scheme" content="light dark" />
 
     <!-- ── PRIMARY SEO ── -->
-    <title>Vivra — App para perros: vacunas, peso, veterinario y carnet digital</title>
-    <meta name="description" content="Vivra es la app gratis para llevar la salud de tu perro en un solo lugar: carnet de vacunas, peso, visitas al veterinario, alimentación, gastos y pasaporte de viaje. En iPhone y desde la web." />
-    <meta name="keywords" content="app para perros, app para mascotas, carnet de vacunas digital, control de vacunas perro, app salud perro, historial veterinario mascota, peso perro app, pasaporte de mascota, app mascotas Panamá, app mascotas Latinoamérica" />
+    <title>Vivra — App para perros y gatos: vacunas, peso, veterinario y carnet digital</title>
+    <meta name="description" content="Vivra es la app gratis para llevar la salud de tu perro o gato en un solo lugar: carnet de vacunas, peso, visitas al veterinario, alimentación, gastos y pasaporte de viaje. En iPhone y desde la web." />
+    <meta name="keywords" content="app para perros, app para gatos, app para mascotas, carnet de vacunas digital, control de vacunas perro, app salud perro, historial veterinario mascota, peso perro app, pasaporte de mascota, app mascotas Panamá, app mascotas Latinoamérica" />
     <meta name="author" content="Vivra" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="googlebot" content="index, follow" />
@@ -40,8 +41,8 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
     <!-- ── OPEN GRAPH ── -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://vivrapet.com/" />
-    <meta property="og:title" content="Vivra — App para perros: salud, vacunas y carnet digital" />
-    <meta property="og:description" content="La app gratis para llevar la salud de tu perro en un solo lugar: vacunas, peso, veterinario, alimentación y pasaporte de viaje. En iPhone y web." />
+    <meta property="og:title" content="Vivra — App para perros y gatos: salud, vacunas y carnet digital" />
+    <meta property="og:description" content="La app gratis para llevar la salud de tu mascota en un solo lugar: vacunas, peso, veterinario, alimentación y pasaporte de viaje. En iPhone y web." />
     <meta property="og:image" content="https://vivrapet.com/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -51,8 +52,8 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
     <!-- ── TWITTER ── -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Vivra — App para perros: salud, vacunas y carnet digital" />
-    <meta name="twitter:description" content="La app gratis para llevar la salud de tu perro: vacunas, peso, veterinario y pasaporte de viaje. En iPhone y web." />
+    <meta name="twitter:title" content="Vivra — App para perros y gatos: salud, vacunas y carnet digital" />
+    <meta name="twitter:description" content="La app gratis para llevar la salud de tu mascota: vacunas, peso, veterinario y pasaporte de viaje. En iPhone y web." />
     <meta name="twitter:image" content="https://vivrapet.com/og-image.png" />
 
     <!-- ── FONTS + ICONS ── -->
@@ -74,7 +75,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       "name": "Vivra",
       "operatingSystem": "iOS",
       "applicationCategory": "LifestyleApplication",
-      "description": "Vivra es la app para llevar la salud de tu perro en un solo lugar: carnet de vacunas, peso, visitas al veterinario, alimentación, gastos y pasaporte de viaje. Gratis, en iPhone y desde la web.",
+      "description": "Vivra es la app para llevar la salud de tu perro o gato en un solo lugar: carnet de vacunas, peso, visitas al veterinario, alimentación, gastos y pasaporte de viaje. Gratis, en iPhone y desde la web.",
       "url": "https://vivrapet.com",
       "downloadUrl": APP_STORE_URL,
       "installUrl": APP_STORE_URL,
@@ -133,7 +134,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         {
           "@type": "Question",
           "name": "¿Solo funciona para perros?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Por ahora está optimizada para perros (badges de vacunas, razas, BCS, etc.) pero puedes registrar cualquier mascota. Próximamente agregamos soporte específico para gatos." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Funciona para perros y gatos. Los perros tienen perfiles por raza; los gatos usan un perfil felino general. Puedes tener varios, todos gratis." }
         },
         {
           "@type": "Question",
@@ -148,7 +149,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         {
           "@type": "Question",
           "name": "¿Qué es el Indicador de Bienestar?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Es un número del 0 al 100 que resume qué tan completo y al día está el registro de salud de tu perro en cuatro áreas: peso, cuidado preventivo, raza y edad, y alimentación. No es un diagnóstico médico, sube cuando agregas información y te muestra qué te falta por registrar." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Es un número del 0 al 100 que resume qué tan completo y al día está el registro de salud de tu mascota en cuatro áreas: peso, cuidado preventivo, raza y edad, y alimentación. No es un diagnóstico médico, sube cuando agregas información y te muestra qué te falta por registrar." }
         },
         {
           "@type": "Question",
@@ -732,7 +733,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
             <span class="gradient-text">en un solo lugar.</span>
           </h1>
           <p class="lead">
-            Vacunas, peso, veterinario, alimentación y pasaporte de viaje. Todo organizado, siempre contigo. Para que cuidar a tu perro sea simple.
+            Vacunas, peso, veterinario, alimentación y pasaporte de viaje. Todo organizado, siempre contigo. Para que cuidar a tu perro o a tu gato sea simple.
           </p>
           <div class="hero-actions">
             <a href="/register" class="btn-primary">
@@ -843,7 +844,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
             <div class="score-preview">
               <div class="bento-icon" style="background:rgba(249,115,22,0.18);">🧡</div>
               <h3>Indicador de Bienestar</h3>
-              <p>Un número del 0 al 100 que resume qué tan completo y al día está el cuidado de tu perro en 4 áreas: peso, cuidado preventivo, raza y nutrición. Te muestra qué te falta por registrar. No es un diagnóstico.</p>
+              <p>Un número del 0 al 100 que resume qué tan completo y al día está el cuidado de tu mascota en 4 áreas: peso, cuidado preventivo, raza y nutrición. Te muestra qué te falta por registrar. No es un diagnóstico.</p>
             </div>
             <div class="score-visual">
               <div class="score-circle">
@@ -956,19 +957,19 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       <div class="faq-grid">
         <details class="faq-item">
           <summary>¿Vivra es gratis?</summary>
-          <p>Sí. Las funciones esenciales (vacunas, peso, veterinario, pasaporte) son gratis para siempre. Hay un plan premium opcional con analytics avanzados, codueño compartido, exportar PDF y más.</p>
+          <p>Sí. Vacunas, peso, veterinario, alimentación, recordatorios, varias mascotas y el pasaporte son gratis para siempre. Premium solo agrega dos cosas: compartir la mascota con un co-dueño y ver el desglose de tus gastos por categoría.</p>
         </details>
         <details class="faq-item">
           <summary>¿Funciona sin internet?</summary>
           <p>Necesitas conexión para sincronizar entre iPhone y web. La app móvil cachea datos para consultas rápidas cuando estás fuera de cobertura.</p>
         </details>
         <details class="faq-item">
-          <summary>¿Solo funciona para perros?</summary>
-          <p>Por ahora está optimizada para perros (badges de vacunas, razas, BCS, etc.) pero puedes registrar cualquier mascota. Próximamente agregamos soporte específico para gatos.</p>
+          <summary>¿Funciona para perros y gatos?</summary>
+          <p>Sí. Los perros tienen perfiles por raza (peso ideal, riesgos, recordatorios); los gatos usan un perfil felino general. Puedes tener varios en la misma cuenta, todos gratis.</p>
         </details>
         <details class="faq-item">
           <summary>¿Puedo compartir la mascota con mi pareja o familia?</summary>
-          <p>Sí. Con plan premium puedes agregar un codueño — comparten la misma vista de la mascota desde sus propias cuentas. El codueño hereda premium mientras tu lo tengas activo.</p>
+          <p>Sí. Con Premium agregas un co-dueño: ambos ven y registran todo desde sus propias cuentas, y el co-dueño hereda Premium mientras lo tengas activo.</p>
         </details>
         <details class="faq-item">
           <summary>¿Mis datos están seguros?</summary>
@@ -980,7 +981,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         </details>
         <details class="faq-item">
           <summary>¿Qué es el Indicador de Bienestar?</summary>
-          <p>Es un número del 0 al 100 que resume qué tan completo y al día está el registro de salud de tu perro en cuatro áreas: peso, cuidado preventivo, raza y edad, y alimentación. No es un diagnóstico médico — sube cuando agregas información y te muestra qué te falta por registrar.</p>
+          <p>Es un número del 0 al 100 que resume qué tan completo y al día está el registro de salud de tu mascota en cuatro áreas: peso, cuidado preventivo, raza y edad, y alimentación. No es un diagnóstico médico — sube cuando agregas información y te muestra qué te falta por registrar.</p>
         </details>
         <details class="faq-item">
           <summary>¿La app me dice cuánta comida darle a mi perro?</summary>
@@ -1044,5 +1045,6 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
     <!-- Vercel Analytics — free tier on Hobby plan (2.5k events/mo) -->
     <Analytics />
     <SpeedInsights />
+    <Track />
   </body>
 </html>

@@ -1,0 +1,197 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import { createSupabaseAdminClient } from '../lib/supabase';
+
+/**
+ * /admin — panel interno de producto. Solo accesible para ADMIN_EMAILS.
+ * Lee app_events (page views, clicks, screen views de iOS) + métricas core.
+ * Todo se agrega en memoria: volumen actual es pequeño (early stage);
+ * mover a SQL agregado cuando app_events pase de ~50k filas.
+ */
+const { user } = Astro.locals;
+
+const ADMIN_EMAILS = (import.meta.env.ADMIN_EMAILS ?? 'diarcaes@gmail.com')
+  .split(',')
+  .map((e: string) => e.trim().toLowerCase());
+
+if (!user?.email || !ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+  return Astro.redirect('/dashboard');
+}
+
+const admin = createSupabaseAdminClient();
+const since14d = new Date(Date.now() - 14 * 86400000).toISOString();
+const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
+
+const [eventsRes, petsRes, subsRes, tokensRes, notifsRes, usersRes] = await Promise.all([
+  admin.from('app_events')
+    .select('user_id, event, name, platform, created_at')
+    .gte('created_at', since14d)
+    .order('created_at', { ascending: false })
+    .limit(5000),
+  admin.from('pets').select('id, species', { count: 'exact' }),
+  admin.from('user_subscriptions').select('plan, premium_until').eq('plan', 'premium'),
+  admin.from('push_tokens').select('id', { count: 'exact', head: true }),
+  admin.from('notifications').select('id', { count: 'exact', head: true }).gte('created_at', since7d),
+  admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+]);
+
+const events = eventsRes.data ?? [];
+const totalUsers = usersRes.data?.users?.length ?? 0;
+const totalPets = petsRes.count ?? 0;
+const totalCats = (petsRes.data ?? []).filter((p: any) => p.species === 'cat').length;
+const premiumActive = (subsRes.data ?? []).filter(
+  (s: any) => s.premium_until && new Date(s.premium_until) > new Date()
+).length;
+const pushTokens = tokensRes.count ?? 0;
+const notifs7d = notifsRes.count ?? 0;
+
+// Usuarios activos (con al menos 1 evento) 7d
+const active7d = new Set(
+  events.filter(e => e.user_id && e.created_at >= since7d).map(e => e.user_id)
+).size;
+
+// Actividad por día (14 días)
+const byDay = new Map<string, number>();
+for (let i = 13; i >= 0; i--) {
+  byDay.set(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10), 0);
+}
+for (const e of events) {
+  const d = e.created_at.slice(0, 10);
+  if (byDay.has(d)) byDay.set(d, (byDay.get(d) ?? 0) + 1);
+}
+const dayEntries = [...byDay.entries()];
+const maxDay = Math.max(...dayEntries.map(([, v]) => v), 1);
+
+// Top pantallas y clicks (14d)
+function topBy(list: typeof events, evName: string[], n = 10) {
+  const m = new Map<string, number>();
+  for (const e of list) {
+    if (!evName.includes(e.event)) continue;
+    m.set(e.name, (m.get(e.name) ?? 0) + 1);
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+const topScreens = topBy(events, ['page_view', 'screen_view']);
+const topClicks = topBy(events, ['click']);
+const maxScreen = Math.max(...topScreens.map(([, v]) => v), 1);
+const maxClick = Math.max(...topClicks.map(([, v]) => v), 1);
+
+// Plataforma split
+const webCount = events.filter(e => e.platform === 'web').length;
+const iosCount = events.filter(e => e.platform === 'ios').length;
+
+const recentEvents = events.slice(0, 40);
+
+const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' });
+---
+
+<MainLayout title="Admin">
+  <div class="space-y-6 animate-fade-up">
+    <div>
+      <h1 class="text-2xl font-bold text-ink">Panel de producto</h1>
+      <p class="text-sm text-muted mt-1">Eventos de los últimos 14 días · {events.length} eventos</p>
+    </div>
+
+    <!-- Stat tiles -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {[
+        { label: 'Usuarios', value: totalUsers },
+        { label: 'Activos 7d', value: active7d },
+        { label: 'Mascotas', value: `${totalPets}${totalCats > 0 ? ` (${totalCats} 🐱)` : ''}` },
+        { label: 'Premium activos', value: premiumActive },
+        { label: 'Push tokens', value: pushTokens },
+        { label: 'Notifs enviadas 7d', value: notifs7d },
+      ].map(s => (
+        <div class="rounded-2xl border border-card-border bg-card px-4 py-4">
+          <p class="text-2xl font-bold text-ink">{s.value}</p>
+          <p class="text-xs text-muted mt-0.5">{s.label}</p>
+        </div>
+      ))}
+    </div>
+
+    <!-- Actividad 14 días -->
+    <div class="rounded-2xl border border-card-border bg-card p-5">
+      <div class="flex items-baseline justify-between mb-4">
+        <p class="text-sm font-semibold text-ink">Eventos por día</p>
+        <p class="text-xs text-muted">web {webCount} · iOS {iosCount}</p>
+      </div>
+      <div class="flex items-end gap-1 h-28">
+        {dayEntries.map(([d, v]) => (
+          <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${fmtDay(d)}: ${v} eventos`}>
+            <div
+              class="w-full rounded-t"
+              style={`height:${Math.max(3, Math.round((v / maxDay) * 96))}px;background:#F97316;opacity:${v === 0 ? 0.15 : 0.9}`}
+            ></div>
+          </div>
+        ))}
+      </div>
+      <div class="flex justify-between mt-2">
+        <p class="text-[10px] text-muted">{fmtDay(dayEntries[0][0])}</p>
+        <p class="text-[10px] text-muted">{fmtDay(dayEntries[dayEntries.length - 1][0])}</p>
+      </div>
+    </div>
+
+    <!-- Top pantallas + top clicks -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="rounded-2xl border border-card-border bg-card p-5">
+        <p class="text-sm font-semibold text-ink mb-4">Pantallas más vistas</p>
+        {topScreens.length === 0 && <p class="text-xs text-muted">Sin datos aún — los eventos empiezan a registrarse con este deploy.</p>}
+        <div class="space-y-2">
+          {topScreens.map(([name, v]) => (
+            <div class="flex items-center gap-2" title={`${name}: ${v} vistas`}>
+              <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
+              <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
+                <div class="h-full rounded" style={`width:${Math.round((v / maxScreen) * 100)}%;background:#F97316;opacity:.9`}></div>
+              </div>
+              <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="rounded-2xl border border-card-border bg-card p-5">
+        <p class="text-sm font-semibold text-ink mb-4">Clicks más frecuentes</p>
+        {topClicks.length === 0 && <p class="text-xs text-muted">Sin datos aún.</p>}
+        <div class="space-y-2">
+          {topClicks.map(([name, v]) => (
+            <div class="flex items-center gap-2" title={`${name}: ${v} clicks`}>
+              <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
+              <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
+                <div class="h-full rounded" style={`width:${Math.round((v / maxClick) * 100)}%;background:#F97316;opacity:.9`}></div>
+              </div>
+              <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <!-- Eventos recientes -->
+    <div class="rounded-2xl border border-card-border bg-card p-5 overflow-x-auto">
+      <p class="text-sm font-semibold text-ink mb-4">Eventos recientes</p>
+      {recentEvents.length === 0 ? (
+        <p class="text-xs text-muted">Todavía no hay eventos registrados.</p>
+      ) : (
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left text-muted border-b border-card-border">
+              <th class="py-2 pr-3 font-medium">Cuándo</th>
+              <th class="py-2 pr-3 font-medium">Evento</th>
+              <th class="py-2 pr-3 font-medium">Nombre</th>
+              <th class="py-2 font-medium">Plataforma</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentEvents.map(e => (
+              <tr class="border-b border-card-border/50">
+                <td class="py-1.5 pr-3 text-muted whitespace-nowrap">{new Date(e.created_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                <td class="py-1.5 pr-3 text-ink">{e.event}</td>
+                <td class="py-1.5 pr-3 text-ink truncate max-w-50">{e.name}</td>
+                <td class="py-1.5 text-muted">{e.platform}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  </div>
+</MainLayout>

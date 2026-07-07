@@ -6,15 +6,15 @@ import type { PremiumStatus } from '../lib/premium';
 const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
+// Premium = co-dueño + desglose de gastos. Todo lo demás es gratis para todos.
 const features = [
-  { icon: '👥', name: 'Premium compartido', desc: 'Si uno paga Premium, ambos co-dueños tienen acceso completo', free: 'No', premium: 'Ambos con Premium' },
-  { icon: '🐾', name: 'Mascotas ilimitadas', desc: 'Registra todos tus perros en una sola cuenta', free: '1 mascota', premium: 'Hasta 10' },
-  { icon: '📊', name: 'Grafica de peso', desc: 'Visualiza la evolucion del peso con graficas detalladas', free: 'Ultimo peso', premium: 'Historial completo' },
-  { icon: '🧡', name: 'Score detallado', desc: 'Desglose por pilar, flags y recomendaciones personalizadas', free: 'Score general', premium: 'Detalle completo' },
-  { icon: '🍖', name: 'Inventario de comida', desc: 'Alertas de stock, costo por dia y analytics', free: 'Registro basico', premium: 'Inventario + analytics' },
-  { icon: '✈️', name: 'Documentos de viaje', desc: 'Sube documentos y genera pasaporte imprimible', free: '2 vuelos', premium: 'Ilimitados + docs' },
-  { icon: '📋', name: 'Exportar datos', desc: 'Descarga todo el historial de tu mascota en PDF', free: 'No', premium: 'PDF + CSV' },
-  { icon: '🔔', name: 'Push notifications', desc: 'Recordatorios automaticos en tu celular', free: 'In-app', premium: 'Push nativo' },
+  { icon: '👥', name: 'Co-dueño', desc: 'Comparte la mascota con tu pareja: ambos ven y registran todo', free: 'No', premium: 'Sí' },
+  { icon: '💰', name: 'Desglose de gastos', desc: 'Ve en qué gastas: vet, alimento, grooming, vuelos y más', free: 'Solo el total', premium: 'Por categoría' },
+  { icon: '🐾', name: 'Varias mascotas', desc: 'Perros y gatos en una sola cuenta', free: 'Sí', premium: 'Sí' },
+  { icon: '📊', name: 'Gráfica de peso', desc: 'Evolución del peso con gráficas detalladas', free: 'Sí', premium: 'Sí' },
+  { icon: '🧡', name: 'Vitality Score', desc: 'Desglose por pilar, flags y recomendaciones', free: 'Sí', premium: 'Sí' },
+  { icon: '✈️', name: 'Pasaporte y viajes', desc: 'Documentos de vuelo y pasaporte imprimible', free: 'Sí', premium: 'Sí' },
+  { icon: '🔔', name: 'Recordatorios', desc: 'Vacunas, comida, antiparasitarios y más', free: 'Sí', premium: 'Sí' },
 ];
 ---
 
@@ -57,7 +57,7 @@ const features = [
           </div>
           <div>
             <p class="text-sm font-bold text-ink">Plan gratuito</p>
-            <p class="text-xs text-muted">Funciones basicas para 1 mascota</p>
+            <p class="text-xs text-muted">Todo Vivra, gratis — Premium agrega co-dueño y desglose de gastos</p>
           </div>
         </div>
       </div>

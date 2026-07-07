@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { usePetContext } from '../../../contexts/PetContext';
-import { useSubscription } from '../../../hooks/useSubscription';
 import { calculateAge, formatDate } from '@vivra/shared';
 
 interface FlightRow {
@@ -28,7 +27,6 @@ interface FlightRow {
 export default function PasaporteScreen() {
   const router = useRouter();
   const { pet, vaccines, weightRecords } = usePetContext();
-  const { isPremium } = useSubscription();
   const [flights, setFlights] = useState<FlightRow[]>([]);
 
   useEffect(() => {
@@ -43,13 +41,8 @@ export default function PasaporteScreen() {
 
   const exportPdf = useCallback(() => {
     if (!pet?.id) return;
-    // Viewing the passport is free; exporting it to PDF is the premium action.
-    if (!isPremium) {
-      router.push('/paywall' as any);
-      return;
-    }
     Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`).catch(() => {});
-  }, [pet?.id, isPremium, router]);
+  }, [pet?.id, router]);
 
   if (!pet) {
     return (
@@ -91,9 +84,9 @@ export default function PasaporteScreen() {
               )}
             </View>
             <View style={styles.idInfo}>
-              <Text style={styles.idEyebrow}>PASAPORTE · CANINO</Text>
+              <Text style={styles.idEyebrow}>{pet.species === 'cat' ? 'PASAPORTE · FELINO' : 'PASAPORTE · CANINO'}</Text>
               <Text style={styles.petName}>{pet.name}</Text>
-              <Field label="Raza / Breed" value={pet.breed} />
+              <Field label="Raza / Breed" value={pet.species === 'cat' ? (pet.breed ?? 'Gato') : pet.breed} />
               <Field
                 label="Fecha de nacimiento"
                 value={pet.birth_date ? `${formatDate(pet.birth_date)}${age ? `  (${age})` : ''}` : null}
@@ -116,7 +109,7 @@ export default function PasaporteScreen() {
               <Field label="Nº Microchip" value={pet.chip_id} half />
               <Field label="Peso actual" value={latestWeight ? `${latestWeight} kg` : null} half />
               <Field label="Color de pelaje" value={pet.color} half />
-              <Field label="Especie" value="Canino" half />
+              <Field label="Especie" value={pet.species === 'cat' ? 'Felino' : 'Canino'} half />
               <Field label="Lugar de nacimiento" value={location || null} half />
             </View>
           </View>
@@ -154,15 +147,13 @@ export default function PasaporteScreen() {
           )}
         </View>
 
-        {/* ── EXPORT (premium) ── */}
+        {/* ── EXPORT ── */}
         <TouchableOpacity style={styles.exportBtn} onPress={exportPdf} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Exportar pasaporte a PDF">
-          <Ionicons name={isPremium ? 'download-outline' : 'lock-closed'} size={18} color="#fff" />
+          <Ionicons name="download-outline" size={18} color="#fff" />
           <Text style={styles.exportBtnText}>Exportar a PDF</Text>
         </TouchableOpacity>
         <Text style={styles.exportHint}>
-          {isPremium
-            ? 'Abre una versión imprimible que puedes guardar o compartir.'
-            : 'Exportar a PDF está disponible con Premium.'}
+          Abre una versión imprimible que puedes guardar o compartir.
         </Text>
       </ScrollView>
     </SafeAreaView>

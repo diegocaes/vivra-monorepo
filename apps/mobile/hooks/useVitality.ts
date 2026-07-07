@@ -10,6 +10,7 @@ export function useVitality(petData: PetData): VitalityScoreResult | null {
 
     const input: ScoreInput = {
       pet: {
+        species: pet.species,
         breed: pet.breed,
         birth_date: pet.birth_date,
         weight_kg: pet.weight_kg,

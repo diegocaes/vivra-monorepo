@@ -45,6 +45,11 @@ const GENDER_OPTIONS = [
   { key: 'hembra', label: 'Hembra', icon: 'female' as const },
 ];
 
+const SPECIES_OPTIONS = [
+  { key: 'dog' as const, label: 'Perro', emoji: '🐶' },
+  { key: 'cat' as const, label: 'Gato', emoji: '🐱' },
+];
+
 // Small presentational helper for the success screen stat row.
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -66,6 +71,7 @@ export default function OnboardingScreen() {
 
   // Form state
   const [petName, setPetName] = useState('');
+  const [species, setSpecies] = useState<'dog' | 'cat'>('dog');
   const [breed, setBreed] = useState('');
   const [breedSearch, setBreedSearch] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -168,14 +174,15 @@ const animateProgress = (toStep: number) => {
       Alert.alert('', 'Ingresa el nombre de tu mascota');
       return;
     }
-    const next = step + 1;
+    // Gatos no piden raza — saltar el paso de razas
+    const next = step === 0 && species === 'cat' ? 2 : step + 1;
     setStep(next);
     animateProgress(next);
   };
 
   const goBack = () => {
     if (step === 0) return;
-    const prev = step - 1;
+    const prev = step === 2 && species === 'cat' ? 0 : step - 1;
     setStep(prev);
     animateProgress(prev);
   };
@@ -192,7 +199,8 @@ const animateProgress = (toStep: number) => {
       .insert({
         user_id: user.id,
         name: cleanName,
-        breed: breed || null,
+        species,
+        breed: species === 'cat' ? null : (breed || null),
         birth_date: birthDate || null,
         gender: gender || null,
         weight_kg: weightKg ? parseFloat(weightKg) : null,
@@ -271,7 +279,7 @@ const animateProgress = (toStep: number) => {
     setCreatedPet({
       id: insertedPet.id,
       name: cleanName,
-      breed,
+      breed: species === 'cat' ? 'Gato' : breed,
       gender,
       weightKg,
       birthDate,
@@ -435,13 +443,32 @@ const animateProgress = (toStep: number) => {
               </TouchableOpacity>
 
               <Text style={styles.welcomeBadge}>Bienvenido a Vivra</Text>
+
+              {/* Species picker — perros piden raza, gatos no */}
+              <View style={styles.speciesRow}>
+                {SPECIES_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.speciesBtn, species === opt.key && styles.speciesBtnActive]}
+                    onPress={() => setSpecies(opt.key)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={opt.label}
+                  >
+                    <Text style={styles.speciesEmoji}>{opt.emoji}</Text>
+                    <Text style={[styles.speciesText, species === opt.key && styles.speciesTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <TextInput
                 style={styles.bigInput}
                 placeholder="Ej: Max, Luna, Rocky..."
                 placeholderTextColor={Colors.cardBorder}
                 value={petName}
                 onChangeText={setPetName}
-                autoFocus
                 autoCapitalize="words"
                 maxLength={30}
                 textAlign="center"
@@ -700,6 +727,28 @@ const styles = StyleSheet.create({
   },
   skipBtn: { alignItems: 'center', paddingVertical: Spacing.xs },
   skipBtnText: { fontSize: FontSize.sm, color: Colors.muted },
+
+  // ── Species picker ──
+  speciesRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.lg },
+  speciesBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.card,
+    borderWidth: 1.5,
+    borderColor: Colors.cardBorder,
+  },
+  speciesBtnActive: {
+    backgroundColor: Colors.accent,
+    borderColor: Colors.accent,
+  },
+  speciesEmoji: { fontSize: FontSize.lg },
+  speciesText: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
+  speciesTextActive: { color: Colors.white },
 
   // ── Step 0 avatar with optional photo ──
   avatarWrap: {

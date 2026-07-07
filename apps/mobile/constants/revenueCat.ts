@@ -15,16 +15,14 @@ export const PRODUCT_IDS = {
 // Entitlement identifier — configured in RevenueCat dashboard
 export const ENTITLEMENT_ID = 'premium';
 
-// Free plan limits
+// Free plan limits — multi-mascota es FREE (estrategia de retención 2026-07)
 export const FREE_LIMITS = {
-  MAX_PETS: 1,
+  MAX_PETS: 10,
 } as const;
 
 // Premium features list (for paywall display)
+// Premium = co-dueño + desglose de gastos por categoría. Todo lo demás es free.
 export const PREMIUM_FEATURES = [
-  { icon: 'people' as const, title: 'Compartir con tu pareja', description: 'Ambos dueños pueden ver y registrar todo' },
-  { icon: 'paw' as const, title: 'Mascotas ilimitadas', description: 'Agrega hasta 5 mascotas en tu cuenta' },
-  { icon: 'stats-chart' as const, title: 'Estadísticas avanzadas', description: 'Gráficos de peso, tendencias y análisis detallado' },
-  { icon: 'document-text' as const, title: 'Exportar PDF', description: 'Exporta el historial médico y pasaporte' },
-  { icon: 'color-palette' as const, title: 'Temas de color', description: 'Personaliza con 6 colores diferentes' },
+  { icon: 'people' as const, title: 'Co-dueño', description: 'Comparte la mascota con tu pareja: ambos ven y registran todo' },
+  { icon: 'wallet' as const, title: 'Desglose de gastos', description: 'Ve en qué gastas: vet, alimento, grooming, vuelos y más, por categoría' },
 ] as const;

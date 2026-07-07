@@ -1,7 +1,7 @@
 import { defineMiddleware } from 'astro:middleware';
 import { createSupabaseClient } from './lib/supabase';
 
-const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/api/auth/callback', '/privacy', '/terms', '/invite'];
+const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/api/auth/callback', '/api/track', '/privacy', '/terms', '/invite'];
 
 function withUtf8(response: Response): Response {
   const contentType = response.headers.get('content-type');

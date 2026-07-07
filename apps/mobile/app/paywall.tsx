@@ -52,7 +52,7 @@ export default function PaywallScreen() {
             <Ionicons name="star" size={32} color={Colors.white} />
           </View>
           <Text style={styles.title}>Vivra Premium</Text>
-          <Text style={styles.subtitle}>Todo lo que necesitas para cuidar a tus mascotas</Text>
+          <Text style={styles.subtitle}>Cuiden juntos a su mascota y sepan en qué gastan</Text>
         </View>
 
         {/* Features */}

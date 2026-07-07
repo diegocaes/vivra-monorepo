@@ -29,37 +29,40 @@ export interface PremiumStatus {
 // ── Feature gates ──
 // true = requires premium. Change a value to toggle gating on/off.
 
+// ESTRATEGIA 2026-07: casi todo es FREE para maximizar uso y retención.
+// Premium queda reducido a 2 cosas: detalle de gastos por categoría y co-dueño.
+// El TOTAL de gastos es visible para todos; el desglose por categoría es premium.
 export const FEATURE_GATES = {
   // Mascotas
-  multiplePets: true,         // Mas de 1 mascota
+  multiplePets: false,        // FREE — multi-mascota impulsa retención
 
   // Salud
-  vitalityScore: false,       // Score basico: FREE para todos
-  vitalityDetails: true,      // Desglose por pilar, flags, recomendaciones
-  weightChart: true,          // Grafica de peso historica
-  exportHealthPdf: true,      // Exportar historial en PDF
+  vitalityScore: false,       // FREE
+  vitalityDetails: false,     // FREE — desglose por pilar, flags, recomendaciones
+  weightChart: false,         // FREE — grafica de peso historica
+  exportHealthPdf: false,     // FREE
 
   // Alimentacion
-  foodTracking: false,        // Registrar comida: FREE
-  foodInventory: true,        // Inventario avanzado, alertas de stock
-  costAnalysis: true,         // Costo por dia, analytics
+  foodTracking: false,        // FREE
+  foodInventory: false,       // FREE
+  costAnalysis: true,         // PREMIUM — desglose de gastos POR CATEGORÍA (el total es free)
 
   // Viajes
-  passport: false,            // Pasaporte basico: FREE
-  flightDocuments: true,      // Subir documentos de vuelo
-  printPassport: true,        // Imprimir pasaporte
+  passport: false,            // FREE
+  flightDocuments: false,     // FREE
+  printPassport: false,       // FREE
 
   // Calendario y recordatorios
-  calendar: false,            // Calendario basico: FREE
-  pushNotifications: true,    // Notificaciones push (iOS)
+  calendar: false,            // FREE
+  pushNotifications: false,   // FREE
 
   // Social
-  referrals: false,           // Sistema de referidos: FREE (es el growth engine)
-  badges: false,              // Insignias: FREE (engagement)
-  coOwnerSharing: true,       // Compartir mascota con co-dueno
+  referrals: false,           // FREE (es el growth engine)
+  badges: false,              // FREE (engagement)
+  coOwnerSharing: true,       // PREMIUM — compartir mascota con co-dueno
 
   // Data
-  dataExport: true,           // Exportar todos los datos
+  dataExport: false,          // FREE
 } as const;
 
 export type Feature = keyof typeof FEATURE_GATES;
@@ -68,12 +71,12 @@ export type Feature = keyof typeof FEATURE_GATES;
 
 export const LIMITS = {
   free: {
-    maxPets: 1,
-    maxVaccineRecords: 20,
-    maxWeightRecords: 6,
-    maxVetVisits: 10,
+    maxPets: 10,
+    maxVaccineRecords: Infinity,
+    maxWeightRecords: Infinity,
+    maxVetVisits: Infinity,
     maxFoods: Infinity,
-    maxFlights: 1,
+    maxFlights: Infinity,
   },
   premium: {
     maxPets: 10,

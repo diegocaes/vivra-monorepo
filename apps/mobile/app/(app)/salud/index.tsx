@@ -6,7 +6,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { usePetContext } from '../../../contexts/PetContext';
 import { useVitality } from '../../../hooks/useVitality';
-import { useSubscription } from '../../../hooks/useSubscription';
 import { VitalityWidget } from '../../../components/pet/VitalityWidget';
 import { Card } from '../../../components/ui/Card';
 
@@ -47,7 +46,6 @@ export default function SaludScreen() {
   const router = useRouter();
   const petData = usePetContext();
   const vitality = useVitality(petData);
-  const { isPremium } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -168,22 +166,6 @@ export default function SaludScreen() {
           badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />
 
-        {/* Premium upsell */}
-        {!isPremium && (
-          <TouchableOpacity
-            style={styles.premiumBanner}
-            onPress={() => router.push('/paywall' as any)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="analytics" size={18} color={Colors.accent} />
-            <View style={styles.premiumBannerInfo}>
-              <Text style={styles.premiumBannerTitle}>Estadísticas avanzadas</Text>
-              <Text style={styles.premiumBannerDesc}>Gráficos de peso, tendencias y exportar PDF</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
-          </TouchableOpacity>
-        )}
-
         {/* Disclaimer: the score is informational, not diagnostic */}
         <Text style={styles.disclaimer}>
           El Vitality Score es orientativo, no un diagnóstico médico.
@@ -275,19 +257,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     color: Colors.accent,
   },
-  premiumBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.accentLight,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.accent + '20',
-  },
-  premiumBannerInfo: { flex: 1 },
-  premiumBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
-  premiumBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
   flagsWrap: { gap: Spacing.xs },
   flagCard: {
     flexDirection: 'row',

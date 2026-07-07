@@ -5,7 +5,6 @@ import { useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { usePetContext } from '../../../contexts/PetContext';
-import { useSubscription } from '../../../hooks/useSubscription';
 import { evaluateBadges, type EarnedBadge } from '@vivra/shared';
 
 // Static require map for badge PNG images
@@ -28,15 +27,13 @@ const BADGE_IMAGES: Record<string, ImageSourcePropType> = {
   'vac-hepatitis':      require('../../../assets/badges/vacunas/hepatitis.png'),
 };
 
-function BadgeCard({ id, name, description, earned, isPremium }: {
+function BadgeCard({ id, name, description, earned }: {
   id: string;
   name: string;
   description: string;
   earned: boolean;
-  isPremium: boolean;
 }) {
   const imgSource = BADGE_IMAGES[id];
-  const showDescription = isPremium || earned;
 
   return (
     <View style={[styles.badgeCard, !earned && styles.badgeCardLocked]}>
@@ -53,11 +50,7 @@ function BadgeCard({ id, name, description, earned, isPremium }: {
       <Text style={[styles.badgeName, !earned && styles.badgeNameLocked]} numberOfLines={2}>
         {name}
       </Text>
-      {showDescription ? (
-        <Text style={styles.badgeDesc} numberOfLines={3}>{description}</Text>
-      ) : (
-        <Text style={styles.badgeDescLocked}>Desbloquea con Premium</Text>
-      )}
+      <Text style={styles.badgeDesc} numberOfLines={3}>{description}</Text>
     </View>
   );
 }
@@ -65,7 +58,6 @@ function BadgeCard({ id, name, description, earned, isPremium }: {
 export default function InsigniasScreen() {
   const router = useRouter();
   const petData = usePetContext();
-  const { isPremium } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -134,14 +126,6 @@ export default function InsigniasScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Premium upsell for locked badges description */}
-        {!isPremium && (
-          <TouchableOpacity style={styles.premiumBanner} onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
-            <Ionicons name="star" size={16} color={Colors.accent} />
-            <Text style={styles.premiumText}>Ve cómo desbloquear cada insignia con Premium</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.accent} />
-          </TouchableOpacity>
-        )}
 
         {/* Badge grid */}
         <View style={styles.grid}>
@@ -152,7 +136,6 @@ export default function InsigniasScreen() {
               name={badge.name}
               description={badge.description}
               earned={badge.earned}
-              isPremium={isPremium}
             />
           ))}
         </View>
@@ -194,12 +177,6 @@ const styles = StyleSheet.create({
   },
   ctaText: { flex: 1, fontSize: FontSize.sm, color: Colors.ink },
   // Premium banner
-  premiumBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.accentLight, borderRadius: Radius.md,
-    borderWidth: 1, borderColor: Colors.accent + '30', padding: Spacing.sm,
-  },
-  premiumText: { flex: 1, fontSize: FontSize.xs, color: Colors.ink },
   // Grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   badgeCard: {
@@ -222,5 +199,4 @@ const styles = StyleSheet.create({
   },
   badgeNameLocked: { color: Colors.muted },
   badgeDesc: { fontSize: FontSize.xs, color: Colors.muted, textAlign: 'center' },
-  badgeDescLocked: { fontSize: FontSize.xs, color: Colors.cardBorder, textAlign: 'center', fontStyle: 'italic' },
 });

@@ -23,11 +23,13 @@
  *  - Siempre aclarar que no es diagnóstico médico
  */
 
-import { getBreedProfile, isSenior } from './breed-data';
+import { getSpeciesProfile } from './breed-data';
 
 // ─── Tipos de entrada ───────────────────────────────────────────────────────
 
 export interface PetData {
+  /** 'dog' | 'cat' — los gatos usan perfil felino genérico, sin razas */
+  species?: string | null;
   breed: string | null;
   birth_date: string | null;   // ISO date: "2020-05-15"
   weight_kg: number | null;
@@ -198,6 +200,16 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+/** Perfil según especie — gatos usan el perfil felino genérico */
+function profileFor(pet: PetData) {
+  return getSpeciesProfile(pet.species, pet.breed);
+}
+
+/** Senior según especie/raza */
+function isSeniorPet(pet: PetData, ageYears: number): boolean {
+  return ageYears >= profileFor(pet).seniorAgeYears;
+}
+
 /** Vacunas core según AVMA/WSAVA */
 const CORE_VACCINE_KEYWORDS = ['rabia', 'rabies', 'parvovirus', 'parvo', 'moquillo', 'distemper', 'adenovirus', 'hepatitis'];
 
@@ -219,7 +231,7 @@ const PILLAR_DESC = {
 
 function scorePeso(input: ScoreInput): PillarScore {
   const { pet, weightRecords } = input;
-  const breed = getBreedProfile(pet.breed);
+  const breed = profileFor(pet);
   const tips: string[] = [];
 
   // Cachorros < 1 año: no evaluar peso ideal (están creciendo)
@@ -446,13 +458,15 @@ function scoreCuidado(input: ScoreInput): PillarScore {
 
 function scoreRazaEdad(input: ScoreInput): PillarScore {
   const { pet, weightRecords, groomings } = input;
-  const breed = getBreedProfile(pet.breed);
+  const breed = profileFor(pet);
   const age = ageInYears(pet.birth_date);
   const tips: string[] = [];
   let pts = 20;
   let isEstimated = false;
 
-  const hasBreed = pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed';
+  const isCat = pet.species === 'cat';
+  // Los gatos no manejan raza en Vivra — la especie ya define su perfil
+  const hasBreed = isCat || (pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed');
   const hasAge = age !== null;
 
   if (!hasBreed && !hasAge) {
@@ -505,7 +519,7 @@ function scoreRazaEdad(input: ScoreInput): PillarScore {
   }
 
   // Senior: mensaje de cuidado, no de alarma
-  if (hasAge && isSenior(pet.breed, age!)) {
+  if (hasAge && isSeniorPet(pet, age!)) {
     pts -= 2;
     if (tips.length < 2) {
       tips.push('En la etapa senior, los chequeos más frecuentes ayudan a detectar cambios a tiempo');
@@ -608,7 +622,7 @@ function evaluateDataSufficiency(input: ScoreInput): {
 
   const hasWeight = !!(weightRecords[0]?.weight_kg ?? pet.weight_kg);
   const hasVaccinesOrVet = vaccines.length > 0 || vetVisits.length > 0;
-  const hasBreedOrAge = !!(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') || !!pet.birth_date;
+  const hasBreedOrAge = pet.species === 'cat' || !!(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') || !!pet.birth_date;
   const hasFood = foods.length > 0;
 
   // 4 pilares ahora — sin actividad. Thresholds: ≥3 = ready, ≥2 = building.
@@ -632,7 +646,7 @@ function evaluateDataSufficiency(input: ScoreInput): {
 
 function buildFlags(input: ScoreInput): ScoreFlag[] {
   const { pet, weightRecords, vaccines, vetVisits, groomings, foods } = input;
-  const breed = getBreedProfile(pet.breed);
+  const breed = profileFor(pet);
   const age = ageInYears(pet.birth_date);
   const flags: ScoreFlag[] = [];
 
@@ -713,7 +727,7 @@ function buildFlags(input: ScoreInput): ScoreFlag[] {
   }
 
   // Recordatorio: senior — chequeos más frecuentes (solo si hay historial vet existente)
-  if (age !== null && isSenior(pet.breed, age) && vetVisits.length > 0) {
+  if (age !== null && isSeniorPet(input.pet, age) && vetVisits.length > 0) {
     const lastVisitDays = daysBetween(vetVisits[0].date);
     if (lastVisitDays > 210) {
       flags.push({
@@ -847,7 +861,7 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
   }
 
   // Pilar 3: Raza y edad
-  const hasBreedOrAgePending = !(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') && !pet.birth_date;
+  const hasBreedOrAgePending = pet.species !== 'cat' && !(pet.breed && pet.breed.toLowerCase() !== 'other' && pet.breed.toLowerCase() !== 'mixed') && !pet.birth_date;
   if (hasBreedOrAgePending) {
     pendingAreas.push({ label: 'Completa raza y fecha de nacimiento en el perfil', href: '/perfil' });
   }
@@ -874,7 +888,7 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
 
   if (!showScore) {
     headline = 'Completando el perfil';
-    subline = 'Agrega unos datos más para ver el estado de salud de ' + (pet.breed?.split(' ')[0] ?? 'tu perro');
+    subline = 'Agrega unos datos más para ver cómo está ' + (pet.species === 'cat' ? 'tu gato' : 'tu perro');
     color = '#94a3b8';
   } else if (sufficiency === 'building') {
     headline = cat.headline;
@@ -902,6 +916,6 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
     missingDataCount,
     pendingAreas,
     ageYears: age,
-    isSenior: age !== null ? isSenior(input.pet.breed, age) : false,
+    isSenior: age !== null ? isSeniorPet(input.pet, age) : false,
   };
 }

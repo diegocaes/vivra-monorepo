@@ -2,6 +2,7 @@
 import Sidebar from '../components/Sidebar.astro';
 import FormEnhancements from '../components/ui/FormEnhancements.astro';
 import Toast from '../components/ui/Toast.astro';
+import Track from '../components/Track.astro';
 import { ClientRouter } from 'astro:transitions';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
@@ -80,6 +81,9 @@ if (user) {
     <!-- Vercel Analytics + Speed Insights — free tier (2.5k events/mo) -->
     <Analytics />
     <SpeedInsights />
+
+    <!-- Eventos de producto → app_events (admin en /admin) -->
+    <Track />
 
     <script>
       if ('serviceWorker' in navigator) {

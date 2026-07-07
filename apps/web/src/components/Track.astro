@@ -1,0 +1,37 @@
+---
+/**
+ * Track — captura de eventos de producto para el admin (/admin).
+ * - page_view al cargar
+ * - click en cualquier <a> o <button> (usa data-track si existe; si no,
+ *   el texto visible o el href, truncado)
+ * Usa sendBeacon para no bloquear la navegación. Nunca rompe la página.
+ */
+---
+<script is:inline>
+  (function () {
+    var page = location.pathname.replace(/\/+$/, '') || '/';
+    function send(event, name, props) {
+      try {
+        var payload = JSON.stringify({ event: event, name: name, props: props || { page: page } });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/track', { method: 'POST', headers: { 'content-type': 'application/json' }, body: payload, keepalive: true });
+        }
+      } catch (e) { /* nunca romper la página por tracking */ }
+    }
+
+    send('page_view', page);
+
+    document.addEventListener('click', function (e) {
+      var el = e.target && e.target.closest ? e.target.closest('a,button') : null;
+      if (!el) return;
+      var name = el.getAttribute('data-track')
+        || (el.textContent || '').trim().slice(0, 60)
+        || el.getAttribute('aria-label')
+        || el.getAttribute('href')
+        || 'unknown';
+      send('click', name, { page: page, href: el.getAttribute('href') || undefined });
+    }, { capture: true, passive: true });
+  })();
+</script>

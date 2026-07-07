@@ -6,13 +6,17 @@
 // server every day and pushes what matters via Expo Push API, using the
 // push_tokens the mobile app has been collecting.
 //
-// Notification types (all also inserted in-app into `notifications`):
-//   preventive_due   — antipulgas/desparasitante 30-day cycle expired
-//   vaccine_due      — >1 year since a vaccine's last dose
-//   weight_stale     — >30 days without a weight record (premium feature
-//                      in-app, but the push nudge is sent to everyone:
-//                      it drives re-engagement either way)
-//   re_engagement    — no notification sent AND no data logged in 7+ days
+// REGLAS DE NOTIFICACIÓN (todas también se insertan in-app en `notifications`):
+//   preventive_due   — antipulgas/desparasitante: ciclo de 30 días vencido.
+//                      Cooldown 7d.
+//   vaccine_due      — si la vacuna tiene `next_due`: avisa 7 días antes y
+//                      cuando vence. Si no tiene: avisa al pasar 1 año de la
+//                      última dosis. Cooldown 30d.
+//   food_low         — bolsa activa (sin end_date, con bag_size y daily_grams):
+//                      avisa cuando quedan ≤4 días de comida. Cooldown 7d.
+//   weight_stale     — >30 días sin registro de peso. Cooldown 30d.
+//   birthday         — cumpleaños de la mascota (birth_date). Cooldown 300d.
+//   re_engagement    — sin actividad ni notificaciones en 7+ días. Cooldown 14d.
 //
 // Dedup strategy: before sending, check the `notifications` table for a row
 // of the same type+pet within the cooldown window. The same insert that
@@ -30,7 +34,9 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const COOLDOWNS: Record<string, number> = {
   preventive_due: 7,
   vaccine_due: 30,
+  food_low: 7,
   weight_stale: 30,
+  birthday: 300,
   re_engagement: 14,
 };
 
@@ -77,14 +83,16 @@ Deno.serve(async (req) => {
     // Users with at least one push token, their pets, and the data needed to
     // evaluate each rule. Volumes are small (early-stage app) so we load and
     // evaluate in memory; revisit with SQL-side filtering at >10k users.
-    const [tokensRes, petsRes, preventivesRes, vaccinesRes, weightsRes, recentNotifsRes] = await Promise.all([
+    const [tokensRes, petsRes, preventivesRes, vaccinesRes, weightsRes, foodsRes, recentNotifsRes] = await Promise.all([
       admin.from('push_tokens').select('user_id, token, platform'),
-      admin.from('pets').select('id, user_id, name'),
+      admin.from('pets').select('id, user_id, name, birth_date'),
       admin.from('preventive_treatments').select('pet_id, type, date_given').order('date_given', { ascending: false }),
-      admin.from('vaccines').select('pet_id, name, date_given').order('date_given', { ascending: false }),
+      admin.from('vaccines').select('pet_id, name, date_given, next_due').order('date_given', { ascending: false }),
       admin.from('weight_records').select('pet_id, date').order('date', { ascending: false }),
+      admin.from('foods').select('pet_id, brand, daily_grams, bag_size, bag_unit, start_date, end_date, created_at')
+        .is('end_date', null).order('created_at', { ascending: false }),
       admin.from('notifications').select('user_id, pet_id, type, created_at')
-        .gte('created_at', new Date(Date.now() - 35 * 86400000).toISOString()),
+        .gte('created_at', new Date(Date.now() - 310 * 86400000).toISOString()),
     ]);
 
     const tokens = tokensRes.data ?? [];
@@ -119,15 +127,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    const lastVaccineByPetName = new Map<string, string>(); // `${pet}|${vaccine}` → date
+    const lastVaccineByPetName = new Map<string, { date_given: string; next_due: string | null }>(); // `${pet}|${vaccine}`
     for (const v of vaccinesRes.data ?? []) {
       const key = `${v.pet_id}|${v.name}`;
-      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, v.date_given);
+      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, { date_given: v.date_given, next_due: v.next_due });
     }
 
     const lastWeightByPet = new Map<string, string>();
     for (const w of weightsRes.data ?? []) {
       if (!lastWeightByPet.has(w.pet_id)) lastWeightByPet.set(w.pet_id, w.date);
+    }
+
+    // Bolsa activa más reciente por mascota (query ya filtra end_date IS NULL
+    // y ordena por created_at desc)
+    const activeFoodByPet = new Map<string, { brand: string | null; daily_grams: number | null; bag_size: number | null; bag_unit: string | null; start_date: string | null; created_at: string | null }>();
+    for (const f of foodsRes.data ?? []) {
+      if (!activeFoodByPet.has(f.pet_id)) activeFoodByPet.set(f.pet_id, f);
     }
 
     // ── 2. Evaluate rules per pet ────────────────────────────────────────
@@ -168,25 +183,64 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Rule 2: vaccines >1 year
-      let worstVaccine: { name: string; days: number } | null = null;
-      for (const [key, date] of lastVaccineByPetName) {
+      // Rule 2: vacunas — con next_due (7 días antes o vencida); sin next_due, >1 año de la dosis
+      let worstVaccine: { name: string; body: string; score: number } | null = null;
+      for (const [key, v] of lastVaccineByPetName) {
         if (!key.startsWith(`${pet.id}|`)) continue;
-        const days = daysSince(date);
-        if (days > 365 && (!worstVaccine || days > worstVaccine.days)) {
-          worstVaccine = { name: key.split('|')[1], days };
+        const name = key.split('|')[1];
+        if (v.next_due) {
+          const daysToDue = -daysSince(v.next_due); // positivo = faltan días
+          if (daysToDue <= 7) {
+            const body = daysToDue > 0
+              ? `La vacuna de ${name} de ${pet.name} vence en ${daysToDue} día${daysToDue !== 1 ? 's' : ''}. Agenda el refuerzo con tu vet.`
+              : `La vacuna de ${name} de ${pet.name} está vencida. Agenda el refuerzo con tu vet.`;
+            const score = 1000 - daysToDue; // más vencida = más prioridad
+            if (!worstVaccine || score > worstVaccine.score) worstVaccine = { name, body, score };
+          }
+        } else {
+          const days = daysSince(v.date_given);
+          if (days > 365 && (!worstVaccine || days > worstVaccine.score)) {
+            worstVaccine = {
+              name,
+              body: `Hace más de un año de la última dosis de ${name}. Agenda el refuerzo con tu vet.`,
+              score: days,
+            };
+          }
         }
       }
       if (worstVaccine && cooledDown(pet.user_id, pet.id, 'vaccine_due')) {
         pending.push({
           userId: pet.user_id, petId: pet.id, type: 'vaccine_due',
           title: `${pet.name}: vacuna pendiente`,
-          body: `Hace más de un año de la última dosis de ${worstVaccine.name}. Agenda el refuerzo con tu vet.`,
+          body: worstVaccine.body,
           href: '/salud/vacunas', icon: '💉',
         });
       }
 
-      // Rule 3: weight stale >30 days
+      // Rule 3: comida por acabarse — bolsa activa con ración y tamaño conocidos
+      const food = activeFoodByPet.get(pet.id);
+      if (food && food.daily_grams && food.bag_size && cooledDown(pet.user_id, pet.id, 'food_low')) {
+        const bagGrams = food.bag_unit === 'g' ? food.bag_size
+          : food.bag_unit === 'lb' ? food.bag_size * 453.6
+          : food.bag_size * 1000; // default kg
+        const startedAt = food.start_date ?? food.created_at?.slice(0, 10);
+        if (startedAt) {
+          const daysUsed = daysSince(startedAt);
+          const daysLeft = Math.floor(bagGrams / food.daily_grams) - daysUsed;
+          if (daysLeft <= 4 && daysLeft >= -7) { // avisa a tiempo; si pasó mucho, el dato está viejo — no spamear
+            pending.push({
+              userId: pet.user_id, petId: pet.id, type: 'food_low',
+              title: `${pet.name}: comida por acabarse`,
+              body: daysLeft > 0
+                ? `La bolsa de ${food.brand ?? 'alimento'} rinde ~${daysLeft} día${daysLeft !== 1 ? 's' : ''} más. Buen momento para comprar la siguiente.`
+                : `Según la ración diaria, la bolsa de ${food.brand ?? 'alimento'} ya debió acabarse. Registra la nueva para mantener el historial al día.`,
+              href: '/alimentacion', icon: '🍖',
+            });
+          }
+        }
+      }
+
+      // Rule 4: weight stale >30 days
       const lastWeight = lastWeightByPet.get(pet.id);
       if (lastWeight && daysSince(lastWeight) > 30 && cooledDown(pet.user_id, pet.id, 'weight_stale')) {
         pending.push({
@@ -196,9 +250,24 @@ Deno.serve(async (req) => {
           href: '/salud/peso', icon: '⚖️',
         });
       }
+
+      // Rule 5: cumpleaños 🎂
+      if (pet.birth_date && cooledDown(pet.user_id, pet.id, 'birthday')) {
+        const birth = new Date(pet.birth_date + 'T00:00:00');
+        const today = new Date();
+        if (birth.getMonth() === today.getMonth() && birth.getDate() === today.getDate()) {
+          const age = today.getFullYear() - birth.getFullYear();
+          pending.push({
+            userId: pet.user_id, petId: pet.id, type: 'birthday',
+            title: `¡Feliz cumpleaños, ${pet.name}! 🎂`,
+            body: `${pet.name} cumple ${age} ${age === 1 ? 'año' : 'años'} hoy. ¡Dale un premio de nuestra parte!`,
+            href: '/dashboard', icon: '🎂',
+          });
+        }
+      }
     }
 
-    // Rule 4: re-engagement — users with tokens whose pets got NO pending
+    // Rule 6: re-engagement — users with tokens whose pets got NO pending
     // nudge above and have logged nothing recent (proxied by: no notification
     // row of any type in 7+ days and no fresh weight/preventive).
     const usersWithPending = new Set(pending.map(p => p.userId));

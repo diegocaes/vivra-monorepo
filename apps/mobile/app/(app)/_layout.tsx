@@ -1,9 +1,17 @@
-import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
+import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, FontSize, FontWeight } from '../../constants/theme';
 import { PetProvider } from '../../contexts/PetContext';
+import { track } from '../../lib/analytics';
 
 export default function AppLayout() {
+  // Screen views → app_events (se leen en /admin)
+  const pathname = usePathname();
+  useEffect(() => {
+    track('screen_view', pathname || '/');
+  }, [pathname]);
+
   return (
     <PetProvider>
     <Tabs

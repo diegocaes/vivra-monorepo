@@ -5,7 +5,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { usePetContext } from '../../../contexts/PetContext';
-import { useSubscription } from '../../../hooks/useSubscription';
 import { evaluateBadges } from '@vivra/shared';
 
 /**
@@ -70,7 +69,6 @@ function HubCard({ icon, tint, title, stat, sub, cta, locked, onPress, accessibi
 export default function ActividadScreen() {
   const router = useRouter();
   const petData = usePetContext();
-  const { isPremium } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(async () => {
@@ -168,24 +166,6 @@ export default function ActividadScreen() {
             accessibilityLabel={`Pasaporte de ${petName}`}
           />
         </View>
-
-        {/* Premium upsell for notifications */}
-        {!isPremium && (
-          <TouchableOpacity
-            style={styles.premiumBanner}
-            onPress={() => router.push('/paywall' as any)}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Activar recordatorios inteligentes con Premium"
-          >
-            <Ionicons name="notifications" size={18} color={Colors.accent} />
-            <View style={styles.premiumInfo}>
-              <Text style={styles.premiumTitle}>Recordatorios inteligentes</Text>
-              <Text style={styles.premiumDesc}>Vacunas, baño, antipulgas y más con Premium</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
-          </TouchableOpacity>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -267,14 +247,4 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // Premium banner
-  premiumBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.accentLight, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.accent + '30',
-    padding: Spacing.md,
-  },
-  premiumInfo: { flex: 1 },
-  premiumTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
-  premiumDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
 });

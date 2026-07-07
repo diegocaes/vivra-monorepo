@@ -2,6 +2,7 @@ export interface Pet {
   id: string;
   user_id: string;
   name: string;
+  species: 'dog' | 'cat';
   breed: string | null;
   birth_date: string | null;
   gender: string | null;

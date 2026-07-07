@@ -65,27 +65,9 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
 
   const grandTotal = categories.reduce((s, c) => s + c.total, 0);
 
-  if (!isPremium) {
-    return (
-      <TouchableOpacity onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
-        <Card>
-          <View style={styles.lockedRow}>
-            <View style={styles.lockedLeft}>
-              <Ionicons name="wallet-outline" size={22} color={Colors.accent} />
-              <View>
-                <Text style={styles.lockedTitle}>Gastos totales</Text>
-                <Text style={styles.lockedDesc}>Ve cuánto has invertido en tu mascota</Text>
-              </View>
-            </View>
-            <Ionicons name="lock-closed" size={18} color={Colors.muted} />
-          </View>
-        </Card>
-      </TouchableOpacity>
-    );
-  }
-
   if (loading) return null;
 
+  // El TOTAL es visible para todos. El desglose por categoría es premium.
   return (
     <Card>
       <View style={styles.header}>
@@ -93,18 +75,29 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
         <Text style={styles.headerTitle}>Gastos totales</Text>
         <Text style={styles.grandTotal}>${formatCurrency(grandTotal)}</Text>
       </View>
-      <View style={styles.list}>
-        {categories.filter(c => c.total > 0).map(c => (
-          <View key={c.label} style={styles.row}>
-            <Ionicons name={c.icon} size={16} color={c.iconColor} />
-            <Text style={styles.catLabel}>{c.label}</Text>
-            <Text style={styles.catTotal}>${formatCurrency(c.total)}</Text>
+      {grandTotal === 0 ? (
+        <Text style={styles.noData}>Aún no hay gastos registrados</Text>
+      ) : isPremium ? (
+        <View style={styles.list}>
+          {categories.filter(c => c.total > 0).map(c => (
+            <View key={c.label} style={styles.row}>
+              <Ionicons name={c.icon} size={16} color={c.iconColor} />
+              <Text style={styles.catLabel}>{c.label}</Text>
+              <Text style={styles.catTotal}>${formatCurrency(c.total)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <TouchableOpacity onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+          <View style={styles.lockedRow}>
+            <View style={styles.lockedLeft}>
+              <Ionicons name="lock-closed" size={16} color={Colors.muted} />
+              <Text style={styles.lockedDesc}>Ver el desglose por categoría con Premium</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
           </View>
-        ))}
-        {grandTotal === 0 && (
-          <Text style={styles.noData}>Aún no hay gastos registrados</Text>
-        )}
-      </View>
+        </TouchableOpacity>
+      )}
     </Card>
   );
 }
