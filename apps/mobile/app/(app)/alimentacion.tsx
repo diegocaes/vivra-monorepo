@@ -101,7 +101,9 @@ function FoodSpendChart({ foods, treats }: { foods: Food[]; treats: Treat[] }) {
                   fontWeight="600"
                   fill={Colors.ink}
                 >
-                  ${Math.round(total)}
+                  {/* Un solo hijo string: con hijos múltiples ("$" + número),
+                      react-native-svg centra cada tspan en el mismo punto y se pisan */}
+                  {`$${Math.round(total)}`}
                 </SvgText>
               )}
               <SvgText x={x + barW / 2} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={10} fill={Colors.muted}>

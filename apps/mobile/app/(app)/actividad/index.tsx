@@ -9,9 +9,57 @@ import { evaluateBadges } from '@vivra/shared';
 
 /**
  * Activity hub — 2×2 grid of visually rich shortcut cards (Grooming, Viajes,
- * Insignias, Pasaporte). Each card: big tinted icon, title, a live stat line,
- * and an optional accent footer. Replaces the old flat list rows.
+ * Insignias, Pasaporte) + "Actividad reciente": a merged, reverse-chronological
+ * feed of everything registered for the pet (vacunas, peso, vet, grooming,
+ * preventivos, alimentos) so the screen reflects the pet's real life.
  */
+
+interface TimelineEvent {
+  date: string; // YYYY-MM-DD
+  icon: keyof typeof Ionicons.glyphMap;
+  tint: string;
+  title: string;
+  sub: string | null;
+}
+
+function relativeDay(date: string): string {
+  const days = Math.floor((Date.now() - new Date(date + 'T00:00:00').getTime()) / 86400000);
+  if (days <= 0) return 'Hoy';
+  if (days === 1) return 'Ayer';
+  if (days < 30) return `Hace ${days}d`;
+  const months = Math.floor(days / 30);
+  return `Hace ${months}m`;
+}
+
+function buildTimeline(petData: ReturnType<typeof usePetContext>): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  for (const g of petData.groomings) {
+    events.push({ date: g.date, icon: 'cut', tint: '#8B5CF6', title: g.type || 'Grooming', sub: g.location });
+  }
+  for (const v of petData.vetVisits) {
+    events.push({ date: v.date, icon: 'medkit', tint: '#10B981', title: v.reason || 'Visita al vet', sub: v.location });
+  }
+  for (const vac of petData.vaccines) {
+    events.push({ date: vac.date_given, icon: 'shield-checkmark', tint: '#3B82F6', title: `Vacuna · ${vac.name}`, sub: null });
+  }
+  for (const w of petData.weightRecords) {
+    events.push({ date: w.date, icon: 'trending-up', tint: Colors.accent, title: `Peso: ${w.weight_kg} kg`, sub: null });
+  }
+  for (const p of petData.preventives) {
+    const label = p.type === 'antipulgas' ? 'Antipulgas' : p.type === 'desparasitante' ? 'Desparasitante' : 'Preventivo';
+    events.push({ date: p.date_given, icon: 'shield-half', tint: Colors.warn, title: label, sub: p.product_name });
+  }
+  for (const f of petData.foods) {
+    const date = f.start_date ?? f.created_at?.slice(0, 10);
+    if (date) events.push({ date, icon: 'restaurant', tint: '#F59E0B', title: `Nueva bolsa · ${f.brand}`, sub: f.food_type ?? f.type ?? null });
+  }
+
+  return events
+    .filter(e => !!e.date)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 10);
+}
 
 interface HubCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -107,6 +155,11 @@ export default function ActividadScreen() {
     router.push('/(app)/actividad/pasaporte' as any);
   }, [petData.pet?.id, router]);
 
+  const timeline = useMemo(() => buildTimeline(petData), [
+    petData.groomings, petData.vetVisits, petData.vaccines,
+    petData.weightRecords, petData.preventives, petData.foods,
+  ]);
+
   const groomingStat = groomingDaysAgo === null
     ? null
     : groomingDaysAgo === 0 ? 'Hoy'
@@ -166,6 +219,26 @@ export default function ActividadScreen() {
             accessibilityLabel={`Pasaporte de ${petName}`}
           />
         </View>
+
+        {timeline.length > 0 && (
+          <>
+            <Text style={styles.timelineHeader}>Actividad reciente</Text>
+            <View style={styles.timelineCard}>
+              {timeline.map((e, i) => (
+                <View key={`${e.date}-${e.title}-${i}`} style={[styles.timelineRow, i < timeline.length - 1 && styles.timelineRowBorder]}>
+                  <View style={[styles.timelineIcon, { backgroundColor: e.tint + '16' }]}>
+                    <Ionicons name={e.icon} size={16} color={e.tint} />
+                  </View>
+                  <View style={styles.timelineBody}>
+                    <Text style={styles.timelineTitle} numberOfLines={1}>{e.title}</Text>
+                    {e.sub ? <Text style={styles.timelineSub} numberOfLines={1}>{e.sub}</Text> : null}
+                  </View>
+                  <Text style={styles.timelineDate}>{relativeDay(e.date)}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -247,4 +320,53 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  // Recent activity timeline
+  timelineHeader: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+    marginTop: Spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  timelineCard: {
+    backgroundColor: Colors.card,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    paddingHorizontal: Spacing.md,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm + 2,
+  },
+  timelineRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+  },
+  timelineIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineBody: { flex: 1, minWidth: 0 },
+  timelineTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.ink,
+  },
+  timelineSub: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    marginTop: 1,
+  },
+  timelineDate: {
+    fontSize: FontSize.xs,
+    color: Colors.muted,
+    fontVariant: ['tabular-nums'],
+  },
 });
