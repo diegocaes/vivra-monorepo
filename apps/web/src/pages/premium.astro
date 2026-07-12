@@ -8,6 +8,14 @@ const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
 const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
+// Checkout web con Paddle — se activa solo cuando las env vars existen.
+// PUBLIC_PADDLE_ENV: 'sandbox' | 'production'
+const PADDLE_TOKEN = import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN ?? '';
+const PADDLE_ENV = import.meta.env.PUBLIC_PADDLE_ENV ?? 'sandbox';
+const PADDLE_PRICE_MONTHLY = import.meta.env.PUBLIC_PADDLE_PRICE_MONTHLY ?? '';
+const PADDLE_PRICE_YEARLY = import.meta.env.PUBLIC_PADDLE_PRICE_YEARLY ?? '';
+const paddleReady = !!(PADDLE_TOKEN && (PADDLE_PRICE_MONTHLY || PADDLE_PRICE_YEARLY));
+
 // Premium = co-dueño + desglose de gastos. Todo lo demás es gratis para todos.
 const features = [
   { icon: '👥', name: 'Co-dueño', desc: 'Comparte la mascota con tu pareja: ambos ven y registran todo', free: 'No', premium: 'Sí' },
@@ -126,18 +134,76 @@ const features = [
           <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           Invitar amigos y ganar premium
         </a>
-        <a
-          href={APP_STORE_URL}
-          target="_blank"
-          rel="noopener"
-          class="flex items-center justify-center gap-2 w-full rounded-2xl border border-card-border bg-card px-6 py-3.5 text-sm font-semibold text-ink transition-all hover:border-ink active:scale-95"
-        >
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          Suscribirme desde la app de iPhone
-        </a>
-        <p class="text-center text-xs text-muted">La suscripción se gestiona con tu Apple ID. Al suscribirte en el iPhone, Premium se activa también en la web al instante.</p>
+        {paddleReady ? (
+          <>
+            <div class="grid grid-cols-2 gap-3">
+              {PADDLE_PRICE_MONTHLY && (
+                <button
+                  type="button"
+                  data-paddle-price={PADDLE_PRICE_MONTHLY}
+                  class="paddle-buy flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-accent bg-card px-4 py-3.5 transition-all hover:bg-accent/5 active:scale-95"
+                >
+                  <span class="text-sm font-bold text-ink">$2.99/mes</span>
+                  <span class="text-xs text-muted">Mensual</span>
+                </button>
+              )}
+              {PADDLE_PRICE_YEARLY && (
+                <button
+                  type="button"
+                  data-paddle-price={PADDLE_PRICE_YEARLY}
+                  class="paddle-buy flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-accent bg-accent/10 px-4 py-3.5 transition-all hover:bg-accent/15 active:scale-95"
+                >
+                  <span class="text-sm font-bold text-accent-dark">$19.99/año</span>
+                  <span class="text-xs text-accent-dark/80">Ahorra 44%</span>
+                </button>
+              )}
+            </div>
+            <p class="text-center text-xs text-muted">Pago seguro con tarjeta, Apple Pay o Google Pay. Cancela cuando quieras.</p>
+          </>
+        ) : (
+          <>
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener"
+              class="flex items-center justify-center gap-2 w-full rounded-2xl border border-card-border bg-card px-6 py-3.5 text-sm font-semibold text-ink transition-all hover:border-ink active:scale-95"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+              Suscribirme desde la app de iPhone
+            </a>
+            <p class="text-center text-xs text-muted">La suscripción se gestiona con tu Apple ID. Al suscribirte en el iPhone, Premium se activa también en la web al instante.</p>
+          </>
+        )}
       </div>
     )}
 
   </div>
+
+  {paddleReady && !premium.isPremium && (
+    <script is:inline src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  )}
+  {paddleReady && !premium.isPremium && (
+    <script define:vars={{ PADDLE_TOKEN, PADDLE_ENV, userId: user.id, userEmail: user.email ?? '' }}>
+      if (PADDLE_ENV === 'sandbox') Paddle.Environment.set('sandbox');
+      Paddle.Initialize({
+        token: PADDLE_TOKEN,
+        eventCallback: (ev) => {
+          // Tras el pago, el webhook activa premium en segundos; recargamos para reflejarlo.
+          if (ev.name === 'checkout.completed') {
+            setTimeout(() => window.location.reload(), 4000);
+          }
+        },
+      });
+      document.querySelectorAll('.paddle-buy').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          Paddle.Checkout.open({
+            items: [{ priceId: btn.dataset.paddlePrice, quantity: 1 }],
+            customData: { user_id: userId },
+            customer: userEmail ? { email: userEmail } : undefined,
+            settings: { displayMode: 'overlay', locale: 'es' },
+          });
+        });
+      });
+    </script>
+  )}
 </MainLayout>
