@@ -1,0 +1,53 @@
+---
+import '../styles/global.css';
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F97316" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" /></noscript>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <title>Blog | Vivra</title>
+    <meta name="description" content="Consejos, guías y novedades sobre el cuidado de tu perro o gato. El blog de Vivra." />
+  </head>
+  <body class="bg-canvas font-sans text-ink antialiased">
+
+    <!-- Header -->
+    <header class="border-b border-card-border bg-white">
+      <div class="mx-auto max-w-3xl px-6 py-4 flex items-center justify-between">
+        <a href="/" class="hover:opacity-80 transition-opacity">
+          <img src="/Vivra.svg" alt="Vivra" style="height:36px;width:auto;" />
+        </a>
+        <a href="/login" class="text-sm font-medium text-accent hover:text-accent-dark transition-colors">Iniciar sesión</a>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="mx-auto max-w-3xl px-6 py-12">
+      <h1 class="text-3xl font-bold text-ink mb-2">Blog</h1>
+      <p class="text-sm text-muted mb-10">Consejos, guías y novedades sobre el cuidado de tu mascota.</p>
+
+      <div id="soro-blog"></div>
+      <script is:inline src="https://app.trysoro.com/api/embed/73e6deb2-a4e2-4564-a0d0-80f32478f871" defer></script>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-card-border bg-white mt-16">
+      <div class="mx-auto max-w-3xl px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p class="text-xs text-muted">&copy; 2026 Vivra. Todos los derechos reservados.</p>
+        <div class="flex gap-4 text-xs">
+          <a href="/privacy" class="text-muted hover:text-ink transition-colors">Política de Privacidad</a>
+          <a href="/terms" class="text-muted hover:text-ink transition-colors">Términos de Servicio</a>
+        </div>
+      </div>
+    </footer>
+
+  </body>
+</html>
