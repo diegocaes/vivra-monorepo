@@ -75,6 +75,12 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  // Cancelación programada (cancel al final del período): Paddle deja la sub
+  // 'active' con scheduled_change = { action: 'cancel', effective_at }. La
+  // guardamos para que la UI muestre "no se renovará"; NULL = renueva normal.
+  const cancelScheduledAt: string | null =
+    data.scheduled_change?.action === 'cancel' ? (data.scheduled_change.effective_at ?? null) : null;
+
   if (['subscription.created', 'subscription.activated', 'subscription.updated', 'subscription.resumed'].includes(type)) {
     const status: string = data.status ?? '';
     // 'active' y 'trialing' otorgan premium; otros estados (paused, past_due) no extienden.
@@ -85,6 +91,7 @@ Deno.serve(async (req) => {
         source: 'web',
         premium_until: periodEnd,
         paddle_subscription_id: data.id ?? null,
+        cancel_scheduled_at: cancelScheduledAt,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
       if (error) {
@@ -99,7 +106,7 @@ Deno.serve(async (req) => {
     if (periodEnd) {
       const { error } = await supabase
         .from('user_subscriptions')
-        .update({ premium_until: periodEnd, updated_at: new Date().toISOString() })
+        .update({ premium_until: periodEnd, cancel_scheduled_at: periodEnd, updated_at: new Date().toISOString() })
         .eq('user_id', userId)
         .eq('source', 'web');
       if (error) console.error('[paddle-webhook] cancel update failed:', error.message);

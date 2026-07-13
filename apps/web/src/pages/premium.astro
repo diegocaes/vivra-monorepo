@@ -6,6 +6,21 @@ import type { PremiumStatus } from '../lib/premium';
 const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
+// Cancelación programada de suscripción web (Paddle): premium sigue activo
+// hasta cancelAt pero no se renovará.
+let cancelAt: string | null = null;
+if (premium.isPremium && premium.source === 'web') {
+  const { data: subRow } = await supabase
+    .from('user_subscriptions')
+    .select('cancel_scheduled_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  cancelAt = subRow?.cancel_scheduled_at ?? null;
+}
+const cancelAtLabel = cancelAt
+  ? new Date(cancelAt).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
+  : null;
+
 const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
 // Checkout web con Paddle — se activa solo cuando las env vars existen.
@@ -61,7 +76,22 @@ const features = [
         )}
 
         {/* Gestionar/cancelar según el origen de la suscripción */}
-        {premium.source === 'web' && (
+        {premium.source === 'web' && cancelAt && (
+          <div class="mt-4 pt-4 border-t border-accent/20">
+            <div class="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 mb-2">
+              <p class="text-xs font-semibold text-amber-700">Suscripción cancelada — no se renovará</p>
+              <p class="text-xs text-amber-600 mt-0.5">Mantienes Premium hasta el {cancelAtLabel}. Después pasas a plan gratuito sin perder ningún dato.</p>
+            </div>
+            <button
+              type="button"
+              id="resume-sub-btn"
+              class="text-xs font-semibold text-accent hover:text-accent-dark transition-colors"
+            >
+              Reanudar suscripción
+            </button>
+          </div>
+        )}
+        {premium.source === 'web' && !cancelAt && (
           <div class="mt-4 pt-4 border-t border-accent/20">
             <p class="text-xs text-muted mb-2">Suscripción contratada en la web. Si cancelas, mantienes Premium hasta el final del período pagado.</p>
             <button
@@ -216,29 +246,44 @@ const features = [
   {premium.isPremium && premium.source === 'web' && (
     <script is:inline data-astro-rerun>
       (function () {
-        var btn = document.getElementById('cancel-sub-btn');
-        if (!btn || btn.dataset.wired) return;
-        btn.dataset.wired = '1';
-        btn.addEventListener('click', async function () {
-          if (!confirm('¿Cancelar tu suscripción Premium? Mantienes el acceso hasta el final del período pagado.')) return;
-          btn.disabled = true;
-          btn.textContent = 'Cancelando…';
-          try {
-            var res = await fetch('/api/subscription/cancel', { method: 'POST' });
-            var data = await res.json();
-            if (res.ok) {
-              alert('Suscripción cancelada. Mantienes Premium hasta el final del período pagado.');
-              window.location.reload();
-            } else {
-              alert(data.error || 'No se pudo cancelar. Intenta de nuevo.');
+        function wire(id, opts) {
+          var btn = document.getElementById(id);
+          if (!btn || btn.dataset.wired) return;
+          btn.dataset.wired = '1';
+          var idle = btn.textContent;
+          btn.addEventListener('click', async function () {
+            if (opts.confirmMsg && !confirm(opts.confirmMsg)) return;
+            btn.disabled = true;
+            btn.textContent = opts.busy;
+            try {
+              var res = await fetch(opts.url, { method: 'POST' });
+              var data = await res.json();
+              if (res.ok) {
+                alert(opts.done);
+                window.location.reload();
+              } else {
+                alert(data.error || 'No se pudo completar. Intenta de nuevo.');
+                btn.disabled = false;
+                btn.textContent = idle;
+              }
+            } catch (e) {
+              alert('Error de conexión. Intenta de nuevo.');
               btn.disabled = false;
-              btn.textContent = 'Cancelar suscripción';
+              btn.textContent = idle;
             }
-          } catch (e) {
-            alert('Error de conexión. Intenta de nuevo.');
-            btn.disabled = false;
-            btn.textContent = 'Cancelar suscripción';
-          }
+          });
+        }
+        wire('cancel-sub-btn', {
+          url: '/api/subscription/cancel',
+          confirmMsg: '¿Cancelar tu suscripción Premium? Mantienes el acceso hasta el final del período pagado.',
+          busy: 'Cancelando…',
+          done: 'Suscripción cancelada. Mantienes Premium hasta el final del período pagado.',
+        });
+        wire('resume-sub-btn', {
+          url: '/api/subscription/resume',
+          confirmMsg: null,
+          busy: 'Reanudando…',
+          done: '¡Listo! Tu suscripción se renovará normalmente.',
         });
       })();
     </script>
