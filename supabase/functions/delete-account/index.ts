@@ -93,6 +93,35 @@ Deno.serve(async (req) => {
       console.warn('[delete-account] flight-docs cleanup soft-fail:', e);
     }
 
+    // Si el usuario tiene una suscripción web (Paddle) activa, cancelarla de
+    // inmediato ANTES de borrar sus datos — si no, Paddle seguiría cobrando a
+    // una cuenta que ya no existe. Best-effort: si falla, seguimos con el
+    // borrado (el derecho del usuario a eliminar su cuenta manda) y queda log.
+    try {
+      const { data: sub } = await admin
+        .from('user_subscriptions')
+        .select('source, paddle_subscription_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      const paddleApiKey = Deno.env.get('PADDLE_API_KEY');
+      if (sub?.source === 'web' && sub.paddle_subscription_id && paddleApiKey) {
+        const paddleEnv = Deno.env.get('PADDLE_ENV') ?? 'sandbox';
+        const apiBase = paddleEnv === 'production' ? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com';
+        const cancelRes = await fetch(`${apiBase}/subscriptions/${sub.paddle_subscription_id}/cancel`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${paddleApiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ effective_from: 'immediately' }),
+        });
+        if (!cancelRes.ok) {
+          console.warn('[delete-account] paddle cancel soft-fail:', cancelRes.status, await cancelRes.text());
+        } else {
+          console.log('[delete-account] paddle subscription canceled:', sub.paddle_subscription_id);
+        }
+      }
+    } catch (e) {
+      console.warn('[delete-account] paddle cancel threw:', e);
+    }
+
     // Delete user-owned rows. Child tables (vaccines, foods, etc.) cascade
     // through `pet_id`, so removing `pets` propagates those automatically.
     // Every row where this user appears as owner, grantee, inviter, or

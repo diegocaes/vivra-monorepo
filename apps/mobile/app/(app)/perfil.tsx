@@ -173,10 +173,30 @@ export default function PerfilScreen() {
     );
   };
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = async () => {
+    // Aviso según suscripción: la web (Paddle) se cancela sola al borrar la
+    // cuenta; la de Apple NO — el usuario debe cancelarla en Ajustes o el
+    // cobro sigue aunque la cuenta ya no exista.
+    let subWarning = '';
+    try {
+      if (user) {
+        const { data: sub } = await supabase
+          .from('user_subscriptions')
+          .select('source, premium_until')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        const vigente = !!(sub?.premium_until && new Date(sub.premium_until) > new Date());
+        if (vigente && sub?.source === 'iap') {
+          subWarning = '\n\n⚠️ Tu suscripción Premium es con Apple: eliminar la cuenta NO detiene el cobro. Cancélala en Ajustes → Apple ID → Suscripciones.';
+        } else if (vigente && sub?.source === 'web') {
+          subWarning = '\n\nTu suscripción Premium (web) se cancelará automáticamente y no se te volverá a cobrar.';
+        }
+      }
+    } catch { /* best-effort: sin aviso si falla la consulta */ }
+
     Alert.alert(
       'Eliminar cuenta',
-      'Se eliminarán permanentemente tu cuenta y todos los datos de tus mascotas. Esta acción no se puede deshacer.',
+      'Se eliminarán permanentemente tu cuenta y todos los datos de tus mascotas. Esta acción no se puede deshacer.' + subWarning,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
