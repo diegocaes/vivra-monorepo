@@ -639,6 +639,54 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       .appstore-btn-text strong { font-size: 19px; font-weight: 700; letter-spacing: -0.4px; }
 
       /* ────────────────────────────────────────────
+         PRICING
+         ──────────────────────────────────────────── */
+      .pricing-section { padding: 100px 24px; background: white; }
+      .pricing-grid {
+        display: grid; grid-template-columns: 1fr 1fr;
+        gap: 20px; max-width: 820px; margin: 0 auto;
+      }
+      .price-card {
+        border: 1px solid var(--card-border);
+        border-radius: 24px;
+        padding: 36px 32px;
+        background: white;
+        display: flex; flex-direction: column;
+      }
+      .price-card.featured {
+        border: 2px solid var(--orange);
+        box-shadow: 0 16px 48px rgba(249,115,22,0.12);
+        position: relative;
+      }
+      .price-badge {
+        position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+        background: var(--orange); color: white;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+        padding: 4px 14px; border-radius: 999px; white-space: nowrap;
+      }
+      .price-name { font-size: 14px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+      .price-amount { font-size: 44px; font-weight: 900; letter-spacing: -2px; color: var(--ink); line-height: 1; }
+      .price-amount small { font-size: 16px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+      .price-alt { font-size: 13px; color: var(--muted); margin-top: 6px; }
+      .price-alt strong { color: var(--orange-dark); }
+      .price-features { list-style: none; margin: 24px 0 28px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+      .price-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink); line-height: 1.45; }
+      .price-features li svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--orange); }
+      .price-features li.muted { color: var(--muted); }
+      .price-cta {
+        display: block; text-align: center;
+        padding: 13px 24px; border-radius: 12px;
+        font-size: 14px; font-weight: 700; text-decoration: none;
+        transition: all 0.15s ease;
+      }
+      .price-cta.solid { background: var(--orange); color: white; box-shadow: 0 6px 20px rgba(249,115,22,0.30); }
+      .price-cta.solid:hover { background: var(--orange-dark); transform: translateY(-2px); }
+      .price-cta.ghost { border: 1.5px solid var(--card-border); color: var(--ink); }
+      .price-cta.ghost:hover { border-color: var(--ink); }
+      .pricing-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 24px; }
+      @media (max-width: 700px) { .pricing-grid { grid-template-columns: 1fr; } }
+
+      /* ────────────────────────────────────────────
          FAQ SECTION
          ──────────────────────────────────────────── */
       .faq-section { padding: 100px 24px; background: var(--canvas); }
@@ -742,6 +790,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       </a>
       <div class="nav-links">
         <a href="#features" class="nav-link-text">Funciones</a>
+        <a href="#pricing" class="nav-link-text">Precios</a>
         <a href="#faq" class="nav-link-text">Preguntas</a>
         <a href="/blog" class="nav-link-text">Blog</a>
         <a href="/login" class="nav-link-text">Entrar</a>
@@ -965,6 +1014,47 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       </div>
     </section>
 
+    <!-- ── PRICING ── -->
+    <section class="pricing-section" id="pricing">
+      <div class="section-inner" style="text-align:center;">
+        <span class="section-eyebrow">Precios</span>
+        <h2 class="section-title" style="margin-bottom:12px;">Gratis para siempre.<br/>Premium si quieres más.</h2>
+        <p class="section-sub" style="margin:0 auto 56px;">Sin tarjeta para empezar. Sin anuncios. Sin sorpresas.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <div class="price-card">
+          <p class="price-name">Free</p>
+          <p class="price-amount">$0 <small>/ para siempre</small></p>
+          <p class="price-alt">Todo lo esencial, sin límites de registros</p>
+          <ul class="price-features">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Carnet de vacunas con recordatorios</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Peso con gráficas, vet, grooming y alimentación</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Pasaporte imprimible y documentos de viaje</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Varias mascotas (perros y gatos)</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Indicador de Bienestar + total de gastos</li>
+          </ul>
+          <a href="/register" class="price-cta ghost">Empezar gratis</a>
+        </div>
+
+        <div class="price-card featured">
+          <span class="price-badge">2 MESES GRATIS CON EL PLAN ANUAL</span>
+          <p class="price-name">Premium</p>
+          <p class="price-amount">$2.99 <small>/ mes</small></p>
+          <p class="price-alt">o <strong>$19.99/año</strong> — ahorra 44%</p>
+          <ul class="price-features">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Todo lo de Free</strong>, más:</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Co-dueño: comparte la mascota con tu pareja</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Detalle de gastos por categoría y por sección</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Todos los colores de tema para tu mascota</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Paga con tarjeta, Apple Pay o Google Pay</li>
+          </ul>
+          <a href="/register" class="price-cta solid">Probar Premium</a>
+        </div>
+      </div>
+      <p class="pricing-note">Cancela cuando quieras — conservas Premium hasta el final del período pagado y tus datos nunca se pierden.</p>
+    </section>
+
     <!-- ── FAQ ── -->
     <section class="faq-section" id="faq">
       <div class="section-inner" style="text-align:center;">
@@ -1032,6 +1122,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
           <ul>
             <li><a href="#features">Funciones</a></li>
             <li><a href="#how">Cómo funciona</a></li>
+            <li><a href="#pricing">Precios</a></li>
             <li><a href="#faq">Preguntas</a></li>
             <li><a href="/blog">Blog</a></li>
             <li><a href={APP_STORE_URL} target="_blank" rel="noopener">App Store</a></li>

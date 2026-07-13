@@ -9,13 +9,30 @@ const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 // Cancelación programada de suscripción web (Paddle): premium sigue activo
 // hasta cancelAt pero no se renovará.
 let cancelAt: string | null = null;
+let isMonthlyPlan = false;
 if (premium.isPremium && premium.source === 'web') {
   const { data: subRow } = await supabase
     .from('user_subscriptions')
-    .select('cancel_scheduled_at')
+    .select('cancel_scheduled_at, paddle_subscription_id')
     .eq('user_id', user.id)
     .maybeSingle();
   cancelAt = subRow?.cancel_scheduled_at ?? null;
+
+  // Para el exit offer: si el plan actual es mensual, ofrecemos cambiarse al
+  // anual antes de cancelar. Consultamos el precio actual a Paddle.
+  const apiKey = import.meta.env.PADDLE_API_KEY || process.env.PADDLE_API_KEY;
+  if (!cancelAt && apiKey && subRow?.paddle_subscription_id) {
+    try {
+      const apiBase = PADDLE_ENV === 'production' ? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com';
+      const r = await fetch(`${apiBase}/subscriptions/${subRow.paddle_subscription_id}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (r.ok) {
+        const body = await r.json();
+        isMonthlyPlan = body.data?.items?.[0]?.price?.id === PADDLE_PRICE_MONTHLY;
+      }
+    } catch { /* sin oferta si falla; el flujo de cancelar sigue funcionando */ }
+  }
 }
 const cancelAtLabel = cancelAt
   ? new Date(cancelAt).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -96,7 +113,7 @@ const features = [
             <p class="text-xs text-muted mb-2">Suscripción contratada en la web. Si cancelas, mantienes Premium hasta el final del período pagado.</p>
             <button
               type="button"
-              id="cancel-sub-btn"
+              id="open-cancel-modal-btn"
               class="text-xs font-semibold text-red-500 hover:text-red-600 transition-colors"
             >
               Cancelar suscripción
@@ -243,6 +260,65 @@ const features = [
 
   </div>
 
+  {/* ── EXIT OFFER: modal de cancelación con motivo + contraoferta ── */}
+  {premium.isPremium && premium.source === 'web' && !cancelAt && (
+    <div id="cancel-modal" class="fixed inset-0 z-50 items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm hidden">
+      <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <h3 class="text-base font-bold text-ink mb-1">Antes de que te vayas…</h3>
+        <p class="text-sm text-muted mb-4">¿Qué te hizo querer cancelar? Nos ayuda a mejorar.</p>
+
+        <div class="space-y-2 mb-4" id="cancel-reasons">
+          {[
+            { v: 'price', l: 'Es muy caro' },
+            { v: 'not_used', l: 'No lo uso lo suficiente' },
+            { v: 'missing_feature', l: 'Le falta algo que necesito' },
+            { v: 'other', l: 'Otro motivo' },
+          ].map(r => (
+            <label class="flex items-center gap-3 rounded-xl border border-card-border px-4 py-2.5 cursor-pointer hover:bg-canvas transition-colors has-checked:border-accent has-checked:bg-accent/5">
+              <input type="radio" name="cancel-reason" value={r.v} class="accent-accent" />
+              <span class="text-sm text-ink">{r.l}</span>
+            </label>
+          ))}
+          <textarea
+            id="cancel-comment"
+            rows="2"
+            placeholder="Cuéntanos más (opcional)"
+            class="w-full rounded-xl border border-card-border bg-canvas px-4 py-2.5 text-sm text-ink placeholder-muted focus:border-accent focus:outline-none resize-none"
+          ></textarea>
+        </div>
+
+        {isMonthlyPlan && (
+          <div class="rounded-2xl border-2 border-accent bg-accent/5 px-4 py-3.5 mb-4">
+            <p class="text-sm font-bold text-ink">💡 ¿Y si mejor pagas menos?</p>
+            <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">$19.99/año</strong> — equivale a $1.67/mes, un 44% menos de lo que pagas hoy.</p>
+            <button
+              type="button"
+              id="switch-yearly-btn"
+              class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95"
+            >
+              Cambiarme al anual y ahorrar 44%
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          id="keep-sub-btn"
+          class="w-full rounded-xl border border-card-border px-4 py-2.5 text-sm font-semibold text-ink hover:bg-canvas transition-colors mb-2"
+        >
+          Mantener mi suscripción
+        </button>
+        <button
+          type="button"
+          id="cancel-sub-btn"
+          class="w-full text-center text-xs font-semibold text-red-500 hover:text-red-600 transition-colors py-2"
+        >
+          Cancelar de todos modos
+        </button>
+      </div>
+    </div>
+  )}
+
   {premium.isPremium && premium.source === 'web' && (
     <script is:inline data-astro-rerun>
       (function () {
@@ -273,18 +349,79 @@ const features = [
             }
           });
         }
-        wire('cancel-sub-btn', {
-          url: '/api/subscription/cancel',
-          confirmMsg: '¿Cancelar tu suscripción Premium? Mantienes el acceso hasta el final del período pagado.',
-          busy: 'Cancelando…',
-          done: 'Suscripción cancelada. Mantienes Premium hasta el final del período pagado.',
-        });
         wire('resume-sub-btn', {
           url: '/api/subscription/resume',
           confirmMsg: null,
           busy: 'Reanudando…',
           done: '¡Listo! Tu suscripción se renovará normalmente.',
         });
+
+        // Exit offer: modal de cancelación con motivo + contraoferta anual
+        var modal = document.getElementById('cancel-modal');
+        var openBtn = document.getElementById('open-cancel-modal-btn');
+        if (modal && openBtn && !openBtn.dataset.wired) {
+          openBtn.dataset.wired = '1';
+          function openModal() { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+          function closeModal() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+          openBtn.addEventListener('click', openModal);
+          modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+          var keepBtn = document.getElementById('keep-sub-btn');
+          if (keepBtn) keepBtn.addEventListener('click', closeModal);
+
+          function getReason() {
+            var sel = document.querySelector('input[name="cancel-reason"]:checked');
+            var comment = (document.getElementById('cancel-comment') || {}).value || '';
+            return { reason: sel ? sel.value : null, comment: comment.trim().slice(0, 500) };
+          }
+
+          var cancelBtn = document.getElementById('cancel-sub-btn');
+          if (cancelBtn) cancelBtn.addEventListener('click', async function () {
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = 'Cancelando…';
+            try {
+              var res = await fetch('/api/subscription/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(getReason()),
+              });
+              var data = await res.json();
+              if (res.ok) {
+                alert('Suscripción cancelada. Mantienes Premium hasta el final del período pagado.');
+                window.location.reload();
+              } else {
+                alert(data.error || 'No se pudo cancelar. Intenta de nuevo.');
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = 'Cancelar de todos modos';
+              }
+            } catch (e) {
+              alert('Error de conexión. Intenta de nuevo.');
+              cancelBtn.disabled = false;
+              cancelBtn.textContent = 'Cancelar de todos modos';
+            }
+          });
+
+          var switchBtn = document.getElementById('switch-yearly-btn');
+          if (switchBtn) switchBtn.addEventListener('click', async function () {
+            switchBtn.disabled = true;
+            switchBtn.textContent = 'Cambiando…';
+            try {
+              var res = await fetch('/api/subscription/switch-yearly', { method: 'POST' });
+              var data = await res.json();
+              if (res.ok) {
+                alert('¡Listo! Ahora estás en el plan anual de $19.99/año.');
+                window.location.reload();
+              } else {
+                alert(data.error || 'No se pudo cambiar el plan. Intenta de nuevo.');
+                switchBtn.disabled = false;
+                switchBtn.textContent = 'Cambiarme al anual y ahorrar 44%';
+              }
+            } catch (e) {
+              alert('Error de conexión. Intenta de nuevo.');
+              switchBtn.disabled = false;
+              switchBtn.textContent = 'Cambiarme al anual y ahorrar 44%';
+            }
+          });
+        }
       })();
     </script>
   )}
