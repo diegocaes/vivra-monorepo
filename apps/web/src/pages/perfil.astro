@@ -197,6 +197,13 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect('/perfil?error=name_required');
   }
 
+  // Colores de tema premium: naranja y azul son free; el resto requiere premium.
+  const requestedTheme = (formData.get('theme_color') as string) || 'orange';
+  const premiumAtSave = await getPremiumStatus(supabase, user.id);
+  const themeColor = premiumAtSave.isPremium || ['orange', 'blue'].includes(requestedTheme)
+    ? requestedTheme
+    : (pet?.theme_color ?? 'orange');
+
   const petData = {
     user_id: user.id,
     name: rawName,
@@ -206,7 +213,7 @@ if (Astro.request.method === 'POST') {
     weight_kg: newWeight,
     chip_id: ((formData.get('chip_id') as string)?.trim().slice(0, 50)) || null,
     color: ((formData.get('color') as string)?.trim().slice(0, 50)) || null,
-    theme_color: (formData.get('theme_color') as string) || 'orange',
+    theme_color: themeColor,
     birth_city: (formData.get('birth_city') as string)?.trim() || null,
     birth_country: (formData.get('birth_country') as string)?.trim() || null,
     support_type: (formData.get('support_type') as string) || null,
@@ -538,7 +545,7 @@ const origin = new URL(Astro.request.url).origin;
           <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
           Color del perfil
         </div>
-        <p class="text-xs text-muted -mt-2">Este color se usa en el hero card y como acento en toda la app.</p>
+        <p class="text-xs text-muted -mt-2">Este color se usa en el hero card y como acento en toda la app.{!isPremium && ' Naranja y azul son gratis — desbloquea todos con Premium.'}</p>
         <input type="hidden" name="theme_color" id="theme-color-input" value={pet?.theme_color || 'orange'} />
         <div class="flex gap-3 flex-wrap">
           {[
@@ -550,20 +557,29 @@ const origin = new URL(Astro.request.url).origin;
             { name: 'gold', hex: '#E69739', label: 'Dorado' },
             { name: 'yellow', hex: '#EFC65D', label: 'Amarillo' },
             { name: 'sky', hex: '#AAD3DC', label: 'Cielo' },
-          ].map(c => (
-            <button
-              type="button"
-              class:list={[
-                'theme-color-btn flex flex-col items-center gap-1.5 rounded-xl px-3 py-2.5 transition-all active:scale-95',
-                (pet?.theme_color || 'orange') === c.name ? 'ring-2 ring-offset-2 ring-ink bg-canvas' : 'hover:bg-canvas',
-              ]}
-              data-color={c.name}
-              title={c.label}
-            >
-              <span class="h-8 w-8 rounded-full shadow-md" style={`background:${c.hex}`}></span>
-              <span class="text-xs text-muted font-medium">{c.label}</span>
-            </button>
-          ))}
+          ].map(c => {
+            const locked = !isPremium && !['orange', 'blue'].includes(c.name);
+            return (
+              <button
+                type="button"
+                class:list={[
+                  'theme-color-btn flex flex-col items-center gap-1.5 rounded-xl px-3 py-2.5 transition-all active:scale-95',
+                  (pet?.theme_color || 'orange') === c.name ? 'ring-2 ring-offset-2 ring-ink bg-canvas' : 'hover:bg-canvas',
+                  locked && 'opacity-60',
+                ]}
+                data-color={c.name}
+                data-locked={locked ? '1' : undefined}
+                title={locked ? `${c.label} (Premium)` : c.label}
+              >
+                <span class="relative h-8 w-8 rounded-full shadow-md flex items-center justify-center" style={`background:${c.hex}`}>
+                  {locked && (
+                    <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  )}
+                </span>
+                <span class="text-xs text-muted font-medium">{c.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1102,6 +1118,7 @@ const origin = new URL(Astro.request.url).origin;
       var themeInput = document.getElementById('theme-color-input');
       document.querySelectorAll('.theme-color-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
+          if (btn.dataset.locked) { window.location.href = '/premium'; return; }
           var color = btn.dataset.color;
           if (themeInput) themeInput.value = color;
           document.querySelectorAll('.theme-color-btn').forEach(function(b) {

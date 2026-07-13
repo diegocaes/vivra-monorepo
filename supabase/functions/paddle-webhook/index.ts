@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
         plan: 'premium',
         source: 'web',
         premium_until: periodEnd,
+        paddle_subscription_id: data.id ?? null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
       if (error) {

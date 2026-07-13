@@ -21,8 +21,9 @@ export const FREE_LIMITS = {
 } as const;
 
 // Premium features list (for paywall display)
-// Premium = co-dueño + desglose de gastos por categoría. Todo lo demás es free.
+// Premium = co-dueño + detalle de gastos (desglose y totales por sección) + colores de tema.
 export const PREMIUM_FEATURES = [
   { icon: 'people' as const, title: 'Co-dueño', description: 'Comparte la mascota con tu pareja: ambos ven y registran todo' },
-  { icon: 'wallet' as const, title: 'Desglose de gastos', description: 'Ve en qué gastas: vet, alimento, grooming, vuelos y más, por categoría' },
+  { icon: 'wallet' as const, title: 'Detalle de gastos', description: 'Desglose por categoría y totales de vet, alimento, vuelos y más' },
+  { icon: 'color-palette' as const, title: 'Colores de tema', description: 'Personaliza el perfil de tu mascota con todos los colores' },
 ] as const;

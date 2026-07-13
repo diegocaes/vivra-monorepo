@@ -30,8 +30,9 @@ export interface PremiumStatus {
 // true = requires premium. Change a value to toggle gating on/off.
 
 // ESTRATEGIA 2026-07: casi todo es FREE para maximizar uso y retención.
-// Premium queda reducido a 2 cosas: detalle de gastos por categoría y co-dueño.
-// El TOTAL de gastos es visible para todos; el desglose por categoría es premium.
+// Premium: co-dueño, detalle de gastos (desglose por categoría Y totales por
+// sección como "total gastado en alimentación/vet/vuelos") y colores de tema
+// (naranja y azul free, el resto premium). El TOTAL general es free.
 export const FEATURE_GATES = {
   // Mascotas
   multiplePets: false,        // FREE — multi-mascota impulsa retención
@@ -45,7 +46,8 @@ export const FEATURE_GATES = {
   // Alimentacion
   foodTracking: false,        // FREE
   foodInventory: false,       // FREE
-  costAnalysis: true,         // PREMIUM — desglose de gastos POR CATEGORÍA (el total es free)
+  costAnalysis: true,         // PREMIUM — desglose por categoría + totales por sección (el total general es free)
+  themeColors: true,          // PREMIUM — colores de tema más allá de naranja y azul
 
   // Viajes
   passport: false,            // FREE

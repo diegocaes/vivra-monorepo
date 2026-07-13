@@ -7,6 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constant
 import { supabase } from '../../../lib/supabase';
 import { formatDate, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
+import { useSubscription } from '../../../hooks/useSubscription';
 import { Card } from '../../../components/ui/Card';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { Button } from '../../../components/ui/Button';
@@ -16,6 +17,7 @@ import type { VetVisit } from '../../../types/supabase';
 
 export default function HistorialScreen() {
   const router = useRouter();
+  const { isPremium } = useSubscription();
   const { pet } = usePetContext();
   const [visits, setVisits] = useState<VetVisit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,10 +150,17 @@ export default function HistorialScreen() {
             <Text style={styles.statValue}>{daysSinceLast !== null ? `${daysSinceLast}d` : '—'}</Text>
             <Text style={styles.statLabel}>Desde última</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>${totalCost.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>Total gastado</Text>
-          </View>
+          {isPremium ? (
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>${totalCost.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Total gastado</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+              <Ionicons name="lock-closed" size={16} color={Colors.muted} style={{ marginBottom: 2 }} />
+              <Text style={styles.statLabel}>Total gastado</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {visits.length === 0 && !loading ? (

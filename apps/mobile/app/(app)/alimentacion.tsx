@@ -427,11 +427,17 @@ export default function AlimentacionScreen() {
                 <Text style={styles.statCellLabel}>{stats.totalBags === 1 ? 'bolsa' : 'bolsas'}</Text>
               </View>
             </View>
-            {stats.totalSpent > 0 && (
+            {stats.totalSpent > 0 && (isPremium ? (
               <Text style={styles.totalSpentText}>
                 Total gastado en alimentación: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.ink }}>${formatCurrency(stats.totalSpent)}</Text>
               </Text>
-            )}
+            ) : (
+              <TouchableOpacity onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+                <Text style={styles.totalSpentText}>
+                  <Ionicons name="lock-closed" size={11} color={Colors.muted} /> Total gastado en alimentación: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.accent }}>ver con Premium</Text>
+                </Text>
+              </TouchableOpacity>
+            ))}
           </Card>
         ) : (
           <Card>

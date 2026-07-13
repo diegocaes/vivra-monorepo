@@ -25,6 +25,8 @@ import { SharePetSheet } from '../../components/pet/SharePetSheet';
 import * as Linking from 'expo-linking';
 
 const THEME_COLORS = Object.entries(PetThemeColors).map(([key, hex]) => ({ key, hex }));
+// Solo estos colores son free; el resto requiere Premium.
+const FREE_THEME_COLORS = ['orange', 'blue'];
 
 const GENDER_OPTIONS = [
   { key: 'macho', label: 'Macho' },
@@ -115,6 +117,36 @@ export default function PerfilScreen() {
     }
     setShowEdit(false);
     refresh();
+  };
+
+  /**
+   * Gestionar/cancelar suscripción según dónde se contrató:
+   * - 'iap' (Apple): ajustes de suscripciones del App Store.
+   * - 'web' (Paddle): se gestiona en vivrapet.com/premium.
+   * - referral/promo/trial/co-dueño: no hay cobro que cancelar.
+   */
+  const handleManageSubscription = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('user_subscriptions')
+      .select('source')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const source = data?.source;
+    if (source === 'iap') {
+      Linking.openURL('https://apps.apple.com/account/subscriptions');
+    } else if (source === 'web') {
+      Alert.alert(
+        'Suscripción web',
+        'Tu suscripción se contrató en vivrapet.com. Puedes cancelarla desde ahí — mantienes Premium hasta el final del período pagado.',
+        [
+          { text: 'Cerrar', style: 'cancel' },
+          { text: 'Abrir vivrapet.com', onPress: () => Linking.openURL('https://vivrapet.com/premium') },
+        ],
+      );
+    } else {
+      Alert.alert('Premium', 'Tu Premium es un beneficio (referidos, promo o co-dueño) y no tiene ningún cobro asociado que cancelar.');
+    }
   };
 
   const handleSetTheme = async (themeColor: string) => {
@@ -354,20 +386,29 @@ export default function PerfilScreen() {
             {/* Theme color (collapsed — set once, rarely changed) */}
             <CollapsibleCard title="Color del perfil">
               <View style={styles.colorGrid}>
-                {THEME_COLORS.map(({ key, hex }) => (
-                  <TouchableOpacity
-                    key={key}
-                    style={[
-                      styles.colorCircle,
-                      { backgroundColor: hex },
-                      pet.theme_color === key && styles.colorCircleActive,
-                    ]}
-                    onPress={() => handleSetTheme(key)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Tema de color ${key}`}
-                  />
-                ))}
+                {THEME_COLORS.map(({ key, hex }) => {
+                  const locked = !isPremium && !FREE_THEME_COLORS.includes(key);
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[
+                        styles.colorCircle,
+                        { backgroundColor: hex },
+                        pet.theme_color === key && styles.colorCircleActive,
+                        locked && styles.colorCircleLocked,
+                      ]}
+                      onPress={() => (locked ? router.push('/paywall' as any) : handleSetTheme(key))}
+                      accessibilityRole="button"
+                      accessibilityLabel={locked ? `Tema ${key} (Premium)` : `Tema de color ${key}`}
+                    >
+                      {locked && <Ionicons name="lock-closed" size={13} color={Colors.white} />}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+              {!isPremium && (
+                <Text style={styles.colorLockHint}>Naranja y azul son gratis — desbloquea todos con Premium</Text>
+              )}
             </CollapsibleCard>
 
             {/* Premium upsell */}
@@ -389,6 +430,18 @@ export default function PerfilScreen() {
               <Text style={styles.sectionTitle}>Cuenta</Text>
               <InfoRow label="Email" value={user?.email ?? null} />
               {isPremium && <InfoRow label="Plan" value="Premium" />}
+
+              {/* Manage subscription (routes by source: Apple, web, o beneficio) */}
+              {isPremium && (
+                <TouchableOpacity style={styles.coOwnerRow} onPress={handleManageSubscription} activeOpacity={0.7}>
+                  <Ionicons name="card-outline" size={20} color={Colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.coOwnerLabel}>Gestionar suscripción</Text>
+                    <Text style={styles.coOwnerSub}>Ver o cancelar tu plan Premium</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
+                </TouchableOpacity>
+              )}
 
               {/* Co-owner row */}
               {pet && isOwner && (
@@ -683,8 +736,10 @@ const styles = StyleSheet.create({
   coOwnerSub: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
   // Colors
   colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  colorCircle: { width: 36, height: 36, borderRadius: 18 },
+  colorCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   colorCircleActive: { borderWidth: 3, borderColor: Colors.ink },
+  colorCircleLocked: { opacity: 0.55 },
+  colorLockHint: { fontSize: FontSize.xs, color: Colors.muted, marginTop: Spacing.sm },
   // Empty
   emptyCard: { alignItems: 'center', paddingVertical: Spacing.md },
   emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm },

@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { usePetContext } from '../../../contexts/PetContext';
+import { useSubscription } from '../../../hooks/useSubscription';
 import { formatDate } from '@vivra/shared';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -31,6 +32,7 @@ const CHECKLIST_ITEMS: { key: keyof Pick<Flight, 'vet_certificate' | 'health_cer
 
 export default function VuelosScreen() {
   const router = useRouter();
+  const { isPremium } = useSubscription();
   const { pet } = usePetContext();
   const [flights, setFlights] = useState<Flight[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -176,12 +178,17 @@ export default function VuelosScreen() {
             <Text style={styles.statValue}>{destinations}</Text>
             <Text style={styles.statLabel}>Destinos</Text>
           </View>
-          {totalCost > 0 && (
+          {totalCost > 0 && (isPremium ? (
             <View style={styles.statBox}>
               <Text style={styles.statValue} numberOfLines={1}>${totalCost}</Text>
               <Text style={styles.statLabel}>Total</Text>
             </View>
-          )}
+          ) : (
+            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+              <Ionicons name="lock-closed" size={16} color={Colors.muted} style={{ marginBottom: 2 }} />
+              <Text style={styles.statLabel}>Total</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Tabs */}
