@@ -180,30 +180,54 @@ const features = [
   </div>
 
   {paddleReady && !premium.isPremium && (
-    <script is:inline src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-  )}
-  {paddleReady && !premium.isPremium && (
-    <script define:vars={{ PADDLE_TOKEN, PADDLE_ENV, userId: user.id, userEmail: user.email ?? '' }}>
-      if (PADDLE_ENV === 'sandbox') Paddle.Environment.set('sandbox');
-      Paddle.Initialize({
-        token: PADDLE_TOKEN,
-        eventCallback: (ev) => {
-          // Tras el pago, el webhook activa premium en segundos; recargamos para reflejarlo.
-          if (ev.name === 'checkout.completed') {
-            setTimeout(() => window.location.reload(), 4000);
+    /* data-astro-rerun: con ClientRouter los scripts inline no se re-ejecutan en
+       navegación suave — sin esto, llegar a /premium desde el sidebar deja los
+       botones muertos. El script es idempotente (guards) para soportar re-runs. */
+    <script is:inline data-astro-rerun define:vars={{ PADDLE_TOKEN, PADDLE_ENV, userId: user.id, userEmail: user.email ?? '' }}>
+      (function () {
+        function wireButtons() {
+          if (!window.__vivraPaddleInit) {
+            if (PADDLE_ENV === 'sandbox') Paddle.Environment.set('sandbox');
+            Paddle.Initialize({
+              token: PADDLE_TOKEN,
+              eventCallback: function (ev) {
+                // Tras el pago, el webhook activa premium en segundos; recargamos para reflejarlo.
+                if (ev.name === 'checkout.completed') {
+                  setTimeout(function () { window.location.href = '/premium'; }, 4000);
+                }
+              },
+            });
+            window.__vivraPaddleInit = true;
           }
-        },
-      });
-      document.querySelectorAll('.paddle-buy').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          Paddle.Checkout.open({
-            items: [{ priceId: btn.dataset.paddlePrice, quantity: 1 }],
-            customData: { user_id: userId },
-            customer: userEmail ? { email: userEmail } : undefined,
-            settings: { displayMode: 'overlay', locale: 'es' },
+          document.querySelectorAll('.paddle-buy').forEach(function (btn) {
+            if (btn.dataset.wired) return;
+            btn.dataset.wired = '1';
+            btn.addEventListener('click', function () {
+              Paddle.Checkout.open({
+                items: [{ priceId: btn.dataset.paddlePrice, quantity: 1 }],
+                customData: { user_id: userId },
+                customer: userEmail ? { email: userEmail } : undefined,
+                settings: { displayMode: 'overlay', locale: 'es' },
+              });
+            });
           });
-        });
-      });
+        }
+
+        if (window.Paddle) {
+          wireButtons();
+        } else if (!window.__vivraPaddleLoading) {
+          window.__vivraPaddleLoading = true;
+          var s = document.createElement('script');
+          s.src = 'https://cdn.paddle.com/paddle/v2/paddle.js';
+          s.onload = wireButtons;
+          document.head.appendChild(s);
+        } else {
+          // paddle.js ya está cargando (navegación rápida): espera a que exista.
+          var iv = setInterval(function () {
+            if (window.Paddle) { clearInterval(iv); wireButtons(); }
+          }, 100);
+        }
+      })();
     </script>
   )}
 </MainLayout>
