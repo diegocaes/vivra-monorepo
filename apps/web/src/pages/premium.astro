@@ -86,6 +86,11 @@ const features = [
             </a>
           </div>
         )}
+        {['promo', 'referral', 'trial', 'shared'].includes(premium.source ?? '') && (
+          <p class="text-xs text-muted mt-4 pt-4 border-t border-accent/20">
+            Tu Premium es un beneficio ({premium.source === 'shared' ? 'compartido por tu co-dueño' : premium.source === 'promo' ? 'promocional' : 'por referidos'}) — no tiene ningún cobro asociado que cancelar.
+          </p>
+        )}
       </div>
     ) : (
       <div class="rounded-2xl border border-card-border bg-canvas px-5 py-4">
