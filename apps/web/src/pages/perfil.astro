@@ -219,7 +219,8 @@ if (Astro.request.method === 'POST') {
   const petData = {
     user_id: user.id,
     name: rawName,
-    breed: breed?.slice(0, 100) || null,
+    // Los gatos no manejan raza — nunca guardar breed para species 'cat'
+    breed: ((pet as any)?.species === 'cat') ? null : (breed?.slice(0, 100) || null),
     birth_date: (formData.get('birth_date') as string) || null,
     gender: (formData.get('gender') as string) || null,
     weight_kg: newWeight,
@@ -264,6 +265,7 @@ if (Astro.request.method === 'POST') {
 // Check if current breed is in the list (for "Other" logic)
 const breedInList = pet?.breed ? DOG_BREEDS.includes(pet.breed as typeof DOG_BREEDS[number]) : false;
 const isOtherBreed = pet?.breed && !breedInList;
+const isCatPet = ((pet as any)?.species ?? 'dog') === 'cat';
 
 // Premium + Spending data
 const premium = await getPremiumStatus(supabase, user.id);
@@ -483,33 +485,35 @@ const origin = new URL(Astro.request.url).origin;
 
         <Input label="Nombre" name="name" value={pet?.name || ''} required placeholder="Ej: Luna" />
 
-        <!-- Breed Dropdown -->
-        <div>
-          <label class="block text-sm font-medium text-ink mb-1.5">Raza</label>
-          <select
-            name="breed"
-            id="breed-select"
-            class="field-input"
-          >
-            <option value="">Seleccionar raza</option>
-            {DOG_BREEDS.map((breed) => (
-              <option value={breed} selected={pet?.breed === breed || (isOtherBreed && breed === 'Other')}>
-                {breed}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            name="breed_other"
-            id="breed-other-input"
-            placeholder="Escribe la raza"
-            value={isOtherBreed ? pet?.breed : ''}
-            class:list={[
-              'mt-2 field-input',
-              { hidden: !isOtherBreed },
-            ]}
-          />
-        </div>
+        {/* Raza: solo perros — los gatos usan un perfil felino general sin raza */}
+        {!isCatPet && (
+          <div>
+            <label class="block text-sm font-medium text-ink mb-1.5">Raza</label>
+            <select
+              name="breed"
+              id="breed-select"
+              class="field-input"
+            >
+              <option value="">Seleccionar raza</option>
+              {DOG_BREEDS.map((breed) => (
+                <option value={breed} selected={pet?.breed === breed || (isOtherBreed && breed === 'Other')}>
+                  {breed}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              name="breed_other"
+              id="breed-other-input"
+              placeholder="Escribe la raza"
+              value={isOtherBreed ? pet?.breed : ''}
+              class:list={[
+                'mt-2 field-input',
+                { hidden: !isOtherBreed },
+              ]}
+            />
+          </div>
+        )}
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Fecha de nacimiento" name="birth_date" type="date" value={pet?.birth_date || ''} />

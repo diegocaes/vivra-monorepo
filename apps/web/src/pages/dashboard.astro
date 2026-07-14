@@ -7,7 +7,7 @@ import type { ScoreInput } from '@vivra/shared';
 
 import { evaluateBadges } from '@vivra/shared';
 import type { BadgeCounts } from '@vivra/shared';
-import { BREED_FACTS } from '@vivra/shared';
+import { BREED_FACTS, CAT_FACTS } from '@vivra/shared';
 import type { DogBreed } from '@vivra/shared';
 import { getPremiumStatus } from '../lib/premium';
 
@@ -166,8 +166,12 @@ const photoUrl = pet.photo_url || '/icons/default-pet.svg';
 type DashAction = { href: string; icon: string; iconBg: string; iconColor: string; label: string; detail: string; urgent: boolean };
 const todoActions: DashAction[] = [];
 
-// Breed fact — rotates daily based on day-of-year, fallback to generic facts
-const breedFacts = pet.breed ? BREED_FACTS[pet.breed as DogBreed] : BREED_FACTS['Other'];
+// Fact del día — rota por día del año. Gatos usan CAT_FACTS (no manejan raza);
+// perros usan los de su raza con fallback a los genéricos.
+const isCat = ((pet as any).species ?? 'dog') === 'cat';
+const breedFacts = isCat
+  ? CAT_FACTS
+  : (pet.breed ? BREED_FACTS[pet.breed as DogBreed] : BREED_FACTS['Other']);
 const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
 const dailyFact = breedFacts?.length
   ? breedFacts[dayOfYear % breedFacts.length]

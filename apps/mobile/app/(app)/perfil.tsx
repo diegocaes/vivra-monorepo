@@ -91,7 +91,8 @@ export default function PerfilScreen() {
 
     const { error } = await supabase.from('pets').update({
       name: name.trim(),
-      breed: breed || null,
+      // Los gatos no manejan raza — nunca guardar breed para species 'cat'
+      breed: pet.species === 'cat' ? null : (breed || null),
       birth_date: birthDate || null,
       gender: gender || null,
       weight_kg: newWeight,
@@ -388,7 +389,8 @@ export default function PerfilScreen() {
             {/* Info card (collapsed by default — keeps the screen light) */}
             <CollapsibleCard title={`Datos de ${pet.name}`}>
               <InfoRow label="Nombre" value={pet.name} />
-              <InfoRow label="Raza" value={pet.breed} />
+              {pet.species !== 'cat' && <InfoRow label="Raza" value={pet.breed} />}
+              {pet.species === 'cat' && <InfoRow label="Especie" value="Gato" />}
               <InfoRow label="Nacimiento" value={pet.birth_date ? formatDate(pet.birth_date) : null} />
               <InfoRow label="Género" value={pet.gender === 'macho' ? 'Macho' : pet.gender === 'hembra' ? 'Hembra' : null} />
               <InfoRow label="Peso" value={pet.weight_kg ? `${pet.weight_kg} kg` : null} />
@@ -627,19 +629,22 @@ export default function PerfilScreen() {
       {/* Edit form */}
       <BottomSheet visible={showEdit} onClose={() => setShowEdit(false)} title="Editar perfil">
         <FormField label="Nombre" value={name} onChangeText={setName} placeholder="Nombre de tu mascota" />
-        <SelectField
-          label="Raza"
-          value={breed}
-          /* If the user's stored breed doesn't match a current DOG_BREEDS
-             entry (e.g. legacy free-text input), surface it as the first
-             option so it stays visible until they pick a real one. */
-          options={
-            breed && !BREED_OPTIONS.some(o => o.key === breed)
-              ? [{ key: breed, label: `${breed} (actual)` }, ...BREED_OPTIONS]
-              : BREED_OPTIONS
-          }
-          onSelect={setBreed}
-        />
+        {/* Raza: solo perros — los gatos usan un perfil felino general sin raza */}
+        {pet?.species !== 'cat' && (
+          <SelectField
+            label="Raza"
+            value={breed}
+            /* If the user's stored breed doesn't match a current DOG_BREEDS
+               entry (e.g. legacy free-text input), surface it as the first
+               option so it stays visible until they pick a real one. */
+            options={
+              breed && !BREED_OPTIONS.some(o => o.key === breed)
+                ? [{ key: breed, label: `${breed} (actual)` }, ...BREED_OPTIONS]
+                : BREED_OPTIONS
+            }
+            onSelect={setBreed}
+          />
+        )}
         <DatePickerField label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} maxDate={new Date()} clearable />
         <SelectField label="Género" value={gender} options={GENDER_OPTIONS} onSelect={setGender} />
         <FormField label="Peso (kg)" value={weightKg} onChangeText={setWeightKg} placeholder="Ej: 12.5" keyboardType="decimal-pad" />

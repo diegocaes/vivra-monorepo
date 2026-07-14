@@ -223,3 +223,18 @@ export const BREED_FACTS: Partial<Record<DogBreed, BreedFact[]>> = {
     { fact: 'La temperatura normal de un perro es 38-39°C. Más alta que la humana.' },
   ],
 };
+
+// Datos curiosos para gatos — los gatos no manejan razas en Vivra, así que
+// es una sola lista general. Usar cuando pet.species === 'cat'.
+export const CAT_FACTS: BreedFact[] = [
+  { fact: 'Los gatos duermen entre 12 y 16 horas al día — dos tercios de su vida.' },
+  { fact: 'El ronroneo vibra entre 25 y 150 Hz, frecuencias asociadas a la regeneración de huesos y tejidos.' },
+  { fact: 'La nariz de cada gato tiene un patrón único, como las huellas dactilares humanas.' },
+  { fact: 'Los gatos no perciben el sabor dulce — les falta el receptor genético.' },
+  { fact: 'Un gato puede saltar hasta 6 veces la longitud de su cuerpo.' },
+  { fact: 'Sus bigotes son tan anchos como su cuerpo: los usan para medir si caben por un espacio.' },
+  { fact: 'Los gatos adultos casi solo maúllan a los humanos — entre ellos usan otros sonidos y lenguaje corporal.' },
+  { fact: 'Pasan hasta la mitad de sus horas despiertos acicalándose.' },
+  { fact: 'Pueden girar sus orejas 180 grados gracias a más de 30 músculos en cada una.' },
+  { fact: 'La visión nocturna de un gato necesita 6 veces menos luz que la humana.' },
+];
