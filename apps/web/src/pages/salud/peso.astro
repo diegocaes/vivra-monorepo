@@ -3,27 +3,18 @@ import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
-import PremiumGate from '../../components/ui/PremiumGate.astro';
 import WeightChart from '../../components/WeightChart.tsx';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
-import { getPremiumStatus, isAtLimit, canAccess } from '../../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
 
-const premium = await getPremiumStatus(supabase, user.id);
-
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action') as string;
   if (action === 'add') {
-    // Check weight record limit for free users
-    const { count: weightCount } = await supabase.from('weight_records').select('id', { count: 'exact', head: true }).eq('pet_id', pet.id);
-    if (isAtLimit('maxWeightRecords', weightCount ?? 0, premium)) {
-      return Astro.redirect('/salud/peso?toast_error=' + encodeURIComponent('Límite alcanzado. Refiere un amigo o suscríbete a Premium para ilimitados.'));
-    }
     const weightKg = Number(formData.get('weight_kg'));
     const recordDate = formData.get('date') as string;
     // Guard against NaN / nonsense values (manual POST or browser quirk
@@ -86,11 +77,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
             </span>
           )}
         </div>
-        {records.length >= 2 && (
-          <PremiumGate isPremium={canAccess('weightChart', premium)} feature="weightChart" title="Grafica de peso" description="Graficas detalladas del peso. Refiere un amigo o suscríbete para desbloquear.">
-            <WeightChart records={records} client:load />
-          </PremiumGate>
-        )}
+        {records.length >= 2 && <WeightChart records={records} client:load />}
       </div>
 
       {/* Stats row */}

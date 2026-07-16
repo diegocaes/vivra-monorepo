@@ -9,7 +9,7 @@ export const REVENUECAT_API_KEY = Platform.select({
 // Product identifiers — must match App Store Connect
 export const PRODUCT_IDS = {
   MONTHLY: 'vivra_premium_monthly',   // $2.99/month
-  YEARLY: 'vivra_premium_yearly',     // $19.99/year
+  YEARLY: 'vivra_premium_yearly',     // $14.99/year
 } as const;
 
 // Entitlement identifier — configured in RevenueCat dashboard

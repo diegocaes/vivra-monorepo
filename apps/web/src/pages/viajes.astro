@@ -2,13 +2,10 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
-import { getPremiumStatus, isAtLimit, canAccess } from '../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
-
-const premium = await getPremiumStatus(supabase, user.id);
 
 // Handle form submissions
 if (Astro.request.method === 'POST') {
@@ -16,10 +13,6 @@ if (Astro.request.method === 'POST') {
   const action = formData.get('_action') as string;
 
   if (action === 'add_flight') {
-    const { count: flightCount } = await supabase.from('flights').select('id', { count: 'exact', head: true }).eq('pet_id', pet.id);
-    if (isAtLimit('maxFlights', flightCount ?? 0, premium)) {
-      return Astro.redirect('/viajes?toast_error=' + encodeURIComponent('Límite alcanzado. Refiere un amigo o suscríbete a Premium para ilimitados.'));
-    }
     const flightData: Record<string, unknown> = {
       pet_id: pet.id,
       airline: formData.get('airline') as string,
@@ -132,9 +125,6 @@ if (Astro.request.method === 'POST') {
   }
 
   if (action === 'upload_doc') {
-    if (!canAccess('flightDocuments', premium)) {
-      return Astro.redirect('/viajes?toast_error=' + encodeURIComponent('Subir documentos requiere Premium.'));
-    }
     const flightId = formData.get('flight_id') as string;
     const docName = formData.get('doc_name') as string;
     const file = formData.get('doc_file') as File;

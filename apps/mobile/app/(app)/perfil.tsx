@@ -402,6 +402,22 @@ export default function PerfilScreen() {
               } />
             </CollapsibleCard>
 
+            {/* Passport quick access (lives under actividad/ routes; the tab was removed) */}
+            <Card>
+              <TouchableOpacity
+                style={styles.coOwnerRow}
+                onPress={() => router.push('/(app)/actividad/pasaporte' as any)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.coOwnerLabel}>Pasaporte</Text>
+                  <Text style={styles.coOwnerSub}>Identidad, vacunas y viajes de {pet.name}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
+              </TouchableOpacity>
+            </Card>
+
             {/* Spending summary */}
             <SpendingSummary petId={pet.id} isPremium={isPremium} />
 

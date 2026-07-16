@@ -4,7 +4,7 @@
  * This module is the SINGLE SOURCE OF TRUTH for what's free and what's premium.
  * Used by both web (Astro SSR) and will be used by iOS (React Native) since it's pure TS.
  *
- * To change what's gated: edit FEATURE_GATES and LIMITS below.
+ * To change what's gated: edit FEATURE_GATES below.
  * To test premium locally: set FORCE_PREMIUM=true in .env
  */
 
@@ -12,7 +12,7 @@
 
 export interface UserSubscription {
   plan: 'free' | 'premium';
-  source: 'referral' | 'iap' | 'promo' | 'trial' | null;
+  source: 'referral' | 'iap' | 'promo' | 'trial' | 'web' | 'shared' | null;
   premium_until: string | null;
   trial_ends_at: string | null;
 }
@@ -27,70 +27,22 @@ export interface PremiumStatus {
 }
 
 // ── Feature gates ──
-// true = requires premium. Change a value to toggle gating on/off.
+// true = requires premium. Everything not listed here is free.
 
 // ESTRATEGIA 2026-07: casi todo es FREE para maximizar uso y retención.
 // Premium: co-dueño, detalle de gastos (desglose por categoría Y totales por
 // sección como "total gastado en alimentación/vet/vuelos") y colores de tema
 // (naranja y azul free, el resto premium). El TOTAL general es free.
 export const FEATURE_GATES = {
-  // Mascotas
-  multiplePets: false,        // FREE — multi-mascota impulsa retención
-
-  // Salud
-  vitalityScore: false,       // FREE
-  vitalityDetails: false,     // FREE — desglose por pilar, flags, recomendaciones
-  weightChart: false,         // FREE — grafica de peso historica
-  exportHealthPdf: false,     // FREE
-
-  // Alimentacion
-  foodTracking: false,        // FREE
-  foodInventory: false,       // FREE
   costAnalysis: true,         // PREMIUM — desglose por categoría + totales por sección (el total general es free)
   themeColors: true,          // PREMIUM — colores de tema más allá de naranja y azul
-
-  // Viajes
-  passport: false,            // FREE
-  flightDocuments: false,     // FREE
-  printPassport: false,       // FREE
-
-  // Calendario y recordatorios
-  calendar: false,            // FREE
-  pushNotifications: false,   // FREE
-
-  // Social
-  referrals: false,           // FREE (es el growth engine)
-  badges: false,              // FREE (engagement)
-  coOwnerSharing: true,       // PREMIUM — compartir mascota con co-dueno
-
-  // Data
-  dataExport: false,          // FREE
+  coOwnerSharing: true,       // PREMIUM — compartir mascota con co-dueño
 } as const;
 
 export type Feature = keyof typeof FEATURE_GATES;
 
-// ── Limits ──
-
-export const LIMITS = {
-  free: {
-    maxPets: 10,
-    maxVaccineRecords: Infinity,
-    maxWeightRecords: Infinity,
-    maxVetVisits: Infinity,
-    maxFoods: Infinity,
-    maxFlights: Infinity,
-  },
-  premium: {
-    maxPets: 10,
-    maxVaccineRecords: Infinity,
-    maxWeightRecords: Infinity,
-    maxVetVisits: Infinity,
-    maxFoods: Infinity,
-    maxFlights: Infinity,
-  },
-} as const;
-
-export type LimitKey = keyof typeof LIMITS.free;
+// Tope de cordura por cuenta (aplica igual a free y premium, solo anti-abuso)
+export const MAX_PETS = 10;
 
 // ── Core logic ──
 
@@ -139,21 +91,6 @@ export function evaluatePremium(sub: UserSubscription | null): PremiumStatus {
 export function canAccess(feature: Feature, premium: PremiumStatus): boolean {
   if (!FEATURE_GATES[feature]) return true; // Feature is free
   return premium.isPremium;
-}
-
-/**
- * Get the limit for a specific resource.
- */
-export function getLimit(key: LimitKey, premium: PremiumStatus): number {
-  return premium.isPremium ? LIMITS.premium[key] : LIMITS.free[key];
-}
-
-/**
- * Check if user is at or over a limit.
- */
-export function isAtLimit(key: LimitKey, currentCount: number, premium: PremiumStatus): boolean {
-  const limit = getLimit(key, premium);
-  return currentCount >= limit;
 }
 
 // ── Supabase helper (server-side only) ──

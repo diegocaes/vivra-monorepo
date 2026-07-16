@@ -1,9 +1,7 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
 
-import PremiumGate from '../../components/ui/PremiumGate.astro';
 import { getActivePet } from '../../lib/pet';
-import { getPremiumStatus, canAccess } from '../../lib/premium';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
 
@@ -18,8 +16,6 @@ const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 
 if (!pet) return Astro.redirect('/onboarding');
-
-const premium = await getPremiumStatus(supabase, user.id);
 
 const [
   { data: weightRecords },
@@ -150,8 +146,7 @@ if (Astro.request.method === 'POST') {
       </div>
 
       {/* Pillar breakdown bars */}
-      <PremiumGate isPremium={canAccess('vitalityDetails', premium)} feature="vitalityDetails" title="Desglose detallado" description="Score por pilar, flags y recomendaciones. Refiere un amigo o suscríbete.">
-        <div class="pt-3 border-t border-card-border space-y-1">
+      <div class="pt-3 border-t border-card-border space-y-1">
           {score.pillars.map(pillar => (
             <div class="pillar-row">
               <button type="button" class="pillar-toggle w-full flex items-center gap-2.5 py-1.5 rounded-xl transition-colors hover:bg-canvas/50 -mx-1 px-1">
@@ -180,9 +175,8 @@ if (Astro.request.method === 'POST') {
                 )}
               </div>
             </div>
-          ))}
-        </div>
-      </PremiumGate>
+        ))}
+      </div>
 
       {/* Quick stats row */}
       <div class="grid grid-cols-3 gap-3 pt-3 border-t border-card-border mt-3">

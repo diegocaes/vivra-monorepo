@@ -55,16 +55,6 @@ export interface GroomingRecord {
   date: string; // ISO date
 }
 
-export interface ActivityLogRecord {
-  date: string;              // ISO date
-  walks: number;             // number of walks that day
-  duration_minutes: number | null; // total minutes walked
-}
-
-export interface AdventureRecord {
-  date: string; // ISO date
-}
-
 export interface FoodRecord {
   brand: string | null;
   daily_grams: number | null;
@@ -96,10 +86,6 @@ export interface ScoreInput {
   vaccines: VaccineRecord[];
   vetVisits: VetVisit[];
   groomings: GroomingRecord[];
-  /** @deprecated — actividad/paseos se eliminó del score. Campo aceptado por compat con consumers existentes. */
-  activityLogs?: ActivityLogRecord[];
-  /** @deprecated — aventuras se eliminó del score. Campo aceptado por compat con consumers existentes. */
-  adventures?: AdventureRecord[];
   foods: FoodRecord[];
   bloodTests?: BloodTestRecord[];
   /** Registros de antipulgas/desparasitante/combinado. 'combinado' cuenta como ambos. */

@@ -2,18 +2,12 @@
 import '../styles/global.css';
 import { calculateAge, formatDate } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
-import { getPremiumStatus, canAccess } from '../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 
 if (!pet) return Astro.redirect('/perfil?new=1');
-
-// Viewing the passport is free (drives stickiness + sharing). Exporting/printing
-// it is the premium action — gated on the button below, not on the page.
-const premium = await getPremiumStatus(supabase, user.id);
-const canExport = canAccess('printPassport', premium);
 
 const { data: vaccines } = await supabase
   .from('vaccines')
@@ -503,17 +497,10 @@ const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
 
     </div>
 
-    {canExport ? (
-      <button class="print-btn" onclick="window.print()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Imprimir pasaporte
-      </button>
-    ) : (
-      <a class="print-btn" href="/premium">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        Exportar a PDF con Premium
-      </a>
-    )}
+    <button class="print-btn" onclick="window.print()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Imprimir pasaporte
+    </button>
 
     <a href="/dashboard" class="back-btn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>

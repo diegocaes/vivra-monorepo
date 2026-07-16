@@ -24,10 +24,6 @@ export interface PetData {
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
   vetVisits: { date: string; reason: string; location: string | null }[];
   groomings: { type: string; date: string; location: string | null; groomer_name: string | null }[];
-  /** @deprecated — actividad/paseos se eliminó del producto. Siempre `[]`. Mantenido por compat. */
-  activityLogs: { date: string; walks: number; duration_minutes: number | null }[];
-  /** @deprecated — aventuras se eliminó del producto. Siempre `[]`. Mantenido por compat. */
-  adventures: { date: string }[];
   /** Blood test records sorted by date desc. Used for the vitality score bonus + reminder. */
   bloodTests: { date: string }[];
   /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
@@ -227,8 +223,6 @@ export function usePet(): PetData {
     foods,
     vetVisits,
     groomings,
-    activityLogs: [] as PetData['activityLogs'], // deprecated — actividad eliminada del producto
-    adventures: [] as PetData['adventures'],     // deprecated — aventuras eliminadas del producto
     bloodTests,
     preventives,
     lastAntipulgas,

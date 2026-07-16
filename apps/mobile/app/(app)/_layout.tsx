@@ -62,15 +62,8 @@ export default function AppLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="actividad"
-        options={{
-          title: 'Actividad',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'flash' : 'flash-outline'} size={24} color={color} />
-          ),
-        }}
-      />
+      {/* Not a tab: holds grooming/pasaporte/vuelos routes reached from Salud y Perfil */}
+      <Tabs.Screen name="actividad" options={{ href: null }} />
       <Tabs.Screen
         name="perfil"
         options={{

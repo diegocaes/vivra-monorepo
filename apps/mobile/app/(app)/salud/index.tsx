@@ -165,6 +165,21 @@ export default function SaludScreen() {
           onPress={() => router.push('/(app)/salud/vacunas')}
           badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />
+        <NavCard
+          icon="cut"
+          iconColor="#8B5CF6"
+          title="Grooming"
+          subtitle="Baños y cortes"
+          onPress={() => router.push('/(app)/actividad/grooming' as any)}
+          badge={petData.groomings.length > 0 ? `${petData.groomings.length}` : undefined}
+        />
+        <NavCard
+          icon="document-text"
+          iconColor="#3B82F6"
+          title="Pasaporte"
+          subtitle="Identidad, vacunas y viajes"
+          onPress={() => router.push('/(app)/actividad/pasaporte' as any)}
+        />
 
         {/* Disclaimer: the score is informational, not diagnostic */}
         <Text style={styles.disclaimer}>

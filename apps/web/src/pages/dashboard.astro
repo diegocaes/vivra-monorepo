@@ -5,8 +5,6 @@ import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
 
-import { evaluateBadges } from '@vivra/shared';
-import type { BadgeCounts } from '@vivra/shared';
 import { BREED_FACTS, CAT_FACTS } from '@vivra/shared';
 import type { DogBreed } from '@vivra/shared';
 import { getPremiumStatus } from '../lib/premium';
@@ -65,8 +63,6 @@ const [
   { data: weightRecords },
   { data: foods },
   { data: allPreventives },
-  { count: weightCount },
-  { count: flightCount },
 ] = await Promise.all([
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
@@ -76,8 +72,6 @@ const [
   // All preventives (antipulgas, desparasitante, combinado) in one call.
   // 'combinado' rows count as BOTH antipulgas and desparasitante for next-due.
   supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
-  supabase.from('weight_records').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
-  supabase.from('flights').select('*', { count: 'exact', head: true }).eq('pet_id', pet.id),
 ]);
 
 // Split preventives — 'combinado' counts for both
@@ -95,8 +89,6 @@ try {
 // Derived counts and recent items from full queries
 const vaccineCount = allVaccines?.length ?? 0;
 const visitCount = allVetVisits?.length ?? 0;
-const groomingCount = allGroomings?.length ?? 0;
-const allVaccineNames = allVaccines ?? [];
 
 // Food insights — averages across all logged bags. The owner already knows
 // when food runs out; we surface trazabilidad (cost, duration) instead.
@@ -182,26 +174,7 @@ const latestWeight = weightRecords?.[0]?.weight_kg ?? pet.weight_kg;
 const prevWeight = weightRecords?.[1]?.weight_kg;
 const weightDiff = latestWeight && prevWeight ? +(latestWeight - prevWeight).toFixed(1) : null;
 
-// Badges
 const profileComplete = !!(pet.photo_url && pet.chip_id && pet.color);
-const badgeCounts: BadgeCounts = {
-  profileComplete,
-  vaccineCount: vaccineCount ?? 0,
-  visitCount: visitCount ?? 0,
-  weightCount: weightCount ?? 0,
-  adventureCount: 0,
-  flightCount: flightCount ?? 0,
-  groomingCount: groomingCount ?? 0,
-  foodCount: (foods ?? []).length,
-  hasAntipulgas: (lastAntipulgas?.length ?? 0) > 0,
-  hasDesparasitante: (lastDesparasitante?.length ?? 0) > 0,
-  vaccineNames: (allVaccineNames ?? []).map((v: { name: string }) => v.name),
-};
-const badgeResult = evaluateBadges(badgeCounts);
-const earnedBadges = [
-  ...badgeResult.engagement.filter(b => b.earned),
-  ...badgeResult.vaccines.filter(v => v.earned),
-];
 
 // Checklist
 const checklistItems = [
@@ -222,21 +195,11 @@ try {
   const existingSet = new Set((existingNotifs ?? []).map(n => `${n.type}::${n.message}`));
 
   const rawSnapshot = Astro.cookies.get('pet_snapshot')?.value;
-  const snapshot = rawSnapshot ? JSON.parse(rawSnapshot) as { badgeCount?: number; score?: number; petId?: string; foodNotified?: boolean; antipulgasNotified?: boolean; desparasitanteNotified?: boolean } : null;
+  const snapshot = rawSnapshot ? JSON.parse(rawSnapshot) as { score?: number; petId?: string; foodNotified?: boolean; antipulgasNotified?: boolean; desparasitanteNotified?: boolean } : null;
   const isSamePet = snapshot?.petId === pet.id;
   const prevScore = (isSamePet ? snapshot?.score : null) ?? 0;
 
   const newNotifications: Array<{ type: string; title: string; message: string; icon: string; href: string }> = [];
-
-  // New badges earned — only notify if not already in DB
-  for (const badge of earnedBadges) {
-    const msg = `Ganaste "${badge.name}"`;
-    const key = `badge_earned::${msg}`;
-    if (!existingSet.has(key)) {
-      newNotifications.push({ type: 'badge_earned', title: '¡Nueva insignia!', message: msg, icon: '🏆', href: '/badges' });
-      existingSet.add(key);
-    }
-  }
 
   // Score improved by 5+ points (only if we had a previous score to compare)
   if (dashScore.showScore && prevScore > 0 && dashScore.total >= prevScore + 5) {
@@ -318,7 +281,6 @@ try {
 
   // Update snapshot cookie
   Astro.cookies.set('pet_snapshot', JSON.stringify({
-    badgeCount: badgeResult.earnedCount,
     score: dashScore.total,
     petId: pet.id,
     antipulgasNotified: antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3,

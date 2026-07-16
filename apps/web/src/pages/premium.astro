@@ -6,6 +6,14 @@ import type { PremiumStatus } from '../lib/premium';
 const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
 
+// Checkout web con Paddle — se activa solo cuando las env vars existen.
+// PUBLIC_PADDLE_ENV: 'sandbox' | 'production'
+const PADDLE_TOKEN = import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN ?? '';
+const PADDLE_ENV = import.meta.env.PUBLIC_PADDLE_ENV ?? 'sandbox';
+const PADDLE_PRICE_MONTHLY = import.meta.env.PUBLIC_PADDLE_PRICE_MONTHLY ?? '';
+const PADDLE_PRICE_YEARLY = import.meta.env.PUBLIC_PADDLE_PRICE_YEARLY ?? '';
+const paddleReady = !!(PADDLE_TOKEN && (PADDLE_PRICE_MONTHLY || PADDLE_PRICE_YEARLY));
+
 // Cancelación programada de suscripción web (Paddle): premium sigue activo
 // hasta cancelAt pero no se renovará.
 let cancelAt: string | null = null;
@@ -39,14 +47,6 @@ const cancelAtLabel = cancelAt
   : null;
 
 const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
-
-// Checkout web con Paddle — se activa solo cuando las env vars existen.
-// PUBLIC_PADDLE_ENV: 'sandbox' | 'production'
-const PADDLE_TOKEN = import.meta.env.PUBLIC_PADDLE_CLIENT_TOKEN ?? '';
-const PADDLE_ENV = import.meta.env.PUBLIC_PADDLE_ENV ?? 'sandbox';
-const PADDLE_PRICE_MONTHLY = import.meta.env.PUBLIC_PADDLE_PRICE_MONTHLY ?? '';
-const PADDLE_PRICE_YEARLY = import.meta.env.PUBLIC_PADDLE_PRICE_YEARLY ?? '';
-const paddleReady = !!(PADDLE_TOKEN && (PADDLE_PRICE_MONTHLY || PADDLE_PRICE_YEARLY));
 
 // Premium = co-dueño + detalle de gastos + colores de tema. Todo lo demás es gratis.
 const features = [
@@ -198,7 +198,7 @@ const features = [
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm">💳</div>
           <div>
             <p class="text-sm font-medium text-ink">Suscripción</p>
-            <p class="text-xs text-muted mt-0.5">$2.99/mes o $19.99/año — se contrata desde la app de iPhone (Perfil → Premium)</p>
+            <p class="text-xs text-muted mt-0.5">$2.99/mes o $14.99/año — se contrata desde la app de iPhone (Perfil → Premium)</p>
           </div>
         </div>
       </div>
@@ -234,8 +234,8 @@ const features = [
                   data-paddle-price={PADDLE_PRICE_YEARLY}
                   class="paddle-buy flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-accent bg-accent/10 px-4 py-3.5 transition-all hover:bg-accent/15 active:scale-95"
                 >
-                  <span class="text-sm font-bold text-accent-dark">$19.99/año</span>
-                  <span class="text-xs text-accent-dark/80">Ahorra 44%</span>
+                  <span class="text-sm font-bold text-accent-dark">$14.99/año</span>
+                  <span class="text-xs text-accent-dark/80">Ahorra 58%</span>
                 </button>
               )}
             </div>
@@ -290,13 +290,13 @@ const features = [
         {isMonthlyPlan && (
           <div class="rounded-2xl border-2 border-accent bg-accent/5 px-4 py-3.5 mb-4">
             <p class="text-sm font-bold text-ink">💡 ¿Y si mejor pagas menos?</p>
-            <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">$19.99/año</strong> — equivale a $1.67/mes, un 44% menos de lo que pagas hoy.</p>
+            <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">$14.99/año</strong> — equivale a $1.25/mes, un 58% menos de lo que pagas hoy.</p>
             <button
               type="button"
               id="switch-yearly-btn"
               class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95"
             >
-              Cambiarme al anual y ahorrar 44%
+              Cambiarme al anual y ahorrar 58%
             </button>
           </div>
         )}
@@ -408,17 +408,17 @@ const features = [
               var res = await fetch('/api/subscription/switch-yearly', { method: 'POST' });
               var data = await res.json();
               if (res.ok) {
-                alert('¡Listo! Ahora estás en el plan anual de $19.99/año.');
+                alert('¡Listo! Ahora estás en el plan anual de $14.99/año.');
                 window.location.reload();
               } else {
                 alert(data.error || 'No se pudo cambiar el plan. Intenta de nuevo.');
                 switchBtn.disabled = false;
-                switchBtn.textContent = 'Cambiarme al anual y ahorrar 44%';
+                switchBtn.textContent = 'Cambiarme al anual y ahorrar 58%';
               }
             } catch (e) {
               alert('Error de conexión. Intenta de nuevo.');
               switchBtn.disabled = false;
-              switchBtn.textContent = 'Cambiarme al anual y ahorrar 44%';
+              switchBtn.textContent = 'Cambiarme al anual y ahorrar 58%';
             }
           });
         }

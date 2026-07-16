@@ -3,7 +3,7 @@ import '../styles/global.css';
 import { DOG_BREEDS, BREED_FACTS } from '@vivra/shared';
 import { uploadPetPhoto } from '../lib/storage';
 import { createSupabaseAdminClient } from '../lib/supabase';
-import { getPremiumStatus, isAtLimit } from '../lib/premium';
+import { MAX_PETS } from '../lib/premium';
 
 const { supabase, user } = Astro.locals;
 
@@ -23,12 +23,9 @@ if (!isAddMode && hasPet) {
   return Astro.redirect('/dashboard');
 }
 
-// Multi-pet: free para todos — solo un tope de cordura (maxPets) para evitar abuso
-if (isAddMode) {
-  const premium = await getPremiumStatus(supabase, user.id);
-  if (isAtLimit('maxPets', existingPets?.length ?? 0, premium)) {
-    return Astro.redirect('/perfil?toast_error=' + encodeURIComponent('Alcanzaste el límite de mascotas por cuenta.'));
-  }
+// Multi-pet: free para todos — solo un tope de cordura (MAX_PETS) para evitar abuso
+if (isAddMode && (existingPets?.length ?? 0) >= MAX_PETS) {
+  return Astro.redirect('/perfil?toast_error=' + encodeURIComponent('Alcanzaste el límite de mascotas por cuenta.'));
 }
 
 // Personalized greeting
