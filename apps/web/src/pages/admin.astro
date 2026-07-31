@@ -10,9 +10,16 @@ import { createSupabaseAdminClient } from '../lib/supabase';
  */
 const { user } = Astro.locals;
 
-const ADMIN_EMAILS = (import.meta.env.ADMIN_EMAILS ?? 'diarcaes@gmail.com')
+// Fail-closed: sin ADMIN_EMAILS configurada, nadie entra. Antes había un email
+// hardcodeado como fallback, lo que dejaba una credencial de acceso en el repo.
+const ADMIN_EMAILS = (import.meta.env.ADMIN_EMAILS ?? '')
   .split(',')
-  .map((e: string) => e.trim().toLowerCase());
+  .map((e: string) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+if (ADMIN_EMAILS.length === 0) {
+  console.warn('[admin] ADMIN_EMAILS no está configurada — /admin queda cerrado para todos.');
+}
 
 if (!user?.email || !ADMIN_EMAILS.includes(user.email.toLowerCase())) {
   return Astro.redirect('/dashboard');
@@ -22,28 +29,58 @@ const admin = createSupabaseAdminClient();
 const since14d = new Date(Date.now() - 14 * 86400000).toISOString();
 const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
 
-const [eventsRes, petsRes, subsRes, tokensRes, notifsRes, usersRes] = await Promise.all([
+// ── Separar datos propios de datos de usuarios reales ────────────────────────
+// Por defecto el panel EXCLUYE la actividad de las cuentas admin: si no, las
+// métricas quedan infladas por el uso propio probando la app y es imposible
+// saber si alguien más la está usando. `?mios=1` muestra todo.
+const includeMine = Astro.url.searchParams.get('mios') === '1';
+
+// Fase 1: necesitamos los IDs de las cuentas admin antes de filtrar el resto.
+const usersRes = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+const allUsers = usersRes.data?.users ?? [];
+const adminIds = new Set(
+  allUsers
+    .filter((u: any) => u.email && ADMIN_EMAILS.includes(u.email.toLowerCase()))
+    .map((u: any) => u.id),
+);
+
+/**
+ * true si la fila hay que ocultarla. OJO: `user_id === null` son visitantes
+ * anónimos de la landing — esos son tráfico real y NUNCA se filtran.
+ */
+const hidden = (userId: string | null | undefined): boolean =>
+  !includeMine && !!userId && adminIds.has(userId);
+
+// Fase 2: se traen los user_id para poder filtrar en memoria. Los volúmenes son
+// chicos en esta etapa; mover a SQL agregado cuando app_events pase de ~50k filas.
+const [eventsRes, petsRes, subsRes, tokensRes, notifsRes] = await Promise.all([
   admin.from('app_events')
     .select('user_id, event, name, platform, created_at')
     .gte('created_at', since14d)
     .order('created_at', { ascending: false })
     .limit(5000),
-  admin.from('pets').select('id, species', { count: 'exact' }),
-  admin.from('user_subscriptions').select('plan, premium_until').eq('plan', 'premium'),
-  admin.from('push_tokens').select('id', { count: 'exact', head: true }),
-  admin.from('notifications').select('id', { count: 'exact', head: true }).gte('created_at', since7d),
-  admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+  admin.from('pets').select('id, species, user_id'),
+  admin.from('user_subscriptions').select('user_id, plan, premium_until').eq('plan', 'premium'),
+  admin.from('push_tokens').select('user_id'),
+  admin.from('notifications').select('user_id').gte('created_at', since7d),
 ]);
 
-const events = eventsRes.data ?? [];
-const totalUsers = usersRes.data?.users?.length ?? 0;
-const totalPets = petsRes.count ?? 0;
-const totalCats = (petsRes.data ?? []).filter((p: any) => p.species === 'cat').length;
+const allEvents = eventsRes.data ?? [];
+const events = allEvents.filter(e => !hidden(e.user_id));
+const hiddenEvents = allEvents.length - events.length;
+
+const totalUsers = allUsers.filter((u: any) => !hidden(u.id)).length;
+
+const pets = (petsRes.data ?? []).filter((p: any) => !hidden(p.user_id));
+const totalPets = pets.length;
+const totalCats = pets.filter((p: any) => p.species === 'cat').length;
+
 const premiumActive = (subsRes.data ?? []).filter(
-  (s: any) => s.premium_until && new Date(s.premium_until) > new Date()
+  (s: any) => !hidden(s.user_id) && s.premium_until && new Date(s.premium_until) > new Date()
 ).length;
-const pushTokens = tokensRes.count ?? 0;
-const notifs7d = notifsRes.count ?? 0;
+
+const pushTokens = (tokensRes.data ?? []).filter((t: any) => !hidden(t.user_id)).length;
+const notifs7d = (notifsRes.data ?? []).filter((n: any) => !hidden(n.user_id)).length;
 
 // Usuarios activos (con al menos 1 evento) 7d
 const active7d = new Set(
@@ -87,10 +124,42 @@ const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es',
 
 <MainLayout title="Admin">
   <div class="space-y-6 animate-fade-up">
-    <div>
-      <h1 class="text-2xl font-bold text-ink">Panel de producto</h1>
-      <p class="text-sm text-muted mt-1">Eventos de los últimos 14 días · {events.length} eventos</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-ink">Panel de producto</h1>
+        <p class="text-sm text-muted mt-1">
+          Eventos de los últimos 14 días · {events.length} eventos
+          {!includeMine && hiddenEvents > 0 && (
+            <span class="text-accent"> · {hiddenEvents} tuyos ocultos</span>
+          )}
+        </p>
+      </div>
+
+      {/* Sin este filtro las métricas quedan infladas por el uso propio. */}
+      <div class="flex rounded-xl border border-card-border bg-card p-1 text-xs font-semibold shrink-0">
+        <a
+          href="/admin"
+          class:list={['px-3 py-1.5 rounded-lg transition-colors', !includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+        >
+          Solo usuarios
+        </a>
+        <a
+          href="/admin?mios=1"
+          class:list={['px-3 py-1.5 rounded-lg transition-colors', includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+        >
+          Incluirme
+        </a>
+      </div>
     </div>
+
+    {!includeMine && adminIds.size > 0 && (
+      <div class="rounded-xl border border-card-border bg-canvas px-4 py-2.5">
+        <p class="text-xs text-muted">
+          Mostrando actividad de <strong class="text-ink">usuarios reales</strong>, sin tus {adminIds.size === 1 ? 'datos' : `${adminIds.size} cuentas admin`}.
+          Las visitas anónimas de la landing sí se cuentan.
+        </p>
+      </div>
+    )}
 
     <!-- Stat tiles -->
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">

@@ -18,7 +18,7 @@ import { BottomSheet } from '../../components/ui/BottomSheet';
 import { FormField } from '../../components/ui/FormField';
 import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
-import { useSubscription } from '../../hooks/useSubscription';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { FREE_LIMITS } from '../../constants/revenueCat';
 import { SpendingSummary } from '../../components/pet/SpendingSummary';
 import { SharePetSheet } from '../../components/pet/SharePetSheet';

@@ -67,6 +67,14 @@ export function evaluatePremium(sub: UserSubscription | null): PremiumStatus {
 
   const now = Date.now();
   const until = new Date(sub.premium_until).getTime();
+
+  // Fecha corrupta/no parseable → getTime() es NaN, y NaN falla TODA comparación
+  // (incluida `daysLeft <= 0`), así que sin esta guarda el flujo caía hasta el
+  // final y devolvía isPremium: true. Un dato malo regalaba premium para siempre.
+  if (!Number.isFinite(until)) {
+    return { isPremium: false, plan: 'free', source: sub.source, daysLeft: 0, isTrial: false, isExpiringSoon: false };
+  }
+
   const daysLeft = Math.max(0, Math.ceil((until - now) / (1000 * 60 * 60 * 24)));
 
   if (daysLeft <= 0) {

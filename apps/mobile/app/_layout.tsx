@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
+import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +69,8 @@ export default function RootLayout() {
     };
   }, [user]);
 
+  // `router` de expo-router es un singleton estable entre renders, así que no
+  // agrega valor en las deps y solo generaría ruido.
   useEffect(() => {
     if (loading || (session && hasPets === null)) return;
 
@@ -93,17 +96,21 @@ export default function RootLayout() {
 
   return (
     <AppErrorBoundary>
-      <StatusBar style="dark" />
-      <OfflineBanner />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(app)" />
-        <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-      </Stack>
+      {/* Va en el layout raíz (no en (app)) porque /paywall vive fuera del
+          grupo (app) y usePet también consume el estado de suscripción. */}
+      <SubscriptionProvider>
+        <StatusBar style="dark" />
+        <OfflineBanner />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(app)" />
+          <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        </Stack>
+      </SubscriptionProvider>
     </AppErrorBoundary>
   );
 }

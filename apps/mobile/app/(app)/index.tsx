@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePetContext } from '../../contexts/PetContext';
 import { useVitality } from '../../hooks/useVitality';
-import { useSubscription } from '../../hooks/useSubscription';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { PetHeroCard } from '../../components/pet/PetHeroCard';
 import { VitalityWidget } from '../../components/pet/VitalityWidget';
 import { FoodSummaryCard } from '../../components/pet/FoodSummaryCard';
@@ -46,7 +46,9 @@ export default function DashboardScreen() {
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [isTrial, setIsTrial] = useState(false);
 
-  // Fetch unread notification count + trial status
+  // Fetch unread notification count + trial status.
+  // `refreshing` va en las deps aunque no se lea en el cuerpo: se usa como
+  // disparador para que el pull-to-refresh vuelva a traer estos contadores.
   useEffect(() => {
     if (!user) return;
     supabase

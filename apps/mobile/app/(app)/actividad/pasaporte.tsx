@@ -42,7 +42,7 @@ export default function PasaporteScreen() {
   const exportPdf = useCallback(() => {
     if (!pet?.id) return;
     Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`).catch(() => {});
-  }, [pet?.id, router]);
+  }, [pet?.id]);
 
   if (!pet) {
     return (

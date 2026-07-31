@@ -7,7 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constant
 import { supabase } from '../../../lib/supabase';
 import { formatDate, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
-import { useSubscription } from '../../../hooks/useSubscription';
+import { useSubscription } from '../../../contexts/SubscriptionContext';
 import { Card } from '../../../components/ui/Card';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { Button } from '../../../components/ui/Button';

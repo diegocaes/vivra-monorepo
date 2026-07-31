@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/theme';
 import { PREMIUM_FEATURES } from '../constants/revenueCat';
-import { useSubscription } from '../hooks/useSubscription';
+import { useSubscription } from '../contexts/SubscriptionContext';
 import { PACKAGE_TYPE } from 'react-native-purchases';
 
 const PRIVACY_URL = 'https://vivrapet.com/privacy';

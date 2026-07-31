@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import Purchases, { type PurchasesPackage, type CustomerInfo } from 'react-native-purchases';
 import { REVENUECAT_API_KEY, ENTITLEMENT_ID } from '../constants/revenueCat';
@@ -55,14 +55,27 @@ async function syncIapPremiumToSupabase(info: CustomerInfo) {
   }
 }
 
-export function useSubscription(): SubscriptionState {
+export type { SubscriptionState };
+
+/**
+ * Estado real de la suscripción. NO usar directamente en pantallas: montarlo
+ * varias veces dispara RevenueCat + 3-4 queries por pantalla y deja `isPremium`
+ * inconsistente entre ellas durante segundos (un usuario que pagó podía ver
+ * features bloqueadas). Se monta UNA sola vez en SubscriptionProvider; las
+ * pantallas consumen el contexto vía `useSubscription()`.
+ */
+export function useSubscriptionState(): SubscriptionState {
   const { user } = useAuth();
   const [isPremium, setIsPremium] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [currentOffering, setCurrentOffering] = useState<string | null>(null);
 
-  // Initialize RevenueCat
+  // Initialize RevenueCat.
+  // No se pueden agregar `checkSubscription`/`loadOfferings` a las deps: son
+  // consts declarados más abajo y el array se evalúa durante el render, así que
+  // referenciarlos acá lanzaría un ReferenceError por TDZ. El efecto sí puede
+  // llamarlos porque su cuerpo corre después del render.
   useEffect(() => {
     let cancelled = false;
 
@@ -98,7 +111,10 @@ export function useSubscription(): SubscriptionState {
     return () => { cancelled = true; };
   }, [user]);
 
-  // Listen for subscription changes (real-time RevenueCat events)
+  // Listen for subscription changes (real-time RevenueCat events).
+  // `user` no se lee en el cuerpo (se usa `configuredUserId`, de módulo), pero
+  // va en las deps a propósito: al cambiar de cuenta hay que re-registrar el
+  // listener contra el nuevo usuario configurado en RevenueCat.
   useEffect(() => {
     if (!configuredUserId) return;
 
@@ -260,5 +276,10 @@ export function useSubscription(): SubscriptionState {
     setIsLoading(false);
   }, [checkSubscription, loadOfferings]);
 
-  return { isPremium, isLoading, packages, currentOffering, purchase, restore, refresh };
+  // Memoizado: el valor va a un Context, así que una identidad nueva en cada
+  // render re-renderizaría a TODOS los consumidores sin que nada haya cambiado.
+  return useMemo(
+    () => ({ isPremium, isLoading, packages, currentOffering, purchase, restore, refresh }),
+    [isPremium, isLoading, packages, currentOffering, purchase, restore, refresh],
+  );
 }

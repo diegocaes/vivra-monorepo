@@ -18,9 +18,14 @@
       "!**/android",
       "!apps/mobile/types/supabase.ts",
       "!apps/web/src/types/supabase.ts",
+      // Biome solo parsea el frontmatter de .astro, no el template: reporta como
+      // "sin usar" todo lo que se consume en el markup. Un --write llegó a borrar
+      // el import de MainLayout en faq.astro. Se revisan con `astro check`.
       "!**/*.astro"
     ]
   },
+  // Formateo apagado a propósito: activarlo reformatearía ~39k líneas de golpe
+  // y volvería irrevisable cualquier diff. Se puede adoptar archivo por archivo.
   "formatter": {
     "enabled": false,
     "indentStyle": "space",
@@ -38,6 +43,18 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "correctness": {
+        // Evaluada caso por caso sobre los 8 hallazgos del repo: todos resultaron
+        // patrones deliberados, no bugs.
+        //   1. Efectos que llaman consts declarados más abajo — meterlos en las
+        //      deps daría ReferenceError por TDZ (el array se evalúa en el render).
+        //   2. `pet?.id` en vez de `pet`, a propósito: con el objeto completo,
+        //      cualquier cambio de la mascota dispararía refetches innecesarios.
+        //   3. Deps usadas como disparador (ej. `refreshing` para que el
+        //      pull-to-refresh recargue contadores).
+        // Reactivar si algún día se reordenan esos hooks.
+        "useExhaustiveDependencies": "off"
+      },
       "style": {
         "noNonNullAssertion": "off",
         "useImportType": "warn"

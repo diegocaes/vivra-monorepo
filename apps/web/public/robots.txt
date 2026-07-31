@@ -23,5 +23,6 @@ Disallow: /update-password
 Disallow: /forgot-password
 Disallow: /api/
 Disallow: /invite/
+Disallow: /admin
 
 Sitemap: https://vivrapet.com/sitemap.xml

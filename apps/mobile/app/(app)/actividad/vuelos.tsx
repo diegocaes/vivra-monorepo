@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { usePetContext } from '../../../contexts/PetContext';
-import { useSubscription } from '../../../hooks/useSubscription';
+import { useSubscription } from '../../../contexts/SubscriptionContext';
 import { formatDate } from '@vivra/shared';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -59,6 +59,9 @@ export default function VuelosScreen() {
     crate_approved: false,
   });
 
+  // Depende de `pet?.id` a propósito, no de `pet`: con el objeto completo,
+  // cualquier cambio de la mascota (peso, foto, tema) dispararía un refetch
+  // innecesario de vuelos.
   const fetchData = useCallback(async () => {
     if (!pet) return;
     const { data } = await supabase

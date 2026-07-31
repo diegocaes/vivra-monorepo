@@ -7,7 +7,7 @@ import Svg, { Rect, Text as SvgText, Line, G } from 'react-native-svg';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { usePetContext } from '../../contexts/PetContext';
-import { useSubscription } from '../../hooks/useSubscription';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { formatDateShort, computeFoodStats, formatCurrency, friendlyError } from '@vivra/shared';
 import { FOOD_TYPES } from '@vivra/shared';
 import { Card } from '../../components/ui/Card';
@@ -181,6 +181,9 @@ export default function AlimentacionScreen() {
   const [treatDate, setTreatDate] = useState(new Date().toISOString().slice(0, 10));
   const [treatNotes, setTreatNotes] = useState('');
 
+  // depende de `pet?.id`
+  // a propósito, no de `pet`. Con el objeto completo, cualquier cambio de la
+  // mascota dispararía un refetch innecesario de alimentos y snacks.
   const fetchData = useCallback(async () => {
     if (!pet) { setLoading(false); return; }
 

@@ -29,6 +29,9 @@ export default function InviteScreen() {
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [accepting, setAccepting] = useState(false);
 
+  // `fetchInvite` es un const declarado más abajo: el array de deps se evalúa
+  // durante el render, así que referenciarlo acá lanzaría un ReferenceError por
+  // TDZ. El cuerpo del efecto sí puede llamarlo porque corre después del render.
   useEffect(() => {
     if (!token || !user) return;
     fetchInvite();
