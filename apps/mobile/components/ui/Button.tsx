@@ -3,8 +3,8 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  ViewStyle,
-  TextStyle,
+  type ViewStyle,
+  type TextStyle,
 } from 'react-native';
 import { Colors, Radius, FontSize, FontWeight, Spacing } from '../../constants/theme';
 

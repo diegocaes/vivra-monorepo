@@ -1,7 +1,7 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
 
-import { formatDate } from '@vivra/shared';
+import { formatDate, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 
 const { supabase, user, activePetId } = Astro.locals;
@@ -20,7 +20,7 @@ if (Astro.request.method === 'POST') {
       date_given: formData.get('date_given') as string,
       product_name: (formData.get('product_name') as string) || null,
       lot_number: (formData.get('lot_number') as string) || null,
-      cost: formData.get('cost') ? Number(formData.get('cost')) : null,
+      cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     });
     return Astro.redirect('/salud/preventivos?saved=1');

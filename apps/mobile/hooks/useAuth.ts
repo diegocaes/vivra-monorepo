@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { clearRevenueCatUser } from './useSubscription';

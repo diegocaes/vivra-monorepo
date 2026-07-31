@@ -2,7 +2,7 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import Card from '../components/ui/Card.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import { formatDate, formatDateShort, computeFoodStats, formatCurrency } from '@vivra/shared';
+import { formatDate, formatDateShort, computeFoodStats, formatCurrency, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { getPremiumStatus } from '../lib/premium';
 import { FOOD_TYPES } from '@vivra/shared';
@@ -25,11 +25,11 @@ if (Astro.request.method === 'POST') {
       brand:       formData.get('brand') as string,
       type:        (formData.get('type') as string) || null,
       food_type:   (formData.get('type') as string) || null,
-      daily_grams: formData.get('daily_grams') ? Number(formData.get('daily_grams')) : null,
+      daily_grams: parseNumericField(formData.get('daily_grams'), { max: 10_000 }),
       frequency:   (formData.get('frequency') as string) || null,
-      bag_size:    formData.get('bag_size') ? Number(formData.get('bag_size')) : null,
+      bag_size:    parseNumericField(formData.get('bag_size'), { max: 1_000 }),
       bag_unit:    (formData.get('bag_unit') as string) || 'kg',
-      price:       formData.get('price') ? Number(formData.get('price')) : null,
+      price:       parseNumericField(formData.get('price'), { max: 100_000 }),
       start_date:  (formData.get('start_date') as string) || null,
       end_date:    (formData.get('end_date') as string) || null,
       notes:       (formData.get('notes') as string) || null,

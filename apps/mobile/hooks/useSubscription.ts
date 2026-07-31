@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
-import Purchases, { PurchasesPackage, CustomerInfo } from 'react-native-purchases';
+import Purchases, { type PurchasesPackage, type CustomerInfo } from 'react-native-purchases';
 import { REVENUECAT_API_KEY, ENTITLEMENT_ID } from '../constants/revenueCat';
 import { useAuth } from './useAuth';
 import { supabase } from '../lib/supabase';

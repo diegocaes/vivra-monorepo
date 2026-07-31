@@ -4,7 +4,7 @@ import Card from '../components/ui/Card.astro';
 import Input from '../components/ui/Input.astro';
 import Button from '../components/ui/Button.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import { DOG_BREEDS, formatCurrency, calculateAge } from '@vivra/shared';
+import { DOG_BREEDS, formatCurrency, calculateAge, parseNumericField } from '@vivra/shared';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
@@ -202,7 +202,7 @@ if (Astro.request.method === 'POST') {
   const breedOther = formData.get('breed_other') as string;
   const breed = breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null;
 
-  const newWeight = formData.get('weight_kg') ? Number(formData.get('weight_kg')) : null;
+  const newWeight = parseNumericField(formData.get('weight_kg'), { min: 0.1, max: 150 });
 
   const rawName = (formData.get('name') as string)?.trim().slice(0, 100);
   if (!rawName) {

@@ -1,6 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
-import { formatDate } from '@vivra/shared';
+import { formatDate, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 
 const { supabase, user, activePetId } = Astro.locals;
@@ -21,7 +21,7 @@ if (Astro.request.method === 'POST') {
       destination: formData.get('destination') as string,
       flight_date: formData.get('flight_date') as string,
       cabin_or_cargo: (formData.get('cabin_or_cargo') as string) || 'cabina',
-      ticket_price: Number(formData.get('ticket_price')) || null,
+      ticket_price: parseNumericField(formData.get('ticket_price'), { max: 100_000 }),
       crate_approved: formData.get('crate_approved') === 'on',
       vet_certificate: formData.get('vet_certificate') === 'on',
       chip_verified: formData.get('chip_verified') === 'on',
@@ -31,9 +31,9 @@ if (Astro.request.method === 'POST') {
       notes: (formData.get('notes') as string) || null,
     };
     // Optional cost breakdown fields (require DB columns)
-    const paperwork = Number(formData.get('paperwork_cost')) || null;
-    const customs = Number(formData.get('customs_cost')) || null;
-    const airport = Number(formData.get('airport_cost')) || null;
+    const paperwork = parseNumericField(formData.get('paperwork_cost'), { max: 100_000 });
+    const customs = parseNumericField(formData.get('customs_cost'), { max: 100_000 });
+    const airport = parseNumericField(formData.get('airport_cost'), { max: 100_000 });
     if (paperwork) flightData.paperwork_cost = paperwork;
     if (customs) flightData.customs_cost = customs;
     if (airport) flightData.airport_cost = airport;
@@ -60,7 +60,7 @@ if (Astro.request.method === 'POST') {
       destination: formData.get('destination') as string,
       flight_date: formData.get('flight_date') as string,
       cabin_or_cargo: (formData.get('cabin_or_cargo') as string) || 'cabina',
-      ticket_price: Number(formData.get('ticket_price')) || null,
+      ticket_price: parseNumericField(formData.get('ticket_price'), { max: 100_000 }),
       crate_approved: formData.get('crate_approved') === 'on',
       vet_certificate: formData.get('vet_certificate') === 'on',
       chip_verified: formData.get('chip_verified') === 'on',
@@ -69,9 +69,9 @@ if (Astro.request.method === 'POST') {
       health_certificate: formData.get('health_certificate') === 'on',
       notes: (formData.get('notes') as string) || null,
     };
-    const paperwork = Number(formData.get('paperwork_cost')) || null;
-    const customs = Number(formData.get('customs_cost')) || null;
-    const airport = Number(formData.get('airport_cost')) || null;
+    const paperwork = parseNumericField(formData.get('paperwork_cost'), { max: 100_000 });
+    const customs = parseNumericField(formData.get('customs_cost'), { max: 100_000 });
+    const airport = parseNumericField(formData.get('airport_cost'), { max: 100_000 });
     if (paperwork !== null) updateData.paperwork_cost = paperwork;
     if (customs !== null) updateData.customs_cost = customs;
     if (airport !== null) updateData.airport_cost = airport;

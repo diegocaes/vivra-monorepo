@@ -168,7 +168,7 @@ export interface VitalityScoreResult {
 
 function daysBetween(dateA: string, dateB: Date = new Date()): number {
   const a = new Date(dateA);
-  if (isNaN(a.getTime())) return 0;
+  if (Number.isNaN(a.getTime())) return 0;
   return Math.floor((dateB.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
 }
 
@@ -176,7 +176,7 @@ function ageInYears(birthDate: string | null): number | null {
   if (!birthDate) return null;
   const today = new Date();
   const birth = new Date(birthDate);
-  if (isNaN(birth.getTime())) return null;
+  if (Number.isNaN(birth.getTime())) return null;
   const years = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
   return m < 0 || (m === 0 && today.getDate() < birth.getDate()) ? years - 1 : years;

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { calculateVitalityScore, VitalityScoreResult, ScoreInput } from '@vivra/shared';
+import { calculateVitalityScore, type VitalityScoreResult, type ScoreInput } from '@vivra/shared';
 import type { PetData } from './usePet';
 
 export function useVitality(petData: PetData): VitalityScoreResult | null {

@@ -1,4 +1,4 @@
-import { View, Text, TextInput, StyleSheet, TextInputProps } from 'react-native';
+import { View, Text, TextInput, StyleSheet, type TextInputProps } from 'react-native';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 
 interface FormFieldProps extends TextInputProps {

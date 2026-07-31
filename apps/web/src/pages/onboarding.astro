@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { DOG_BREEDS, BREED_FACTS } from '@vivra/shared';
+import { DOG_BREEDS, BREED_FACTS, parseNumericField } from '@vivra/shared';
 import { uploadPetPhoto } from '../lib/storage';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { MAX_PETS } from '../lib/premium';
@@ -56,7 +56,7 @@ if (Astro.request.method === 'POST') {
   // Gatos: sin razas — se registran solo como 'cat'
   const breed = species === 'cat' ? null : (breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null);
 
-  const newWeight = formData.get('weight_kg') ? Number(formData.get('weight_kg')) : null;
+  const newWeight = parseNumericField(formData.get('weight_kg'), { min: 0.1, max: 150 });
 
   const rawName = (formData.get('name') as string)?.trim().slice(0, 100);
   if (!rawName) {

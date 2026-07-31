@@ -1,3 +1,31 @@
+/**
+ * Convierte un valor de formulario a número, o `null` si no es válido.
+ *
+ * `Number('abc')` devuelve NaN, y `NaN` enviado a una columna numérica de
+ * Postgres rompe el insert con un 500. Este helper corta eso y además valida
+ * rango, porque un `-500` o un `999999999` sí pasan el chequeo de NaN.
+ *
+ * @param raw   valor crudo (típicamente `formData.get('campo')`)
+ * @param opts  rango permitido — `min` es 0 por defecto (no se aceptan negativos)
+ */
+export function parseNumericField(
+  raw: unknown,
+  opts: { min?: number; max?: number } = {},
+): number | null {
+  if (raw === null || raw === undefined) return null;
+
+  const str = String(raw).trim();
+  if (str === '') return null;
+
+  const n = Number(str);
+  if (!Number.isFinite(n)) return null;
+
+  const { min = 0, max = 1_000_000 } = opts;
+  if (n < min || n > max) return null;
+
+  return n;
+}
+
 /** Calcula la edad a partir de una fecha de nacimiento (granular) */
 export function calculateAge(birthDate: string): string {
   const birth = new Date(birthDate + 'T00:00:00');
@@ -136,7 +164,7 @@ export function timeAgo(isoStr: string): string {
  *          formatCurrency(null)               → "0.00"
  */
 export function formatCurrency(value: number | null | undefined): string {
-  const n = typeof value === 'number' && isFinite(value) ? value : 0;
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : 0;
   // Redondeamos primero para normalizar artefactos de float.
   const rounded = Math.round(n * 100) / 100;
   const sign = rounded < 0 ? '-' : '';
