@@ -12,7 +12,10 @@ const { user } = Astro.locals;
 
 // Fail-closed: sin ADMIN_EMAILS configurada, nadie entra. Antes había un email
 // hardcodeado como fallback, lo que dejaba una credencial de acceso en el repo.
-const ADMIN_EMAILS = (import.meta.env.ADMIN_EMAILS ?? '')
+// Cadena process.env → import.meta.env, igual que el resto del código: en Vercel
+// las variables de servidor llegan por process.env en runtime, mientras que
+// import.meta.env se resuelve en tiempo de build (y en dev lee el .env local).
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || import.meta.env.ADMIN_EMAILS || '')
   .split(',')
   .map((e: string) => e.trim().toLowerCase())
   .filter(Boolean);
