@@ -60,6 +60,20 @@ if (refFromCookie && !initialRefValid) {
   Astro.cookies.delete('pending_referral', { path: '/' });
 }
 
+// Intención de compra: quien llega desde el CTA "Probar Premium" trae `?next=premium`.
+// Se guarda para llevarlo al checkout al terminar de crear la cuenta, en vez de
+// soltarlo en el dashboard y perder la intención. Sobrevive al correo de
+// confirmación y al redirect de OAuth, igual que el código de referido.
+if (Astro.url.searchParams.get('next') === 'premium') {
+  Astro.cookies.set('pending_next', 'premium', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24, // 1 día: si no completó el registro hoy, ya no aplica
+    secure: import.meta.env.PROD,
+  });
+}
+
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('action') as string;

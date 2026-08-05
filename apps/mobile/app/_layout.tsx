@@ -10,8 +10,12 @@ import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
+import { initSentry, setSentryUser } from '../lib/sentry';
 
 SplashScreen.preventAutoHideAsync();
+
+// Antes de renderizar nada, para capturar también los errores de arranque.
+initSentry();
 
 export default function RootLayout() {
   const { session, user, loading } = useAuth();
@@ -19,6 +23,12 @@ export default function RootLayout() {
   const router = useRouter();
   const [hasPets, setHasPets] = useState<boolean | null>(null);
   useNotifications();
+
+  // Solo el id, nunca el email: permite distinguir "le pasa a todos" de
+  // "le pasa a un usuario" sin guardar datos personales en Sentry.
+  useEffect(() => {
+    setSentryUser(user?.id ?? null);
+  }, [user?.id]);
 
   // Check if user has pets to drive auth routing decision
   useEffect(() => {

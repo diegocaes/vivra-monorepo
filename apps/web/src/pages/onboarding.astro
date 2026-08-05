@@ -146,6 +146,12 @@ if (Astro.request.method === 'POST') {
     }
   }
 
+  // Si venía con intención de comprar Premium, ya tiene mascota: al checkout.
+  if (Astro.cookies.get('pending_next')?.value === 'premium') {
+    Astro.cookies.delete('pending_next', { path: '/' });
+    return Astro.redirect('/premium?onboarded=1');
+  }
+
   return Astro.redirect('/dashboard?onboarded=1');
 }
 

@@ -219,7 +219,12 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       .nav-cta:hover { background: var(--ink-2); transform: translateY(-1px); }
       @media (max-width: 640px) {
         nav { padding: 0 16px; }
-        .nav-links .nav-link-text { display: none; }
+        /* Se ocultan los enlaces de sección, pero NO "Entrar": sin él, un usuario
+           que ya tiene cuenta no tiene cómo iniciar sesión desde el móvil salvo
+           bajando hasta el footer — y la mayoría del tráfico es móvil. */
+        .nav-links .nav-link-text:not(.nav-login) { display: none; }
+        .nav-links .nav-login { opacity: 1; font-weight: 600; padding: 8px 10px; }
+        .nav-links { gap: 2px; }
       }
 
       /* ────────────────────────────────────────────
@@ -793,7 +798,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         <a href="#pricing" class="nav-link-text">Precios</a>
         <a href="#faq" class="nav-link-text">Preguntas</a>
         <a href="/blog" class="nav-link-text">Blog</a>
-        <a href="/login" class="nav-link-text">Entrar</a>
+        <a href="/login" class="nav-link-text nav-login">Entrar</a>
         <a href="/register" class="nav-cta">Crear cuenta</a>
       </div>
     </nav>
@@ -1049,7 +1054,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Todos los colores de tema para tu mascota</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Paga con tarjeta, Apple Pay o Google Pay</li>
           </ul>
-          <a href="/register" class="price-cta solid">Probar Premium</a>
+          <a href="/register?next=premium" class="price-cta solid">Probar Premium</a>
         </div>
       </div>
       <p class="pricing-note">Cancela cuando quieras — conservas Premium hasta el final del período pagado y tus datos nunca se pierden.</p>

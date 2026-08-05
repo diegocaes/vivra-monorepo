@@ -185,5 +185,13 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     }
   }
 
+  // Venía a comprar Premium: lo mandamos al checkout, no al dashboard.
+  // (Si aún no tiene mascota, arriba ya salió hacia /onboarding y la cookie
+  //  sigue viva para que onboarding haga este mismo salto al terminar.)
+  if (cookies.get('pending_next')?.value === 'premium') {
+    cookies.delete('pending_next', { path: '/' });
+    return redirect('/premium');
+  }
+
   return redirect('/dashboard');
 };

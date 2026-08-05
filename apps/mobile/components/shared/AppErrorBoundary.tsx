@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
+import { captureError } from '../../lib/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -27,6 +28,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[AppErrorBoundary]', error, errorInfo.componentStack);
+    // La pantalla le dice al usuario "nuestro equipo ya fue notificado" — esto
+    // es lo que hace que sea verdad.
+    captureError(error, { componentStack: errorInfo.componentStack });
   }
 
   handleRetry = () => {
