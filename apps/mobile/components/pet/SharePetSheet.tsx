@@ -82,7 +82,7 @@ export function SharePetSheet({ visible, onClose }: SharePetSheetProps) {
     try {
       await Share.share({
         message:
-          `¡Hola! Te invito a cuidar juntos a ${pet.name} en Vivra 🐾\n\n` +
+          `¡Hola! Te invito a cuidar juntos a ${pet.name} en Vivra.\n\n` +
           `1. Acepta la invitación: ${url}\n` +
           `2. Descarga la app gratis: ${appStore}\n\n` +
           `Tu acceso se sincroniza automáticamente.`,

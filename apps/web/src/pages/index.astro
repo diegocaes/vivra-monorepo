@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import Icon from '../components/ui/Icon.astro';
 import Analytics from '@vercel/analytics/astro';
 import Track from '../components/Track.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
@@ -159,7 +160,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         {
           "@type": "Question",
           "name": "¿La app me dice cuánta comida darle a mi perro?",
-          "acceptedAnswer": { "@type": "Answer", "text": "No. La porción ideal la define tu veterinario o nutricionista según tu perro. Vivra solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa." }
+          "acceptedAnswer": { "@type": "Answer", "text": "No. La porción ideal la define tu veterinario o nutricionista según tu mascota. Vivra solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa." }
         }
       ]
     })} />
@@ -884,17 +885,17 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
         <div class="how-grid">
           <div class="how-card">
-            <div class="how-icon">🐶</div>
+            <div class="how-icon"><Icon name="mascota" class="h-7 w-7" /></div>
             <h3>Crea su perfil</h3>
             <p>Agregas nombre, raza, foto, microchip y datos básicos. Una vez. Y queda contigo para siempre.</p>
           </div>
           <div class="how-card">
-            <div class="how-icon">📋</div>
+            <div class="how-icon"><Icon name="documento" class="h-7 w-7" /></div>
             <h3>Registra lo importante</h3>
             <p>Vacunas, peso, visitas al vet, alimentación, gastos. La app te recuerda cuándo toca lo que toca.</p>
           </div>
           <div class="how-card">
-            <div class="how-icon">📲</div>
+            <div class="how-icon"><Icon name="descarga" class="h-7 w-7" /></div>
             <h3>Sincroniza y comparte</h3>
             <p>Misma información en iPhone y web. Imprimes el pasaporte para viajes y compartes acceso con tu pareja.</p>
           </div>
@@ -913,7 +914,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
           <!-- Featured: Score -->
           <div class="bento-card featured">
             <div class="score-preview">
-              <div class="bento-icon" style="background:rgba(249,115,22,0.18);">🧡</div>
+              <div class="bento-icon" style="background:rgba(249,115,22,0.18);"><Icon name="score" class="h-6 w-6" /></div>
               <h3>Indicador de Bienestar</h3>
               <p>Un número del 0 al 100 que resume qué tan completo y al día está el cuidado de tu mascota en 4 áreas: peso, cuidado preventivo, raza y nutrición. Te muestra qué te falta por registrar. No es un diagnóstico.</p>
             </div>
@@ -946,31 +947,31 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
           </div>
 
           <div class="bento-card">
-            <div class="bento-icon">💉</div>
+            <div class="bento-icon"><Icon name="vacuna" class="h-6 w-6" /></div>
             <h3>Vacunas al día</h3>
             <p>Cada dosis con su fecha y la próxima programada. Te avisamos cuando lleva más de un año sin vacunarse.</p>
           </div>
 
           <div class="bento-card">
-            <div class="bento-icon" style="background:rgba(59,130,246,0.10);">⚖️</div>
+            <div class="bento-icon" style="background:rgba(59,130,246,0.10);"><Icon name="peso" class="h-6 w-6" /></div>
             <h3>Control de peso</h3>
             <p>Gráfica de evolución con tendencias. Detectas cambios importantes a tiempo.</p>
           </div>
 
           <div class="bento-card">
-            <div class="bento-icon" style="background:rgba(99,102,241,0.10);">🏥</div>
+            <div class="bento-icon" style="background:rgba(99,102,241,0.10);"><Icon name="vet" class="h-6 w-6" /></div>
             <h3>Historial veterinario</h3>
             <p>Cada visita con diagnóstico, tratamiento y costo. Compártelo con el vet en un toque.</p>
           </div>
 
           <div class="bento-card">
-            <div class="bento-icon">🍖</div>
+            <div class="bento-icon"><Icon name="comida" class="h-6 w-6" /></div>
             <h3>Alimentación y costos</h3>
             <p>Lleva control de la dieta y de cuánto gastas en su comida cada mes.</p>
           </div>
 
           <div class="bento-card">
-            <div class="bento-icon" style="background:rgba(34,197,94,0.10);">👥</div>
+            <div class="bento-icon" style="background:rgba(34,197,94,0.10);"><Icon name="codueno" class="h-6 w-6" /></div>
             <h3>Comparte con tu pareja</h3>
             <p>Agrega un co-dueño y ambos ven la misma mascota. Premium para los dos.</p>
           </div>
@@ -987,7 +988,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
         <div class="passport-preview">
           <div class="pp-cover">
-            <p>🐾 Pet Passport</p>
+            <p>Pet Passport</p>
             <h3>Pasaporte</h3>
           </div>
           <div class="pp-body">
@@ -1097,7 +1098,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         </details>
         <details class="faq-item">
           <summary>¿La app me dice cuánta comida darle a mi perro?</summary>
-          <p>No. La porción ideal la define tu veterinario o nutricionista según tu perro. Vivra solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa — nunca te va a contradecir ni asustar con cálculos genéricos. Si tu vet recomendó una porción, esa es la que vale.</p>
+          <p>No. La porción ideal la define tu veterinario o nutricionista según tu mascota. Vivra solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa — nunca te va a contradecir ni asustar con cálculos genéricos. Si tu vet recomendó una porción, esa es la que vale.</p>
         </details>
       </div>
     </section>

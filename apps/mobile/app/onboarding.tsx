@@ -46,8 +46,8 @@ const GENDER_OPTIONS = [
 ];
 
 const SPECIES_OPTIONS = [
-  { key: 'dog' as const, label: 'Perro', emoji: '🐶' },
-  { key: 'cat' as const, label: 'Gato', emoji: '🐱' },
+  { key: 'dog' as const, label: 'Perro', icon: 'paw' as const },
+  { key: 'cat' as const, label: 'Gato', icon: 'paw-outline' as const },
 ];
 
 // Small presentational helper for the success screen stat row.
@@ -257,7 +257,7 @@ const animateProgress = (toStep: number) => {
         } else if (data?.referred_trial_days) {
           // Successful redeem — show a friendly confirmation
           Alert.alert(
-            '🎉 ¡Premium activado!',
+            '¡Premium activado!',
             `Tienes ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
           );
         }
@@ -455,7 +455,12 @@ const animateProgress = (toStep: number) => {
                     accessibilityRole="button"
                     accessibilityLabel={opt.label}
                   >
-                    <Text style={styles.speciesEmoji}>{opt.emoji}</Text>
+                    <Ionicons
+                      name={opt.icon}
+                      size={30}
+                      color={species === opt.key ? Colors.accent : Colors.muted}
+                      style={styles.speciesEmoji}
+                    />
                     <Text style={[styles.speciesText, species === opt.key && styles.speciesTextActive]}>
                       {opt.label}
                     </Text>
@@ -746,7 +751,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     borderColor: Colors.accent,
   },
-  speciesEmoji: { fontSize: FontSize.lg },
+  speciesEmoji: { marginBottom: 2 },
   speciesText: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
   speciesTextActive: { color: Colors.white },
 

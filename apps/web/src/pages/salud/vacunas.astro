@@ -1,11 +1,12 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
+import Icon from '../../components/ui/Icon.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
-import { uploadPetPhoto } from '../../lib/storage';
+import { subirImagen, borrarImagenPorUrl } from '../../lib/storage';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
@@ -36,13 +37,27 @@ if (Astro.request.method === 'POST') {
   }
   if (action === 'upload_card') {
     const photo = formData.get('vaccine_card') as File;
-    const url = await uploadPetPhoto(photo, user.id, supabase, 'vaccine-card');
-    if (url) {
-      await supabase.from('pets').update({ vaccine_card_url: url }).eq('id', pet.id);
+    const { url, error } = await subirImagen(photo, user.id, supabase, 'vaccine-card');
+    // Antes esto redirigía con ?saved=1 pasara lo que pasara: si la subida
+    // fallaba, el usuario veía "guardado" y no había subido nada.
+    if (error) {
+      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent(error));
+    }
+    if (!url) {
+      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent('No se seleccionó ninguna imagen.'));
+    }
+    // Se borra el archivo anterior: "reemplazar" dejaba el viejo vivo —y
+    // accesible— en el bucket para siempre.
+    await borrarImagenPorUrl(pet.vaccine_card_url, supabase);
+    const { error: dbError } = await supabase
+      .from('pets').update({ vaccine_card_url: url }).eq('id', pet.id);
+    if (dbError) {
+      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent('La foto subió pero no se pudo guardar. Inténtalo de nuevo.'));
     }
     return Astro.redirect('/salud/vacunas?saved=1');
   }
   if (action === 'delete_card') {
+    await borrarImagenPorUrl(pet.vaccine_card_url, supabase);
     await supabase.from('pets').update({ vaccine_card_url: null }).eq('id', pet.id);
     return Astro.redirect('/salud/vacunas?deleted=1');
   }
@@ -101,66 +116,118 @@ const upcomingCount = vaccines?.filter(v => {
     </div>
   )}
 
-  {/* ── VACCINE CARD PHOTO ── */}
+  {/* ── CARNÉ FÍSICO ── */}
+  {/* Tenerlo a mano es de lo más útil de la app: en el veterinario, en una
+      guardería o en un viaje siempre lo piden, y nadie carga el papel. */}
   <div class="mb-5 animate-fade-up">
     <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
       <button type="button" id="toggle-vaccine-card" class="w-full flex items-center justify-between px-4 py-3.5 hover:bg-canvas transition-colors">
         <div class="flex items-center gap-2.5">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
-            <svg class="h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
+            <Icon name="camara" class="h-4 w-4" />
           </div>
           <div class="text-left">
-            <p class="text-sm font-semibold text-white">Carné de vacunas</p>
-            <p class="text-xs text-muted">{pet.vaccine_card_url ? 'Foto guardada' : 'Sube una foto de tu carné físico'}</p>
+            <p class="text-sm font-semibold text-ink">Carné de vacunas</p>
+            <p class="text-xs text-muted">
+              {pet.vaccine_card_url
+                ? 'Guardado — disponible sin conexión desde tu celular'
+                : 'Tenlo a mano en el vet, la guardería o un viaje'}
+            </p>
           </div>
         </div>
-        <svg id="toggle-card-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <div class="flex items-center gap-2 shrink-0">
+          {pet.vaccine_card_url && (
+            <span class="rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-accent">Listo</span>
+          )}
+          <svg id="toggle-card-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
       </button>
 
       <div id="vaccine-card-body" class="hidden border-t border-card-border px-4 py-4">
         {pet.vaccine_card_url ? (
           <div class="space-y-3">
-            <a href={pet.vaccine_card_url} target="_blank" rel="noopener">
-              <img src={pet.vaccine_card_url} alt="Carné de vacunas" class="w-full rounded-xl border border-card-border shadow-sm" />
-            </a>
+            {/* Toca para abrir el visor con zoom. Un <a target="_blank"> dejaba
+                la foto a tamaño de pantalla y un carné no se lee así. */}
+            <button type="button" id="abrir-carne" class="block w-full group relative">
+              <img
+                src={pet.vaccine_card_url}
+                alt="Carné de vacunas"
+                class="w-full rounded-xl border border-card-border shadow-sm transition-transform group-hover:scale-[1.01]"
+              />
+              <span class="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-ink/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
+                Ampliar
+              </span>
+            </button>
+
             <div class="flex gap-2">
-              <a href={pet.vaccine_card_url} target="_blank" rel="noopener" class="flex-1 text-center rounded-xl border border-card-border px-3 py-2 text-xs font-semibold text-ink hover:bg-canvas transition-colors">
-                Ver completa
-              </a>
-              <form method="POST" class="flex-1">
+              <form method="POST" enctype="multipart/form-data" class="flex-1">
+                <input type="hidden" name="_action" value="upload_card" />
+                <label class="flex items-center justify-center gap-1.5 rounded-xl border border-card-border px-3 py-2 text-xs font-semibold text-ink hover:bg-canvas transition-colors cursor-pointer">
+                  <Icon name="subir" class="h-3.5 w-3.5" />
+                  Cambiar
+                  <input type="file" name="vaccine_card" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()" />
+                </label>
+              </form>
+              <form method="POST" class="flex-1" onsubmit="return confirm('¿Eliminar la foto del carné?')">
                 <input type="hidden" name="_action" value="delete_card" />
                 <button type="submit" class="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-100 transition-colors">
                   Eliminar
                 </button>
               </form>
             </div>
-            <form method="POST" enctype="multipart/form-data" class="pt-1">
-              <input type="hidden" name="_action" value="upload_card" />
-              <label class="flex items-center justify-center gap-2 rounded-xl border border-dashed border-card-border px-3 py-2.5 cursor-pointer hover:border-accent/30 transition-colors">
-                <svg class="h-4 w-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span class="text-xs font-medium text-muted">Cambiar foto</span>
-                <input type="file" name="vaccine_card" accept="image/*" class="hidden" onchange="this.form.submit()" />
-              </label>
-            </form>
           </div>
         ) : (
           <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="_action" value="upload_card" />
-            <label class="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-card-border px-6 py-8 cursor-pointer hover:border-accent/30 hover:bg-accent/5 transition-all">
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50">
-                <svg class="h-6 w-6 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <label class="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-card-border px-6 py-8 cursor-pointer hover:border-accent/40 hover:bg-accent/5 transition-all">
+              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
+                <Icon name="camara" class="h-6 w-6" />
               </div>
               <div class="text-center">
                 <p class="text-sm font-semibold text-ink">Subir foto del carné</p>
-                <p class="text-xs text-muted mt-0.5">Toca para seleccionar una imagen</p>
+                <p class="text-xs text-muted mt-0.5">JPG, PNG o WEBP · máximo 10 MB</p>
               </div>
-              <input type="file" name="vaccine_card" accept="image/*" class="hidden" onchange="this.form.submit()" />
+              <input type="file" name="vaccine_card" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()" />
             </label>
           </form>
         )}
       </div>
     </div>
   </div>
+
+  {/* Visor a pantalla completa: toca para acercar, arrastra para moverte. */}
+  {pet.vaccine_card_url && (
+    <div id="visor-carne" class="fixed inset-0 z-50 hidden bg-ink/95 backdrop-blur-sm">
+      <div class="absolute top-0 inset-x-0 flex items-center justify-between p-4">
+        <p class="text-sm font-semibold text-white/90">Carné de {pet.name}</p>
+        <div class="flex items-center gap-2">
+          <a
+            href={pet.vaccine_card_url}
+            target="_blank"
+            rel="noopener"
+            class="rounded-xl bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+            title="Abrir original"
+            aria-label="Abrir original en una pestaña nueva"
+          >
+            <Icon name="descarga" class="h-4 w-4" />
+          </a>
+          <button type="button" id="cerrar-carne" class="rounded-xl bg-white/10 p-2 text-white hover:bg-white/20 transition-colors" aria-label="Cerrar">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="visor-scroll" class="h-full w-full overflow-auto p-4 pt-16 flex items-start justify-center">
+        <img
+          id="visor-img"
+          src={pet.vaccine_card_url}
+          alt="Carné de vacunas"
+          class="max-w-full h-auto rounded-lg origin-top transition-transform duration-200 cursor-zoom-in select-none"
+        />
+      </div>
+      <p class="absolute bottom-4 inset-x-0 text-center text-[11px] text-white/50">Toca la imagen para acercar</p>
+    </div>
+  )}
 
   {/* ── FORM (colapsable) ── */}
   <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
@@ -350,6 +417,52 @@ const upcomingCount = vaccines?.filter(v => {
           if (cardIcon) cardIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
         });
       }
+
+      // ── Visor del carné ──
+      var visor = document.getElementById('visor-carne');
+      var visorImg = document.getElementById('visor-img');
+      var visorScroll = document.getElementById('visor-scroll');
+      var abrirCarne = document.getElementById('abrir-carne');
+      var cerrarCarne = document.getElementById('cerrar-carne');
+      var zoom = 1;
+
+      function aplicarZoom() {
+        if (!visorImg) return;
+        visorImg.style.transform = 'scale(' + zoom + ')';
+        visorImg.style.cursor = zoom > 1 ? 'zoom-out' : 'zoom-in';
+      }
+      function abrirVisor() {
+        if (!visor) return;
+        zoom = 1; aplicarZoom();
+        visor.classList.remove('hidden');
+        // Bloquear el scroll del fondo mientras el visor está abierto.
+        document.body.style.overflow = 'hidden';
+      }
+      function cerrarVisor() {
+        if (!visor) return;
+        visor.classList.add('hidden');
+        document.body.style.overflow = '';
+      }
+
+      if (abrirCarne) abrirCarne.addEventListener('click', abrirVisor);
+      if (cerrarCarne) cerrarCarne.addEventListener('click', cerrarVisor);
+      if (visorImg) {
+        visorImg.addEventListener('click', function () {
+          // Tres pasos: 1× → 2× → 3× → vuelve a 1×.
+          zoom = zoom >= 3 ? 1 : zoom + 1;
+          aplicarZoom();
+          if (zoom === 1 && visorScroll) { visorScroll.scrollTop = 0; visorScroll.scrollLeft = 0; }
+        });
+      }
+      // Tocar el fondo cierra; tocar la imagen no.
+      if (visor) {
+        visor.addEventListener('click', function (e) {
+          if (e.target === visor || e.target === visorScroll) cerrarVisor();
+        });
+      }
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && visor && !visor.classList.contains('hidden')) cerrarVisor();
+      });
 
       var toggleBtn = document.getElementById('toggle-vaccine-form');
       var formBody = document.getElementById('vaccine-form-body');

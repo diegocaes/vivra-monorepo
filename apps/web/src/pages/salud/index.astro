@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
+import Icon from '../../components/ui/Icon.astro';
 
 import { getActivePet } from '../../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
@@ -102,7 +103,7 @@ if (Astro.request.method === 'POST') {
     <div class="rounded-2xl bg-card border border-card-border p-5 mb-4 animate-fade-up">
       <div class="flex flex-col items-center text-center mb-5">
         <div class="h-16 w-16 rounded-2xl bg-canvas flex items-center justify-center mb-3 border border-card-border">
-          <span class="text-3xl">🐾</span>
+          <span class="text-accent"><Icon name="mascota" class="h-8 w-8" /></span>
         </div>
         <p class="text-base font-bold text-ink">El score se activa con más datos</p>
         <p class="text-sm text-muted mt-1 leading-relaxed max-w-xs">

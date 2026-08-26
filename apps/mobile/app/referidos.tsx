@@ -106,7 +106,7 @@ export default function ReferidosScreen() {
     try {
       await Share.share({
         message:
-          `🐾 Te invito a usar Vivra para llevar la salud de tu mascota.\n\n` +
+          `Te invito a usar Vivra para llevar la salud de tu mascota.\n\n` +
           `Descarga la app gratis: ${APP_STORE_URL}\n\n` +
           `Cuando te registres, usa mi código ${referralCode} y ambos ganamos premium gratis.`,
       });

@@ -9,14 +9,26 @@ import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/Card';
 import type { Notification } from '../types/supabase';
 
+/**
+ * Tipo de notificación → icono. Las claves son los tipos REALES que escriben
+ * send-push y el dashboard web; antes eran 'vaccine'/'weight'/'preventive',
+ * que no los produce nadie, así que todo caía en la campana genérica.
+ * Gemelo del ICONO_POR_TIPO de la web (pages/notificaciones.astro).
+ */
 const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
-  vaccine: { name: 'medkit', color: Colors.good },
-  weight: { name: 'scale', color: Colors.accent },
-  preventive: { name: 'shield-checkmark', color: Colors.warn },
-  food: { name: 'restaurant', color: Colors.accentDark },
+  vaccine_due: { name: 'medkit', color: Colors.good },
+  weight_stale: { name: 'scale', color: Colors.accent },
+  preventive_due: { name: 'shield-checkmark', color: Colors.warn },
+  food_low: { name: 'restaurant', color: Colors.accentDark },
   birthday: { name: 'gift', color: '#E879F9' },
+  re_engagement: { name: 'paw', color: Colors.muted },
+  score_improved: { name: 'heart', color: Colors.accent },
+  vet_visit: { name: 'medical', color: '#E879F9' },
   flight: { name: 'airplane', color: Colors.accent },
   general: { name: 'notifications', color: Colors.muted },
+  // Tipos históricos, para que las filas viejas no salgan con campana gris.
+  weight_reminder: { name: 'scale', color: Colors.accent },
+  vaccine_reminder: { name: 'medkit', color: Colors.good },
 };
 
 function timeAgo(dateStr: string): string {

@@ -227,9 +227,28 @@ export function useNotifications() {
 
 // ── Local notification helpers ──
 
+/**
+ * Cola de programación de notificaciones.
+ *
+ * Cada `schedule*Reminder` hace leer-todas → cancelar-duplicadas → programar.
+ * Llamadas en paralelo (usePet las dispara en bucle) leían la lista antes de
+ * que ninguna hubiera escrito, así que ninguna veía a las otras y todas
+ * programaban: con 3 dosis de la misma vacuna salían 3 avisos idénticos.
+ * Encadenarlas devuelve la atomicidad sin bloquear la UI.
+ */
+let colaNotificaciones: Promise<unknown> = Promise.resolve();
+
+function enCola<T>(tarea: () => Promise<T>): Promise<T> {
+  const siguiente = colaNotificaciones.then(tarea, tarea);
+  // La cola nunca debe romperse porque una tarea falle.
+  colaNotificaciones = siguiente.catch(() => {});
+  return siguiente;
+}
+
+
 /** Schedule a local notification for a preventive treatment reminder.
  *  Default: alert 1 day before due date. */
-export async function schedulePreventiveReminder(opts: {
+async function schedulePreventiveReminderImpl(opts: {
   petName: string;
   type: 'antipulgas' | 'desparasitante' | 'combinado';
   nextDueDate: Date;
@@ -306,7 +325,7 @@ export async function scheduleBirthdayNotification(opts: {
 
 /** Schedule a vaccine reminder when it's been more than 1 year since the last
  *  vaccine was given (i.e. on or after the next-due date). */
-export async function scheduleVaccineReminder(opts: {
+async function scheduleVaccineReminderImpl(opts: {
   petName: string;
   vaccineName: string;
   /** Date the vaccine was last given. We schedule the alert for +1 year. */
@@ -332,7 +351,7 @@ export async function scheduleVaccineReminder(opts: {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: `${petName}: vacuna pendiente`,
-      body: `💉 Llevas más de un año sin registrar la vacuna de ${vaccineName} de ${petName}.`,
+      body: `Llevas más de un año sin registrar la vacuna de ${vaccineName} de ${petName}.`,
       data: { type: 'vaccine_reminder', vaccineName, petName },
       sound: true,
     },
@@ -344,7 +363,7 @@ export async function scheduleVaccineReminder(opts: {
 }
 
 /** Schedule a weight log reminder 30 days after the last recorded weight. */
-export async function scheduleWeightReminder(opts: {
+async function scheduleWeightReminderImpl(opts: {
   petName: string;
   /** Date of the last weight record. We schedule alert for +30 days. */
   lastWeightDate: Date;
@@ -369,7 +388,7 @@ export async function scheduleWeightReminder(opts: {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: `${petName}: hora de pesar`,
-      body: `⚖️ Llevas más de 30 días sin registrar el peso de ${petName}. Mantener el seguimiento ayuda a detectar cambios.`,
+      body: `Llevas más de 30 días sin registrar el peso de ${petName}. Mantener el seguimiento ayuda a detectar cambios.`,
       data: { type: 'weight_reminder', petName },
       sound: true,
     },
@@ -378,6 +397,25 @@ export async function scheduleWeightReminder(opts: {
       date: alertDate,
     },
   });
+}
+
+
+// ── Envoltorios públicos: toda programación pasa por la cola ──────────────
+// Las firmas son las mismas de antes, así que ningún consumidor cambia.
+
+/** Recordatorio de preventivo. Por defecto avisa 1 día antes del vencimiento. */
+export function schedulePreventiveReminder(opts: Parameters<typeof schedulePreventiveReminderImpl>[0]) {
+  return enCola(() => schedulePreventiveReminderImpl(opts));
+}
+
+/** Recordatorio de vacuna, un año después de la última dosis. */
+export function scheduleVaccineReminder(opts: Parameters<typeof scheduleVaccineReminderImpl>[0]) {
+  return enCola(() => scheduleVaccineReminderImpl(opts));
+}
+
+/** Recordatorio de peso, 30 días después del último registro. */
+export function scheduleWeightReminder(opts: Parameters<typeof scheduleWeightReminderImpl>[0]) {
+  return enCola(() => scheduleWeightReminderImpl(opts));
 }
 
 /** Cancel all scheduled notifications (useful on logout) */

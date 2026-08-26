@@ -371,7 +371,7 @@ const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
         <div class="photo-frame">
           {pet.photo_url ? (
             <img src={pet.photo_url} alt={pet.name} />
-          ) : (petSpecies === 'cat' ? '🐱' : '🐶')}
+          ) : (petSpecies === 'cat' ? 'Gato' : 'Perro')}
         </div>
         <div class="photo-info">
           <p class="passport-type">Pasaporte · {speciesLabel}</p>

@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
             userId: pet.user_id, petId: pet.id, type: 'preventive_due',
             title: `${pet.name}: ${ty} vencido`,
             body: `Hace ${overdueDays} día${overdueDays !== 1 ? 's' : ''} que venció el ${ty} de ${pet.name}. Aplícalo y regístralo.`,
-            href: '/salud/preventivos', icon: ty === 'antipulgas' ? '🐛' : '💊',
+            href: '/salud/preventivos', icon: ty === 'antipulgas' ? 'preventivo' : 'pastilla',
           });
           break; // one preventive push per pet per run is enough
         }
@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
           userId: pet.user_id, petId: pet.id, type: 'vaccine_due',
           title: `${pet.name}: vacuna pendiente`,
           body: worstVaccine.body,
-          href: '/salud/vacunas', icon: '💉',
+          href: '/salud/vacunas', icon: 'vacuna',
         });
       }
 
@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
               body: daysLeft > 0
                 ? `La bolsa de ${food.brand ?? 'alimento'} rinde ~${daysLeft} día${daysLeft !== 1 ? 's' : ''} más. Buen momento para comprar la siguiente.`
                 : `Según la ración diaria, la bolsa de ${food.brand ?? 'alimento'} ya debió acabarse. Registra la nueva para mantener el historial al día.`,
-              href: '/alimentacion', icon: '🍖',
+              href: '/alimentacion', icon: 'comida',
             });
           }
         }
@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
           userId: pet.user_id, petId: pet.id, type: 'weight_stale',
           title: `${pet.name}: hora de pesar`,
           body: `Más de 30 días sin registrar el peso de ${pet.name}. Un registro rápido mantiene su historial al día.`,
-          href: '/salud/peso', icon: '⚖️',
+          href: '/salud/peso', icon: 'peso',
         });
       }
 
@@ -259,9 +259,9 @@ Deno.serve(async (req) => {
           const age = today.getFullYear() - birth.getFullYear();
           pending.push({
             userId: pet.user_id, petId: pet.id, type: 'birthday',
-            title: `¡Feliz cumpleaños, ${pet.name}! 🎂`,
+            title: `¡Feliz cumpleaños, ${pet.name}!`,
             body: `${pet.name} cumple ${age} ${age === 1 ? 'año' : 'años'} hoy. ¡Dale un premio de nuestra parte!`,
-            href: '/dashboard', icon: '🎂',
+            href: '/dashboard', icon: 'cumpleanos',
           });
         }
       }
@@ -285,9 +285,9 @@ Deno.serve(async (req) => {
       if (recentActivity) continue;
       pending.push({
         userId, petId: pet.id, type: 're_engagement',
-        title: `¿Cómo está ${pet.name}? 🐾`,
+        title: `¿Cómo está ${pet.name}?`,
         body: `Hace días que no registras nada. Un vistazo rápido mantiene su Vitality Score al día.`,
-        href: '/dashboard', icon: '🐾',
+        href: '/dashboard', icon: 'mascota',
       });
     }
 

@@ -80,7 +80,7 @@ export default function PasaporteScreen() {
               {pet.photo_url ? (
                 <Image source={{ uri: pet.photo_url }} style={styles.photo} />
               ) : (
-                <Text style={{ fontSize: 36 }}>{pet.species === 'cat' ? '🐱' : '🐶'}</Text>
+                <Ionicons name="paw" size={34} color={Colors.accent} />
               )}
             </View>
             <View style={styles.idInfo}>

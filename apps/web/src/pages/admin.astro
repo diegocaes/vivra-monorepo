@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 import { createSupabaseAdminClient } from '../lib/supabase';
 
 /**
@@ -280,7 +281,7 @@ const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es',
         {[
           { label: 'Usuarios', value: totalUsers },
           { label: 'Activos 7d', value: active7d },
-          { label: 'Mascotas', value: `${totalPets}${totalCats > 0 ? ` (${totalCats} 🐱)` : ''}` },
+          { label: 'Mascotas', value: `${totalPets}${totalCats > 0 ? ` (${totalCats} gatos)` : ''}` },
           { label: 'Premium activos', value: premiumActive },
           { label: 'Push tokens', value: pushTokens },
           { label: 'Notifs enviadas 7d', value: notifs7d },

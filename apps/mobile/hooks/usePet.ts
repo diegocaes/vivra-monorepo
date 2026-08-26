@@ -142,17 +142,22 @@ export function usePet(): PetData {
 
       // Schedule premium-only notifications: vaccines overdue (>1y since given)
       if (isPremium && pet) {
-        // Vaccine reminders — fires 1 year after each vaccine was given
-        // (when "lleva más de un año sin poner vacunas"). Most recent dose
-        // per vaccine name wins because the helper cancels duplicates.
+        // Un recordatorio por VACUNA, no por dosis. Las filas vienen ordenadas
+        // por date_given DESC, así que la primera de cada nombre es la más
+        // reciente. Sin esto, 3 dosis de "Rabia" programaban 3 avisos
+        // idénticos para el mismo día.
+        const vacunaMasReciente = new Map<string, string>();
         for (const v of vaccinesRes.data ?? []) {
-          if (v.date_given) {
-            scheduleVaccineReminder({
-              petName: pet.name,
-              vaccineName: v.name,
-              lastGivenDate: new Date(v.date_given + 'T09:00:00'),
-            }).catch(() => {});
+          if (v.date_given && !vacunaMasReciente.has(v.name)) {
+            vacunaMasReciente.set(v.name, v.date_given);
           }
+        }
+        for (const [nombre, fecha] of vacunaMasReciente) {
+          scheduleVaccineReminder({
+            petName: pet.name,
+            vaccineName: nombre,
+            lastGivenDate: new Date(fecha + 'T09:00:00'),
+          }).catch(() => {});
         }
 
         // Weight reminder — fires 30 days after the most recent weight record

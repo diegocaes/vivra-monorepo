@@ -188,7 +188,7 @@ export default function PerfilScreen() {
           .maybeSingle();
         const vigente = !!(sub?.premium_until && new Date(sub.premium_until) > new Date());
         if (vigente && sub?.source === 'iap') {
-          subWarning = '\n\n⚠️ Tu suscripción Premium es con Apple: eliminar la cuenta NO detiene el cobro. Cancélala en Ajustes → Apple ID → Suscripciones.';
+          subWarning = '\n\nAVISO: tu suscripción Premium es con Apple: eliminar la cuenta NO detiene el cobro. Cancélala en Ajustes → Apple ID → Suscripciones.';
         } else if (vigente && sub?.source === 'web') {
           subWarning = '\n\nTu suscripción Premium (web) se cancelará automáticamente y no se te volverá a cobrar.';
         }

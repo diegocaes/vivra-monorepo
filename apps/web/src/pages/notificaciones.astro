@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 import { timeAgo } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 
@@ -43,6 +44,20 @@ if (activePet) fetchQuery = fetchQuery.eq('pet_id', activePet.id);
 const { data: notifications } = await fetchQuery;
 
 const items = notifications ?? [];
+
+// Tipo de notificación → icono. Gemelo del ICON_MAP de la app; si agregas un
+// tipo en send-push, agrégalo en los dos.
+const ICONO_POR_TIPO: Record<string, string> = {
+  vaccine_due: 'vacuna',
+  preventive_due: 'preventivo',
+  weight_stale: 'peso',
+  food_low: 'comida',
+  birthday: 'cumpleanos',
+  re_engagement: 'mascota',
+  score_improved: 'score',
+  vet_visit: 'vet',
+  flight: 'vuelo',
+};
 ---
 
 <MainLayout title="Notificaciones">
@@ -86,8 +101,10 @@ const items = notifications ?? [];
           href={n.href || '#'}
           class="flex items-start gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-[0.98]"
         >
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-lg">
-            {n.icon || '🔔'}
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
+            {/* `icon` guarda un nombre, no un emoji. Las filas viejas traen
+                emoji: ICONO_POR_TIPO las cubre a partir del tipo. */}
+            <Icon name={ICONO_POR_TIPO[n.type] ?? 'campana'} class="h-5 w-5" />
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-ink leading-snug">{n.title}</p>

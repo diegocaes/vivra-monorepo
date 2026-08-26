@@ -1,14 +1,15 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 
 const sections = [
   {
     title: 'El score de bienestar',
-    emoji: '🐾',
+    emoji: 'mascota',
     questions: [
       {
         q: '¿Qué es el score de bienestar?',
-        a: 'Es un número del 0 al 100 que resume qué tan completo y saludable se ve el registro de tu perro. No mide si tu perro está enfermo — mide qué tan bien tienes documentado su cuidado. Cuantos más datos tengas registrados, más preciso es.',
+        a: 'Es un número del 0 al 100 que resume qué tan completo y saludable se ve el registro de tu mascota. No mide si está enferma — mide qué tan bien tienes documentado su cuidado. Cuantos más datos tengas registrados, más preciso es.',
       },
       {
         q: '¿Por qué no veo el número todavía?',
@@ -16,7 +17,7 @@ const sections = [
       },
       {
         q: '¿Un score bajo significa que mi perro está mal?',
-        a: 'No. Un score bajo casi siempre significa que faltan datos — no que haya un problema real. Por ejemplo, si nunca registraste una visita al veterinario, ese dato no cuenta, aunque tu perro vaya regularmente. El score solo refleja lo que está en Vivra.',
+        a: 'No. Un score bajo casi siempre significa que faltan datos — no que haya un problema real. Por ejemplo, si nunca registraste una visita al veterinario, ese dato no cuenta, aunque tu mascota vaya regularmente. El score solo refleja lo que está en Vivra.',
       },
       {
         q: '¿Puede bajar el score sin que haga nada?',
@@ -24,21 +25,21 @@ const sections = [
       },
       {
         q: '¿Es un diagnóstico médico?',
-        a: 'No. Vivra no reemplaza al veterinario. El score es una herramienta para ayudarte a llevar mejor el historial de tu perro, no para diagnosticar enfermedades. Si tu perro tiene algún síntoma o te preocupa algo, siempre consulta a un vet.',
+        a: 'No. Vivra no reemplaza al veterinario. El score es una herramienta para ayudarte a llevar mejor el historial de tu mascota, no para diagnosticar enfermedades. Si tiene algún síntoma o te preocupa algo, siempre consulta a un vet.',
       },
     ],
   },
   {
     title: 'Qué mide el score',
-    emoji: '📋',
+    emoji: 'documento',
     questions: [
       {
         q: '¿Qué áreas revisa el score?',
-        a: 'Revisa cuatro cosas, cada una aporta hasta 25 puntos: (1) peso actual comparado con el rango ideal de la raza, (2) cuidado preventivo — vacunas, visitas al vet, antipulgas, desparasitante y examen de sangre anual, (3) raza y edad con sus riesgos específicos, y (4) alimentación — si tienes registrado el alimento de tu perro (marca, tipo y ración) y al día.',
+        a: 'Revisa cuatro cosas, cada una aporta hasta 25 puntos: (1) peso actual comparado con el rango ideal de su raza (en gatos, el perfil felino general), (2) cuidado preventivo — vacunas, visitas al vet, antipulgas, desparasitante y examen de sangre anual, (3) raza y edad con sus riesgos específicos, y (4) alimentación — si tienes registrado su alimento (marca, tipo y ración) y al día.',
       },
       {
         q: '¿El score me dice si la porción de comida es la correcta?',
-        a: 'No. La cantidad ideal de comida la define tu veterinario o nutricionista según tu perro — Vivra no la calcula ni la juzga. La sección de alimentación solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa. Si tu vet te recomendó una porción, esa es la que vale: la app no te va a contradecir ni asustar con cálculos genéricos.',
+        a: 'No. La cantidad ideal de comida la define tu veterinario o nutricionista según tu mascota — Vivra no la calcula ni la juzga. La sección de alimentación solo lleva el registro de qué le das, cuánto gastas y cuánto dura cada bolsa. Si tu vet te recomendó una porción, esa es la que vale: la app no te va a contradecir ni asustar con cálculos genéricos.',
       },
       {
         q: '¿Qué pasa si no tengo todos los datos?',
@@ -52,11 +53,11 @@ const sections = [
   },
   {
     title: 'Las sugerencias',
-    emoji: '💡',
+    emoji: 'idea',
     questions: [
       {
         q: '¿Qué son las sugerencias que aparecen?',
-        a: 'Son recordatorios amigables basados en lo que tienes registrado — por ejemplo, si llevas más de un año sin anotar una visita al vet, o si la raza de tu perro tiene recomendaciones de cuidado específicas para su edad. No son alertas de emergencia, son recordatorios útiles.',
+        a: 'Son recordatorios amigables basados en lo que tienes registrado — por ejemplo, si llevas más de un año sin anotar una visita al vet, o si su raza tiene recomendaciones de cuidado específicas para su edad. No son alertas de emergencia, son recordatorios útiles.',
       },
       {
         q: '¿Por qué me aparece una sugerencia si mi perro está bien?',
@@ -70,15 +71,15 @@ const sections = [
   },
   {
     title: 'Sobre Vivra',
-    emoji: '🐶',
+    emoji: 'mascota',
     questions: [
       {
         q: '¿Para qué sirve Vivra?',
-        a: 'Es el historial de vida de tu perro. Puedes guardar vacunas, visitas al vet, peso, grooming, fotos, alimentación y vuelos. La idea es que siempre tengas todo organizado — para llevarlo al vet, para viajes, o simplemente para no olvidar nada importante.',
+        a: 'Es el historial de vida de tu mascota. Puedes guardar vacunas, visitas al vet, peso, grooming, fotos, alimentación y vuelos. La idea es que siempre tengas todo organizado — para llevarlo al vet, para viajes, o simplemente para no olvidar nada importante.',
       },
       {
         q: '¿Puedo tener más de un perro?',
-        a: 'Sí. Puedes agregar todos los perros que quieras en la misma cuenta. Cada uno tiene su propio perfil e historial. Cambias entre ellos desde el menú lateral.',
+        a: 'Sí. Puedes agregar todos los perros y gatos que quieras en la misma cuenta. Cada uno tiene su propio perfil e historial. Cambias entre ellos desde el menú lateral.',
       },
       {
         q: '¿Hay app para el celular?',
@@ -104,7 +105,7 @@ const sections = [
     {sections.map(section => (
       <div>
         <div class="flex items-center gap-2 mb-3">
-          <span class="text-lg" aria-hidden="true">{section.emoji}</span>
+          <span class="text-lg" aria-hidden="true"><Icon name={section.emoji} class="h-5 w-5" /></span>
           <p class="text-xs font-bold text-ink uppercase tracking-wider">{section.title}</p>
         </div>
 

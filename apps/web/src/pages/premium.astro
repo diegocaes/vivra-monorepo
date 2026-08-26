@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 import { getPremiumStatus } from '../lib/premium';
 import type { PremiumStatus } from '../lib/premium';
 
@@ -50,14 +51,14 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
 
 // Premium = co-dueño + detalle de gastos + colores de tema. Todo lo demás es gratis.
 const features = [
-  { icon: '👥', name: 'Co-dueño', desc: 'Comparte la mascota con tu pareja: ambos ven y registran todo', free: 'No', premium: 'Sí' },
-  { icon: '💰', name: 'Detalle de gastos', desc: 'Desglose por categoría y totales de vet, alimento, vuelos y más', free: 'Solo el total', premium: 'Completo' },
-  { icon: '🎨', name: 'Colores de tema', desc: 'Personaliza el color del perfil de tu mascota', free: '2 colores', premium: 'Todos' },
-  { icon: '🐾', name: 'Varias mascotas', desc: 'Perros y gatos en una sola cuenta', free: 'Sí', premium: 'Sí' },
-  { icon: '📊', name: 'Gráfica de peso', desc: 'Evolución del peso con gráficas detalladas', free: 'Sí', premium: 'Sí' },
-  { icon: '🧡', name: 'Vitality Score', desc: 'Desglose por pilar, flags y recomendaciones', free: 'Sí', premium: 'Sí' },
-  { icon: '✈️', name: 'Pasaporte y viajes', desc: 'Documentos de vuelo y pasaporte imprimible', free: 'Sí', premium: 'Sí' },
-  { icon: '🔔', name: 'Recordatorios', desc: 'Vacunas, comida, antiparasitarios y más', free: 'Sí', premium: 'Sí' },
+  { icon: 'codueno', name: 'Co-dueño', desc: 'Comparte la mascota con tu pareja: ambos ven y registran todo', free: 'No', premium: 'Sí' },
+  { icon: 'gastos', name: 'Detalle de gastos', desc: 'Desglose por categoría y totales de vet, alimento, vuelos y más', free: 'Solo el total', premium: 'Completo' },
+  { icon: 'colores', name: 'Colores de tema', desc: 'Personaliza el color del perfil de tu mascota', free: '2 colores', premium: 'Todos' },
+  { icon: 'mascota', name: 'Varias mascotas', desc: 'Perros y gatos en una sola cuenta', free: 'Sí', premium: 'Sí' },
+  { icon: 'grafica', name: 'Gráfica de peso', desc: 'Evolución del peso con gráficas detalladas', free: 'Sí', premium: 'Sí' },
+  { icon: 'score', name: 'Vitality Score', desc: 'Desglose por pilar, flags y recomendaciones', free: 'Sí', premium: 'Sí' },
+  { icon: 'vuelo', name: 'Pasaporte y viajes', desc: 'Documentos de vuelo y pasaporte imprimible', free: 'Sí', premium: 'Sí' },
+  { icon: 'campana', name: 'Recordatorios', desc: 'Vacunas, comida, antiparasitarios y más', free: 'Sí', premium: 'Sí' },
 ];
 ---
 
@@ -153,6 +154,30 @@ const features = [
       </div>
     )}
 
+    {premium.isPremium && (
+      <div class="rounded-2xl border border-accent/25 bg-accent-light/60 p-5">
+        <p class="text-xs font-semibold text-accent-dark uppercase tracking-wider mb-3">Lo que tienes activo</p>
+        <div class="space-y-3">
+          {[
+            { icon: 'codueno', name: 'Co-dueño', desc: 'Comparte la mascota con quien la cuida contigo: ambos registran y ven todo.', href: '/perfil' },
+            { icon: 'gastos', name: 'Detalle de gastos', desc: 'Desglose por categoría y el total de cada sección: vet, alimento, grooming.', href: '/perfil' },
+            { icon: 'colores', name: 'Colores de tema', desc: 'Toda la paleta para el perfil de tu mascota, no solo dos.', href: '/perfil' },
+          ].map((f) => (
+            <a href={f.href} class="flex items-start gap-3 -mx-2 px-2 py-1.5 rounded-xl hover:bg-white/60 transition-colors">
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-accent shadow-sm">
+                <Icon name={f.icon} class="h-4 w-4" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-ink">{f.name}</p>
+                <p class="text-xs text-muted mt-0.5 leading-relaxed">{f.desc}</p>
+              </div>
+              <svg class="h-4 w-4 shrink-0 text-accent/40 mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+          ))}
+        </div>
+      </div>
+    )}
+
     <!-- Feature comparison -->
     <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
       <div class="grid grid-cols-3 gap-0 border-b border-card-border bg-canvas px-4 py-3">
@@ -163,7 +188,7 @@ const features = [
       {features.map((f, i) => (
         <div class:list={['grid grid-cols-3 gap-0 px-4 py-3 items-center', i < features.length - 1 && 'border-b border-card-border']}>
           <div class="flex items-center gap-2 col-span-1">
-            <span class="text-base">{f.icon}</span>
+            <span class="text-accent"><Icon name={f.icon} class="h-4 w-4" /></span>
             <div>
               <p class="text-xs font-semibold text-ink">{f.name}</p>
               <p class="text-xs text-muted leading-tight hidden sm:block">{f.desc}</p>
@@ -176,11 +201,12 @@ const features = [
     </div>
 
     <!-- How to get premium -->
+    {!premium.isPremium && (
     <div class="rounded-2xl border border-card-border bg-card p-5">
-      <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Como obtener premium</p>
+      <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Cómo obtener premium</p>
       <div class="space-y-4">
         <a href="/referidos" class="flex items-start gap-3 -mx-2 px-2 py-1 rounded-xl hover:bg-canvas transition-colors">
-          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm">🎁</div>
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"><Icon name="regalo" class="h-4 w-4" /></div>
           <div class="flex-1">
             <p class="text-sm font-medium text-ink">Refiere amigos</p>
             <p class="text-xs text-muted mt-0.5">Cada amigo que se une = 1 mes premium gratis para ti</p>
@@ -188,14 +214,14 @@ const features = [
           <svg class="h-4 w-4 shrink-0 text-muted mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
         </a>
         <div class="flex items-start gap-3">
-          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm">👥</div>
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"><Icon name="codueno" class="h-4 w-4" /></div>
           <div>
             <p class="text-sm font-medium text-ink">Premium compartido</p>
             <p class="text-xs text-muted mt-0.5">Si tu co-dueño tiene Premium, tú también lo obtienes</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
-          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-sm">💳</div>
+          <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"><Icon name="pago" class="h-4 w-4" /></div>
           <div>
             <p class="text-sm font-medium text-ink">Suscripción</p>
             <p class="text-xs text-muted mt-0.5">$2.99/mes o $14.99/año — se contrata desde la app de iPhone (Perfil → Premium)</p>
@@ -203,6 +229,7 @@ const features = [
         </div>
       </div>
     </div>
+    )}
 
     <!-- CTA -->
     {!premium.isPremium && (
@@ -289,7 +316,7 @@ const features = [
 
         {isMonthlyPlan && (
           <div class="rounded-2xl border-2 border-accent bg-accent/5 px-4 py-3.5 mb-4">
-            <p class="text-sm font-bold text-ink">💡 ¿Y si mejor pagas menos?</p>
+            <p class="text-sm font-bold text-ink">¿Y si mejor pagas menos?</p>
             <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">$14.99/año</strong> — equivale a $1.25/mes, un 58% menos de lo que pagas hoy.</p>
             <button
               type="button"

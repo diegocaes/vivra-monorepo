@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 import { isBirthday, calculateAge, formatDate, computeFoodStats, formatCurrency } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
@@ -184,110 +185,146 @@ const checklistItems = [
   { done: profileComplete,            href: '/perfil',              label: 'Completar perfil',          sub: 'Foto, microchip, color de pelaje',               iconColor: 'bg-amber/10',  iconStroke: 'text-amber-dark',icon: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>' },
 ].filter(item => !item.done);
 
-// ── Notification generation (deduplicated against DB) ──
+// ── Generación de notificaciones ────────────────────────────────────────────
+//
+// OJO — aquí vivía un bug de spam. La deduplicación construía el set con
+// `${type}::${message}` pero comparaba contra claves de OTRO formato
+// (`weight_reminder::${días}`, `vaccine_overdue::${nombre}`), así que NUNCA
+// coincidían: cada carga del dashboard insertaba una notificación nueva.
+// Un usuario acumuló 30 avisos idénticos de peso en un solo día.
+//
+// Ahora se usa la misma estrategia que el cron de push (send-push): ventana
+// de enfriamiento por (mascota, tipo). Los tipos coinciden con los del cron
+// A PROPÓSITO, para que los dos sistemas compartan el enfriamiento y el
+// usuario no reciba el mismo aviso por duplicado desde la web y desde el push.
 try {
-  // Fetch existing notification messages for this pet to avoid duplicates
-  const { data: existingNotifs } = await supabase
+  const COOLDOWNS: Record<string, number> = {
+    preventive_due: 7,
+    vaccine_due: 30,
+    weight_stale: 30,
+    score_improved: 7,
+  };
+
+  const maxCooldown = Math.max(...Object.values(COOLDOWNS));
+  const { data: recentNotifs } = await supabase
     .from('notifications')
-    .select('type, message')
+    .select('type, created_at')
     .eq('user_id', user.id)
-    .eq('pet_id', pet.id);
-  const existingSet = new Set((existingNotifs ?? []).map(n => `${n.type}::${n.message}`));
+    .eq('pet_id', pet.id)
+    .gte('created_at', new Date(Date.now() - maxCooldown * 86400000).toISOString());
+
+  // Fecha del aviso más reciente de cada tipo para esta mascota.
+  const ultimoPorTipo = new Map<string, number>();
+  for (const n of recentNotifs ?? []) {
+    const t = new Date(n.created_at).getTime();
+    if (!ultimoPorTipo.has(n.type) || t > ultimoPorTipo.get(n.type)!) {
+      ultimoPorTipo.set(n.type, t);
+    }
+  }
+
+  /** true si ya pasó el enfriamiento y se puede volver a avisar. */
+  const puedeAvisar = (tipo: string): boolean => {
+    const ultimo = ultimoPorTipo.get(tipo);
+    if (!ultimo) return true;
+    return (Date.now() - ultimo) / 86400000 >= (COOLDOWNS[tipo] ?? 14);
+  };
 
   const rawSnapshot = Astro.cookies.get('pet_snapshot')?.value;
-  const snapshot = rawSnapshot ? JSON.parse(rawSnapshot) as { score?: number; petId?: string; foodNotified?: boolean; antipulgasNotified?: boolean; desparasitanteNotified?: boolean } : null;
+  const snapshot = rawSnapshot ? JSON.parse(rawSnapshot) as { score?: number; petId?: string } : null;
   const isSamePet = snapshot?.petId === pet.id;
   const prevScore = (isSamePet ? snapshot?.score : null) ?? 0;
 
+  // `icon` guarda un NOMBRE de icono, no un emoji: lo dibuja <Icon> en la web
+  // y Ionicons en la app. Un emoji se ve distinto en cada sistema y no hereda
+  // el color del tema.
   const newNotifications: Array<{ type: string; title: string; message: string; icon: string; href: string }> = [];
 
-  // Score improved by 5+ points (only if we had a previous score to compare)
-  if (dashScore.showScore && prevScore > 0 && dashScore.total >= prevScore + 5) {
-    const msg = `El bienestar de ${pet.name} subió a ${dashScore.total}/100`;
-    const key = `score_improved::${msg}`;
-    if (!existingSet.has(key)) {
-      newNotifications.push({ type: 'score_improved', title: '¡Score mejoró!', message: msg, icon: '📈', href: '/salud' });
-    }
+  if (dashScore.showScore && prevScore > 0 && dashScore.total >= prevScore + 5 && puedeAvisar('score_improved')) {
+    newNotifications.push({
+      type: 'score_improved',
+      title: `${pet.name}: su bienestar mejoró`,
+      message: `El bienestar de ${pet.name} subió a ${dashScore.total}/100`,
+      icon: 'score',
+      href: '/salud',
+    });
   }
 
-  // Antipulgas due (≤1 day left or overdue, notify once per cycle)
-  if (antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 1 && !(isSamePet && snapshot?.antipulgasNotified)) {
-    const msg = antipulgasInfo.overdue
-      ? `El antipulgas de ${pet.name} ya venció. Aplícalo cuanto antes.`
-      : antipulgasInfo.daysLeft === 0
-        ? `Hoy toca el antipulgas de ${pet.name}`
-        : `Mañana toca el antipulgas de ${pet.name}`;
-    const key = `preventive_due::${msg}`;
-    if (!existingSet.has(key)) {
-      newNotifications.push({ type: 'preventive_due', title: antipulgasInfo.overdue ? '⚠️ Antipulgas vencido' : '🐛 Antipulgas próximo', message: msg, icon: '🐛', href: '/dashboard' });
-    }
+  // Preventivos vencidos o por vencer (ciclo de 30 días)
+  for (const [info, etiqueta] of [
+    [antipulgasInfo, 'antipulgas'],
+    [desparasitanteInfo, 'desparasitante'],
+  ] as const) {
+    if (!info.lastDate || info.daysLeft > 1) continue;
+    if (!puedeAvisar('preventive_due')) break;
+    newNotifications.push({
+      type: 'preventive_due',
+      title: info.overdue ? `${pet.name}: ${etiqueta} vencido` : `${pet.name}: ${etiqueta} próximo`,
+      message: info.overdue
+        ? `El ${etiqueta} de ${pet.name} ya venció. Aplícalo cuanto antes.`
+        : info.daysLeft === 0
+          ? `Hoy toca el ${etiqueta} de ${pet.name}`
+          : `Mañana toca el ${etiqueta} de ${pet.name}`,
+      icon: 'preventivo',
+      href: '/salud/preventivos',
+    });
+    break; // un solo aviso de preventivos por ciclo, no uno de cada tipo
   }
 
-  // Desparasitante due (≤1 day left or overdue, notify once per cycle)
-  if (desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 1 && !(isSamePet && snapshot?.desparasitanteNotified)) {
-    const msg = desparasitanteInfo.overdue
-      ? `El desparasitante de ${pet.name} ya venció. Aplícalo cuanto antes.`
-      : desparasitanteInfo.daysLeft === 0
-        ? `Hoy toca el desparasitante de ${pet.name}`
-        : `Mañana toca el desparasitante de ${pet.name}`;
-    const key = `preventive_due::${msg}`;
-    if (!existingSet.has(key)) {
-      newNotifications.push({ type: 'preventive_due', title: desparasitanteInfo.overdue ? '⚠️ Desparasitante vencido' : '💊 Desparasitante próximo', message: msg, icon: '💊', href: '/dashboard' });
-    }
-  }
-
-  // ── Smart reminders (non-invasive, once per trigger) ──
-
-  // Vaccine reminder: it's been more than 1 year (365 days) since the most
-  // recent dose for this vaccine — i.e. the user is overdue.
-  const { data: allVaccinesByDate } = await supabase
-    .from('vaccines')
-    .select('name, date_given')
-    .eq('pet_id', pet.id)
-    .order('date_given', { ascending: false });
-  const seenVaccineNames = new Set<string>();
-  for (const v of allVaccinesByDate ?? []) {
-    if (!v.date_given || seenVaccineNames.has(v.name)) continue;
-    seenVaccineNames.add(v.name); // only consider most-recent dose per vaccine
-    const daysSince = Math.floor((Date.now() - new Date(v.date_given + 'T00:00:00').getTime()) / 86400000);
-    if (daysSince > 365) {
-      const msg = `Llevas más de un año sin registrar la vacuna de ${v.name} de ${pet.name}`;
-      const key = `vaccine_overdue::${v.name}`;
-      if (!existingSet.has(key)) {
-        newNotifications.push({ type: 'vaccine_due', title: '💉 Vacuna pendiente', message: msg, icon: '💉', href: '/salud/vacunas' });
+  // Vacuna con más de un año desde la última dosis
+  if (puedeAvisar('vaccine_due')) {
+    const { data: allVaccinesByDate } = await supabase
+      .from('vaccines')
+      .select('name, date_given')
+      .eq('pet_id', pet.id)
+      .order('date_given', { ascending: false });
+    const vistas = new Set<string>();
+    for (const v of allVaccinesByDate ?? []) {
+      if (!v.date_given || vistas.has(v.name)) continue;
+      vistas.add(v.name); // solo la dosis más reciente de cada vacuna
+      const dias = Math.floor((Date.now() - new Date(v.date_given + 'T00:00:00').getTime()) / 86400000);
+      if (dias > 365) {
+        newNotifications.push({
+          type: 'vaccine_due',
+          title: `${pet.name}: vacuna pendiente`,
+          message: `Llevas más de un año sin registrar la vacuna de ${v.name} de ${pet.name}`,
+          icon: 'vacuna',
+          href: '/salud/vacunas',
+        });
+        break; // una sola por ciclo, aunque haya varias vencidas
       }
     }
   }
 
-  // Weight check reminder: no weight recorded in 30+ days
+  // Sin registro de peso en 30+ días. Mismo tipo que el cron (`weight_stale`)
+  // para que compartan enfriamiento; antes la web usaba `weight_reminder` y
+  // el push `weight_stale`, así que el usuario recibía los dos.
   const lastWeightDate = weightRecords?.[0]?.date;
-  if (lastWeightDate) {
-    const daysSinceWeight = Math.floor((Date.now() - new Date(lastWeightDate + 'T00:00:00').getTime()) / 86400000);
-    if (daysSinceWeight >= 30) {
-      const msg = `Llevas ${daysSinceWeight} días sin pesar a ${pet.name}`;
-      const key = `weight_reminder::${daysSinceWeight}`;
-      if (!existingSet.has(key)) {
-        newNotifications.push({ type: 'weight_reminder', title: '⚖️ Hora de pesar', message: msg, icon: '⚖️', href: '/salud/peso' });
-      }
+  if (lastWeightDate && puedeAvisar('weight_stale')) {
+    const dias = Math.floor((Date.now() - new Date(lastWeightDate + 'T00:00:00').getTime()) / 86400000);
+    if (dias >= 30) {
+      newNotifications.push({
+        type: 'weight_stale',
+        title: `${pet.name}: hora de pesar`,
+        message: `Llevas ${dias} días sin pesar a ${pet.name}`,
+        icon: 'peso',
+        href: '/salud/peso',
+      });
     }
   }
 
-  // Insert only truly new notifications
   if (newNotifications.length > 0) {
     await supabase.from('notifications').insert(
       newNotifications.map(n => ({ ...n, user_id: user.id, pet_id: pet.id, dismissed: false }))
     );
   }
 
-  // Update snapshot cookie
   Astro.cookies.set('pet_snapshot', JSON.stringify({
     score: dashScore.total,
     petId: pet.id,
-    antipulgasNotified: antipulgasInfo.lastDate && antipulgasInfo.daysLeft <= 3,
-    desparasitanteNotified: desparasitanteInfo.lastDate && desparasitanteInfo.daysLeft <= 3,
   }), { path: '/', httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, secure: import.meta.env.PROD });
 } catch (_) {
-  // Silently ignore if notifications table doesn't exist yet
+  // Si algo falla, el dashboard se muestra igual: las notificaciones nunca
+  // deben poder tumbar la página.
 }
 
 // Build "Qué hacer hoy" actions
@@ -357,7 +394,7 @@ const topActions = todoActions.slice(0, 4);
   {incomingShare && (
     <div class="mb-5 rounded-2xl border border-accent/30 bg-accent/8 px-5 py-4 animate-fade-up">
       <div class="flex items-start gap-4">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-2xl">🐾</div>
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><Icon name="mascota" class="h-6 w-6" /></div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-bold text-ink">
             ¡Ahora compartes a {incomingShare.petName} con {incomingShare.ownerName}!
@@ -386,7 +423,7 @@ const topActions = todoActions.slice(0, 4);
     <div class="mb-5 animate-fade-up" id="onboarding-checklist">
       <div class="rounded-t-2xl border border-b-0 border-accent/30 bg-accent/10 px-5 py-4">
         <div class="flex items-center gap-3">
-          <span class="text-xl">🚀</span>
+          <span class="text-accent"><Icon name="cohete" class="h-5 w-5" /></span>
           <div>
             <p class="text-sm font-bold text-accent-dark">Primeros pasos con {pet.name}</p>
             <p class="text-xs text-muted mt-0.5">{checklistItems.length} {checklistItems.length === 1 ? 'paso pendiente' : 'pasos pendientes'}</p>
@@ -396,7 +433,7 @@ const topActions = todoActions.slice(0, 4);
       {isNewlyOnboarded && age && !age.includes('mes') && !age.startsWith('0') && (
         <div class="border-x border-accent/30 bg-amber/5 px-5 py-3">
           <div class="flex items-start gap-2">
-            <span class="text-base shrink-0 mt-0.5">💡</span>
+            <span class="shrink-0 mt-0.5 text-amber-600"><Icon name="idea" class="h-4 w-4" /></span>
             <p class="text-xs text-amber-dark leading-relaxed">
               No importa si {pet.name} es mayor — Vivra te ayuda a llevar su historial desde hoy.
             </p>
@@ -563,7 +600,7 @@ const topActions = todoActions.slice(0, 4);
   {/* ── BIRTHDAY BANNER ── */}
   {birthday && (
     <div class="mb-5 rounded-2xl border border-amber/30 bg-amber/10 px-4 py-3 text-center animate-fade-up">
-      <p class="text-sm font-semibold text-amber-dark">🎂 ¡Hoy es el cumpleaños de {pet.name}! 🎉</p>
+      <p class="flex items-center justify-center gap-2 text-sm font-semibold text-amber-dark"><Icon name="cumpleanos" class="h-4 w-4" />¡Hoy es el cumpleaños de {pet.name}!</p>
     </div>
   )}
 
@@ -581,7 +618,11 @@ const topActions = todoActions.slice(0, 4);
               birthday ? 'ring-2 ring-amber ring-offset-1 ring-offset-transparent' : 'ring-1 ring-white/10',
             ]}
           />
-          {birthday && <span class="absolute -top-1 -right-1 text-base animate-bounce">🎂</span>}
+          {birthday && (
+            <span class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-white animate-bounce">
+              <Icon name="cumpleanos" class="h-3 w-3" />
+            </span>
+          )}
         </a>
         <div class="flex-1 min-w-0">
           <h1 class="text-xl font-bold text-white tracking-tight truncate">{pet.name}</h1>
@@ -612,7 +653,7 @@ const topActions = todoActions.slice(0, 4);
             </div>
           ) : (
             <div class="h-14 w-14 rounded-full flex items-center justify-center border-2 border-dashed border-white/20">
-              <span class="text-lg">🐾</span>
+              <span class="text-accent"><Icon name="mascota" class="h-5 w-5" /></span>
             </div>
           )}
         </a>
@@ -747,7 +788,7 @@ const topActions = todoActions.slice(0, 4);
           : 'border border-card-border bg-card'
     ]}>
       <div class="flex items-center gap-2 mb-2">
-        <span class="text-base">🐛</span>
+        <span class="text-accent-dark"><Icon name="preventivo" class="h-4 w-4" /></span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Antipulgas</p>
       </div>
       {antipulgasInfo.lastDate ? (
@@ -765,7 +806,7 @@ const topActions = todoActions.slice(0, 4);
             'text-[11px] mt-1',
             antipulgasInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {antipulgasInfo.overdue ? '⚠️ Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
+            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
           </p>
         </>
       ) : (
@@ -784,7 +825,7 @@ const topActions = todoActions.slice(0, 4);
           : 'border border-card-border bg-card'
     ]}>
       <div class="flex items-center gap-2 mb-2">
-        <span class="text-base">💊</span>
+        <span class="text-blue-500"><Icon name="pastilla" class="h-4 w-4" /></span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Desparasitante</p>
       </div>
       {desparasitanteInfo.lastDate ? (
@@ -802,7 +843,7 @@ const topActions = todoActions.slice(0, 4);
             'text-[11px] mt-1',
             desparasitanteInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {desparasitanteInfo.overdue ? '⚠️ Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
+            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
           </p>
         </>
       ) : (

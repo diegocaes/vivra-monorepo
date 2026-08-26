@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { captureError } from '../../lib/sentry';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Props {
   children: React.ReactNode;
@@ -42,7 +43,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
       return (
         <SafeAreaView style={styles.safe}>
           <View style={styles.container}>
-            <Text style={styles.emoji}>🐾</Text>
+            <Ionicons name="paw" size={44} color={Colors.accent} style={styles.emoji} />
             <Text style={styles.title}>Algo salió mal</Text>
             <Text style={styles.message}>
               Vivra tuvo un error inesperado. Nuestro equipo ya fue notificado.

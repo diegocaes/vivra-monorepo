@@ -1,5 +1,6 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
 import Card from '../components/ui/Card.astro';
 import Input from '../components/ui/Input.astro';
 import Button from '../components/ui/Button.astro';
@@ -393,7 +394,7 @@ const origin = new URL(Astro.request.url).origin;
 
         <div class="relative">
           <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl shadow-inner">
-            🐾
+            <Icon name="mascota" class="h-7 w-7" />
           </div>
           <p class="text-2xl font-bold tracking-tight">
             ¡Hola, {firstName}!
@@ -435,7 +436,7 @@ const origin = new URL(Astro.request.url).origin;
         <div class="rounded-2xl border border-card-border bg-white px-5 py-4">
           <div class="flex items-center gap-4 mb-3">
             <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-canvas text-2xl">
-              🔒
+              <Icon name="candado" class="h-4 w-4" />
             </div>
             <div class="flex-1">
               <p class="text-sm font-bold text-ink">Perfil completo</p>
@@ -537,8 +538,8 @@ const origin = new URL(Astro.request.url).origin;
               class="field-input"
             >
               <option value="">Seleccionar</option>
-              <option value="macho" selected={pet?.gender === 'macho'}>Macho ♂️</option>
-              <option value="hembra" selected={pet?.gender === 'hembra'}>Hembra ♀️</option>
+              <option value="macho" selected={pet?.gender === 'macho'}>Macho</option>
+              <option value="hembra" selected={pet?.gender === 'hembra'}>Hembra</option>
             </select>
           </div>
         </div>
@@ -772,7 +773,7 @@ const origin = new URL(Astro.request.url).origin;
         </>
       ) : (
         <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-          <span class="text-lg">👥</span>
+          <span class="text-accent"><Icon name="codueno" class="h-5 w-5" /></span>
           <div class="flex-1">
             <p class="text-sm font-semibold text-ink">Agrega al otro dueño de {pet.name}</p>
             <p class="text-xs text-muted">Disponible con Premium — 7 días gratis</p>
@@ -808,7 +809,7 @@ const origin = new URL(Astro.request.url).origin;
         <summary class="flex items-center justify-between cursor-pointer list-none select-none">
           <div class="flex items-center gap-3">
             <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
-              <span class="text-base">💰</span>
+              <span class="text-accent"><Icon name="gastos" class="h-4 w-4" /></span>
             </div>
             <div>
               <p class="text-sm font-semibold text-ink">Resumen de gastos</p>
@@ -826,37 +827,37 @@ const origin = new URL(Astro.request.url).origin;
               <div class="space-y-2">
                 {spending.alimento > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">🥫 Alimentos</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="comida" class="h-3.5 w-3.5" />Alimentos</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.alimento)}</span>
                   </div>
                 )}
                 {spending.vet > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">🩺 Veterinario</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="vet" class="h-3.5 w-3.5" />Veterinario</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.vet)}</span>
                   </div>
                 )}
                 {spending.grooming > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">✂️ Grooming</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="grooming" class="h-3.5 w-3.5" />Grooming</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.grooming)}</span>
                   </div>
                 )}
                 {spending.vuelos > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">✈️ Vuelos</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="vuelo" class="h-3.5 w-3.5" />Vuelos</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.vuelos)}</span>
                   </div>
                 )}
                 {spending.snacks > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">🦴 Snacks</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="comida" class="h-3.5 w-3.5" />Snacks</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.snacks)}</span>
                   </div>
                 )}
                 {spending.preventivos > 0 && (
                   <div class="flex items-center justify-between text-sm">
-                    <span class="text-muted">💊 Preventivos</span>
+                    <span class="flex items-center gap-1.5 text-muted"><Icon name="pastilla" class="h-3.5 w-3.5" />Preventivos</span>
                     <span class="font-semibold text-ink">${formatCurrency(spending.preventivos)}</span>
                   </div>
                 )}
@@ -876,7 +877,7 @@ const origin = new URL(Astro.request.url).origin;
                 <span class="font-bold text-accent text-base">${formatCurrency(spending.total)}</span>
               </div>
               <a href="/premium" class="flex items-center gap-3 rounded-xl bg-canvas border border-card-border px-4 py-3 hover:border-accent/30 transition-all">
-                <span class="text-lg">🔒</span>
+                <span class="text-muted"><Icon name="candado" class="h-5 w-5" /></span>
                 <div>
                   <p class="text-sm font-semibold text-ink">Ver el desglose por categoría</p>
                   <p class="text-xs text-muted">Vet, alimento, grooming y más — con Premium</p>
@@ -1021,7 +1022,7 @@ const origin = new URL(Astro.request.url).origin;
   <div id="delete-modal" class="fixed inset-0 z-50 items-end justify-center p-4 bg-black/40 backdrop-blur-sm hidden">
     <div class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-in">
       <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 mx-auto text-2xl">
-        ⚠️
+        <Icon name="alerta" class="h-5 w-5" />
       </div>
       <h3 class="text-center text-base font-bold text-ink mb-2">
         {hasMultiplePets ? `¿Eliminar a ${pet?.name}?` : '¿Eliminar cuenta?'}
