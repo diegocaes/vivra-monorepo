@@ -15,12 +15,17 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { SelectField } from '../../../components/ui/SelectField';
 import type { Grooming } from '../../../types/supabase';
+import { track } from '../../../lib/analytics';
+import { AddButton } from '../../../components/ui/AddButton';
+import { HistoryChart } from '../../../components/pet/HistoryChart';
+import { useSubscription } from '../../../contexts/SubscriptionContext';
 
 const GROOMING_OPTIONS = Object.entries(GROOMING_TYPES).map(([key, label]) => ({ key, label }));
 
 export default function GroomingScreen() {
   const router = useRouter();
   const { pet } = usePetContext();
+  const { isPremium } = useSubscription();
   const [groomings, setGroomings] = useState<Grooming[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,6 +99,10 @@ export default function GroomingScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `grooming_${editingGrooming ? 'editar' : 'crear'}`);
     resetForm();
     setShowForm(false);
     fetchData();
@@ -124,9 +133,7 @@ export default function GroomingScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Grooming</Text>
-        <TouchableOpacity onPress={() => setShowForm(true)}>
-          <Ionicons name="add-circle" size={28} color={Colors.accent} />
-        </TouchableOpacity>
+        <AddButton label="Grooming" onPress={() => setShowForm(true)} />
       </View>
 
       <ScrollView
@@ -144,6 +151,12 @@ export default function GroomingScreen() {
             <Text style={styles.statLabel}>Desde último</Text>
           </View>
         </View>
+
+        <HistoryChart
+          items={groomings.map(g => ({ date: g.date, amount: g.cost }))}
+          noun="sesiones"
+          showMoney={isPremium}
+        />
 
         {groomings.length === 0 && !loading ? (
           <View style={styles.empty}>

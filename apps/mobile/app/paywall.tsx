@@ -6,6 +6,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { PREMIUM_FEATURES } from '../constants/revenueCat';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { PACKAGE_TYPE } from 'react-native-purchases';
+import { track } from '../lib/analytics';
 
 const PRIVACY_URL = 'https://vivrapet.com/privacy';
 const TERMS_URL = 'https://vivrapet.com/terms';
@@ -19,13 +20,19 @@ export default function PaywallScreen() {
 
   async function handlePurchase(pkg: typeof monthly) {
     if (!pkg) return;
+    // Se registran intento y resultado por separado: la diferencia entre los
+    // dos ES la tasa de abandono en el momento de pagar.
+    const plan = pkg === yearly ? 'anual' : 'mensual';
+    track('click', `compra_intento_${plan}`);
     const success = await purchase(pkg);
+    track('click', `compra_${success ? 'exito' : 'abandono'}_${plan}`);
     if (success) {
       router.back();
     }
   }
 
   async function handleRestore() {
+    track('click', 'restaurar_compra');
     const success = await restore();
     if (success) {
       Alert.alert('Compra restaurada', 'Tu suscripción Premium ha sido restaurada.');

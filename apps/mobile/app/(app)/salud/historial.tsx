@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, friendlyError } from '@vivra/shared';
+import { formatDate, friendlyError, formatCurrency, sumAmounts } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
 import { Card } from '../../../components/ui/Card';
@@ -14,6 +14,9 @@ import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import type { VetVisit } from '../../../types/supabase';
+import { track } from '../../../lib/analytics';
+import { AddButton } from '../../../components/ui/AddButton';
+import { HistoryChart } from '../../../components/pet/HistoryChart';
 
 export default function HistorialScreen() {
   const router = useRouter();
@@ -99,6 +102,10 @@ export default function HistorialScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `vet_visit_${editingVisit ? 'editar' : 'crear'}`);
     resetForm();
     setShowForm(false);
     fetchData();
@@ -117,7 +124,9 @@ export default function HistorialScreen() {
   };
 
   // Stats
-  const totalCost = visits.reduce((sum, v) => sum + (v.cost ?? 0), 0);
+  // Mismo criterio y formato que el perfil. `toLocaleString()` además dependía
+  // del idioma del teléfono: en español salía "427,99" y en el perfil "427.99".
+  const totalCost = sumAmounts(visits, 'cost');
   const lastVisit = visits[0];
   const daysSinceLast = lastVisit
     ? Math.floor((Date.now() - new Date(lastVisit.date).getTime()) / (1000 * 60 * 60 * 24))
@@ -130,9 +139,7 @@ export default function HistorialScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Historial veterinario</Text>
-        <TouchableOpacity onPress={() => { resetForm(); setShowForm(true); }}>
-          <Ionicons name="add-circle" size={28} color={Colors.accent} />
-        </TouchableOpacity>
+        <AddButton label="Visita" onPress={() => { resetForm(); setShowForm(true); }} />
       </View>
 
       <ScrollView
@@ -152,7 +159,7 @@ export default function HistorialScreen() {
           </View>
           {isPremium ? (
             <View style={styles.statBox}>
-              <Text style={styles.statValue}>${totalCost.toLocaleString()}</Text>
+              <Text style={styles.statValue}>${formatCurrency(totalCost)}</Text>
               <Text style={styles.statLabel}>Total gastado</Text>
             </View>
           ) : (
@@ -162,6 +169,12 @@ export default function HistorialScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        <HistoryChart
+          items={visits.map(v => ({ date: v.date, amount: v.cost }))}
+          noun="visitas"
+          showMoney={isPremium}
+        />
 
         {visits.length === 0 && !loading ? (
           <View style={styles.empty}>

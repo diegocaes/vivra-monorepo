@@ -108,15 +108,15 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     <button
       type="button"
       id="toggle-peso-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95"
+      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
     >
       <div class="flex items-center gap-2.5">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50">
-          <svg class="h-3.5 w-3.5 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
+          <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </div>
-        <p class="text-sm font-semibold text-ink">Registrar peso</p>
+        <p class="text-sm font-semibold text-white">Registrar peso</p>
       </div>
-      <svg id="toggle-peso-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      <svg id="toggle-peso-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
     <div id="peso-form-body" class="hidden mt-2">

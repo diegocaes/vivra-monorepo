@@ -161,7 +161,7 @@ export default function SaludScreen() {
           icon="medkit"
           iconColor={Colors.good}
           title="Vacunas"
-          subtitle="Registro y badges de vacunación"
+          subtitle="Historial de dosis y próximas fechas"
           onPress={() => router.push('/(app)/salud/vacunas')}
           badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />

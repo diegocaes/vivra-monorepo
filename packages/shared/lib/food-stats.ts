@@ -5,6 +5,7 @@
  * cost ledger and trazabilidad tool, not an alarm. These stats power the
  * "Alimentación" tab and the home dashboard food card.
  */
+import { toAmount } from './spending';
 
 /** Minimal subset of the Food row we need for stats. Compatible with both
  *  the mobile `Food` type and what the web SSR queries select. */
@@ -82,9 +83,10 @@ export function computeFoodStats(foods: FoodLike[]): FoodStats {
   const pricePerDayList: number[] = [];
 
   for (const f of sorted) {
-    if (typeof f.price === 'number' && f.price > 0) {
-      totalSpent += f.price;
-    }
+    // Misma regla que el resumen de gastos del perfil (ver ./spending.ts):
+    // si aquí y allá se sumara distinto, el usuario vería dos totales para
+    // el mismo dinero.
+    totalSpent += toAmount(f.price);
     if (typeof f.daily_grams === 'number' && f.daily_grams > 0) {
       dailyGramsList.push(f.daily_grams);
     }
@@ -100,8 +102,9 @@ export function computeFoodStats(foods: FoodLike[]): FoodStats {
 
     if (durationDays !== null && durationDays > 0) {
       durationDaysList.push(durationDays);
-      if (typeof f.price === 'number' && f.price > 0) {
-        pricePerDayList.push(f.price / durationDays);
+      const price = toAmount(f.price);
+      if (price > 0) {
+        pricePerDayList.push(price / durationDays);
       }
     }
   }
@@ -113,7 +116,7 @@ export function computeFoodStats(foods: FoodLike[]): FoodStats {
     avgPricePerDay: avg(pricePerDayList),
     avgDaysPerBag: avg(durationDaysList) !== null ? Math.round(avg(durationDaysList)!) : null,
     avgDailyGrams: avg(dailyGramsList) !== null ? Math.round(avg(dailyGramsList)!) : null,
-    totalSpent,
+    totalSpent: Math.round(totalSpent * 100) / 100,
     totalBags: sorted.length,
     latestFood,
   };

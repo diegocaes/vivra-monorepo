@@ -4,7 +4,7 @@ import Card from '../components/ui/Card.astro';
 import Input from '../components/ui/Input.astro';
 import Button from '../components/ui/Button.astro';
 import SectionHeader from '../components/ui/SectionHeader.astro';
-import { DOG_BREEDS, formatCurrency, calculateAge, parseNumericField } from '@vivra/shared';
+import { DOG_BREEDS, formatCurrency, calculateAge, parseNumericField, sumAmounts } from '@vivra/shared';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { getActivePet } from '../lib/pet';
 import { uploadPetPhoto } from '../lib/storage';
@@ -22,8 +22,13 @@ const hasPasswordLogin = user.identities?.some((i: { provider: string }) => i.pr
 const fullName = user.user_metadata?.full_name || user.user_metadata?.name || '';
 const firstName = fullName.split(' ')[0] || user.email?.split('@')[0] || 'bienvenido';
 
-// Get existing pet + all pets (to decide delete behavior)
-const { pet, pets, isOwner } = await getActivePet(supabase, user.id, activePetId);
+// Estas dos consultas solo dependen de user.id, así que van juntas. En serie
+// eran dos viajes a Supabase encadenados antes de renderizar nada.
+const [petCtx, ownerProfileRes] = await Promise.all([
+  getActivePet(supabase, user.id, activePetId),
+  supabase.from('owner_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+]);
+const { pet, pets, isOwner } = petCtx;
 const hasMultiplePets = pets.length > 1;
 
 // Profile completion badge logic
@@ -42,12 +47,8 @@ const totalFields = profileFields.length;
 const isProfileComplete = pet && completedFields === totalFields;
 const completionPct = pet ? Math.round((completedFields / totalFields) * 100) : 0;
 
-// Owner profile
-const { data: ownerProfile } = await supabase
-  .from('owner_profiles')
-  .select('*')
-  .eq('user_id', user.id)
-  .maybeSingle();
+// Owner profile (ya resuelto arriba, en paralelo con getActivePet)
+const ownerProfile = ownerProfileRes.data;
 
 // Handle form submission
 if (Astro.request.method === 'POST') {
@@ -267,16 +268,18 @@ const breedInList = pet?.breed ? DOG_BREEDS.includes(pet.breed as typeof DOG_BRE
 const isOtherBreed = pet?.breed && !breedInList;
 const isCatPet = ((pet as any)?.species ?? 'dog') === 'cat';
 
-// Premium + Spending data
-const premium = await getPremiumStatus(supabase, user.id);
+// Premium + suscripción propia (para avisos al eliminar cuenta). Ninguna
+// depende de la otra, así que se piden a la vez.
+const [premium, ownSubRes] = await Promise.all([
+  getPremiumStatus(supabase, user.id),
+  supabase
+    .from('user_subscriptions')
+    .select('source, premium_until, cancel_scheduled_at')
+    .eq('user_id', user.id)
+    .maybeSingle(),
+]);
 const isPremium = premium.isPremium;
-
-// Suscripción propia (para avisos al eliminar cuenta)
-const { data: ownSub } = await supabase
-  .from('user_subscriptions')
-  .select('source, premium_until, cancel_scheduled_at')
-  .eq('user_id', user.id)
-  .maybeSingle();
+const ownSub = ownSubRes.data;
 const subVigente = !!(ownSub?.premium_until && new Date(ownSub.premium_until) > new Date());
 const hasActiveWebSub = ownSub?.source === 'web' && subVigente && !ownSub.cancel_scheduled_at;
 const hasActiveIapSub = ownSub?.source === 'iap' && subVigente;
@@ -301,13 +304,19 @@ if (pet) {
     admin.from('preventive_treatments').select('cost').eq('pet_id', pet.id).not('cost', 'is', null),
     admin.from('foods').select('price').eq('pet_id', pet.id).not('price', 'is', null),
   ]);
-  spending.alimento = (foodRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
-  spending.vet = (vetRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
-  spending.grooming = (groomRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
-  spending.vuelos = (flightRes.data ?? []).reduce((s: number, r: any) => s + (r.ticket_price ?? 0), 0);
-  spending.snacks = (treatRes.data ?? []).reduce((s: number, r: any) => s + (r.price ?? 0), 0);
-  spending.preventivos = (prevRes.data ?? []).reduce((s: number, r: any) => s + (r.cost ?? 0), 0);
-  spending.total = spending.alimento + spending.vet + spending.grooming + spending.vuelos + spending.snacks + spending.preventivos;
+  // `sumAmounts` es la MISMA función que usa /alimentacion y el resumen del
+  // móvil. Antes cada sitio sumaba a su manera y el total del perfil podía no
+  // coincidir con el de la pantalla de la que venía el gasto.
+  spending.alimento = sumAmounts(foodRes.data, 'price');
+  spending.vet = sumAmounts(vetRes.data, 'cost');
+  spending.grooming = sumAmounts(groomRes.data, 'cost');
+  spending.vuelos = sumAmounts(flightRes.data, 'ticket_price');
+  spending.snacks = sumAmounts(treatRes.data, 'price');
+  spending.preventivos = sumAmounts(prevRes.data, 'cost');
+  spending.total = Math.round(
+    (spending.alimento + spending.vet + spending.grooming +
+     spending.vuelos + spending.snacks + spending.preventivos) * 100,
+  ) / 100;
 }
 
 // Co-owner data
@@ -319,40 +328,44 @@ const inviteTokenParam = Astro.url.searchParams.get('invite_token');
 try {
   if (pet && isOwner) {
     const admin = createSupabaseAdminClient();
-    const { data: shares } = await admin
-      .from('pet_shares')
-      .select('id, shared_with')
-      .eq('pet_id', pet.id);
+    // La invitación pendiente no depende de los co-dueños: se piden juntas.
+    const invitePromise = inviteTokenParam
+      ? admin.from('pet_share_invites')
+          .select('token, expires_at')
+          .eq('token', inviteTokenParam)
+          .maybeSingle()
+      : admin.from('pet_share_invites')
+          .select('token, expires_at')
+          .eq('pet_id', pet.id)
+          .eq('inviter_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
+    const [sharesRes, inviteRes] = await Promise.all([
+      admin.from('pet_shares').select('id, shared_with').eq('pet_id', pet.id),
+      invitePromise,
+    ]);
+    pendingInvite = inviteRes.data;
+
+    const shares = sharesRes.data;
     if (shares && shares.length > 0) {
-      for (const share of shares) {
-        const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
-        const sharedName = sharedUser?.user_metadata?.full_name || sharedUser?.user_metadata?.name || '';
-        coOwners.push({
-          id: share.id,
-          shared_with: share.shared_with,
-          email: sharedUser?.email ?? 'Usuario',
-          name: sharedName,
-        });
-      }
-    }
-
-    if (inviteTokenParam) {
-      const { data: inv } = await admin.from('pet_share_invites')
-        .select('token, expires_at')
-        .eq('token', inviteTokenParam)
-        .maybeSingle();
-      pendingInvite = inv;
-    } else {
-      const { data: inv } = await admin.from('pet_share_invites')
-        .select('token, expires_at')
-        .eq('pet_id', pet.id)
-        .eq('inviter_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      pendingInvite = inv;
+      // Antes esto era un for con await adentro: un viaje por co-dueño, en
+      // fila. Con Promise.all los N tardan lo que tardaba uno.
+      const perfiles = await Promise.all(
+        shares.map(async (share: { id: string; shared_with: string }) => {
+          const { data: { user: sharedUser } } = await admin.auth.admin.getUserById(share.shared_with);
+          const sharedName = sharedUser?.user_metadata?.full_name || sharedUser?.user_metadata?.name || '';
+          return {
+            id: share.id,
+            shared_with: share.shared_with,
+            email: sharedUser?.email ?? 'Usuario',
+            name: sharedName,
+          };
+        }),
+      );
+      coOwners.push(...perfiles);
     }
   }
 

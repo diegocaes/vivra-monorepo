@@ -1,15 +1,19 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
+import HistoryChart from '../../components/HistoryChart.astro';
 import Card from '../../components/ui/Card.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
-import { formatDate } from '@vivra/shared';
+import { formatDate, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
+import { getPremiumStatus } from '../../lib/premium';
 import { GROOMING_TYPES } from '@vivra/shared';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
+
+const premium = await getPremiumStatus(supabase, user.id);
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
@@ -21,7 +25,7 @@ if (Astro.request.method === 'POST') {
       type: formData.get('type') as string,
       groomer_name: (formData.get('groomer_name') as string) || null,
       location: (formData.get('location') as string) || null,
-      cost: formData.get('cost') ? Number(formData.get('cost')) : null,
+      cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     });
   }
@@ -32,7 +36,7 @@ if (Astro.request.method === 'POST') {
       type: formData.get('type') as string,
       groomer_name: (formData.get('groomer_name') as string) || null,
       location: (formData.get('location') as string) || null,
-      cost: formData.get('cost') ? Number(formData.get('cost')) : null,
+      cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     }).eq('id', groomingId).eq('pet_id', pet.id);
   }
@@ -78,7 +82,13 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
           <p class="text-[10px] text-muted font-medium mt-0.5">último grooming</p>
         </div>
         <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{avgCost ? `$${avgCost}` : '—'}</p>
+          {!avgCost ? (
+            <p class="text-lg font-black text-ink">—</p>
+          ) : premium.isPremium ? (
+            <p class="text-lg font-black text-ink">${avgCost}</p>
+          ) : (
+            <a href="/premium" class="text-lg font-black text-accent hover:text-accent-dark transition-colors">$•••</a>
+          )}
           <p class="text-[10px] text-muted font-medium mt-0.5">costo prom.</p>
         </div>
       </div>
@@ -95,15 +105,15 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     <button
       type="button"
       id="toggle-grooming-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95"
+      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
     >
       <div class="flex items-center gap-2.5">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50">
-          <svg class="h-3.5 w-3.5 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
+          <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </div>
-        <p class="text-sm font-semibold text-ink">Registrar grooming</p>
+        <p class="text-sm font-semibold text-white">Registrar grooming</p>
       </div>
-      <svg id="toggle-grooming-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      <svg id="toggle-grooming-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
     <div id="grooming-form-body" class="hidden mt-2">
@@ -155,6 +165,14 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
       </Card>
     </div>
   </div>
+
+  {/* ── GRÁFICO HISTÓRICO ── */}
+  <HistoryChart
+    items={(groomings ?? []).map(g => ({ date: g.date, amount: g.cost }))}
+    showMoney={premium.isPremium}
+    noun="sesiones"
+    class="mb-5 animate-fade-up"
+  />
 
   {/* ── HISTORIAL ── */}
   {groomings && groomings.length > 0 && (

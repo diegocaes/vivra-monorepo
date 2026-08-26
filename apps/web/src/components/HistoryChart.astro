@@ -1,0 +1,147 @@
+---
+/**
+ * HistoryChart — barras por mes sobre un historial (visitas, groomings,
+ * preventivos…). Se renderiza como SVG en el servidor: cero JavaScript en el
+ * cliente, cero hidratación. A diferencia de WeightChart (React + client:load),
+ * esto no agrega nada al bundle.
+ *
+ * Muestra dinero cuando hay costos registrados y cae a conteo cuando no los
+ * hay, para que la gráfica sirva igual antes de que el usuario anote precios.
+ */
+import { formatCurrency as fmtMoney } from '@vivra/shared';
+
+interface Item {
+  /** 'YYYY-MM-DD' */
+  date: string | null | undefined;
+  /** Costo asociado, si lo hay. */
+  amount?: number | null;
+}
+
+interface Props {
+  items: Item[];
+  /** Cuántos meses hacia atrás mostrar. */
+  months?: number;
+  /** Qué representa cada punto: "visitas", "sesiones", "dosis"… */
+  noun?: string;
+  /**
+   * Los totales en plata por sección son Premium (igual que en el móvil).
+   * Sin premium la gráfica cuenta eventos, que ya es útil, y ofrece el
+   * desglose como upsell en vez de dejar un hueco.
+   */
+  showMoney?: boolean;
+  class?: string;
+}
+
+const { items, months = 12, noun = 'registros', showMoney = false, class: className = '' } = Astro.props;
+
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const now = new Date();
+const buckets: { key: string; label: string; year: number; count: number; total: number }[] = [];
+for (let i = months - 1; i >= 0; i--) {
+  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  buckets.push({
+    key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+    label: MONTH_LABELS[d.getMonth()],
+    year: d.getFullYear(),
+    count: 0,
+    total: 0,
+  });
+}
+const byKey = new Map(buckets.map(b => [b.key, b]));
+
+for (const it of items) {
+  if (!it.date) continue;
+  const b = byKey.get(it.date.slice(0, 7));
+  if (!b) continue;
+  b.count += 1;
+  const amt = Number(it.amount);
+  if (Number.isFinite(amt) && amt > 0) b.total += amt;
+}
+
+// Se muestra plata solo si el usuario es premium Y hay costos anotados.
+const hasCostData = buckets.some(b => b.total > 0);
+const hasMoney = showMoney && hasCostData;
+const alturaDe = (b: typeof buckets[number]) => (hasMoney ? b.total : b.count);
+const maxVal = Math.max(...buckets.map(alturaDe), 1);
+
+const periodTotal = buckets.reduce((s, b) => s + b.total, 0);
+const periodCount = buckets.reduce((s, b) => s + b.count, 0);
+// Promedio sobre los meses con actividad: dividir entre 12 con dos visitas
+// daría "0.2/mes", que no le dice nada a nadie.
+const activeMonths = buckets.filter(b => b.count > 0).length;
+
+const W = 560;
+const H = 180;
+const PAD = { top: 26, right: 8, bottom: 30, left: 8 };
+const plotW = W - PAD.left - PAD.right;
+const plotH = H - PAD.top - PAD.bottom;
+const slot = plotW / buckets.length;
+const barW = Math.min(30, slot * 0.62);
+
+const fmt = (n: number) =>
+  n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+
+// Con muchos meses, etiquetar todos los ejes los amontona.
+const labelEvery = buckets.length > 8 ? 2 : 1;
+---
+
+{periodCount > 0 && (
+  <div class:list={['rounded-2xl border border-card-border bg-card px-4 py-4', className]}>
+    <div class="flex items-baseline justify-between gap-3 mb-1">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest">
+        Últimos {months} meses
+      </p>
+      <p class="text-sm font-bold text-ink">
+        {hasMoney ? `$${fmt(periodTotal)}` : `${periodCount} ${noun}`}
+        {hasMoney && activeMonths > 0 && (
+          <span class="ml-1.5 text-xs font-medium text-muted">
+            ~${fmt(periodTotal / activeMonths)}/mes
+          </span>
+        )}
+      </p>
+    </div>
+
+    {!showMoney && hasCostData && (
+      <a href="/premium" class="mb-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-dark transition-colors">
+        <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Ver cuánto gastaste con Premium
+      </a>
+    )}
+
+    <svg viewBox={`0 0 ${W} ${H}`} class="w-full h-auto" preserveAspectRatio="xMidYMid meet" role="img"
+      aria-label={`Historial de ${noun} por mes`}>
+      <line x1={PAD.left} y1={H - PAD.bottom} x2={W - PAD.right} y2={H - PAD.bottom}
+        stroke="#EAECF0" stroke-width="1" />
+
+      {buckets.map((b, i) => {
+        const v = alturaDe(b);
+        const h = v > 0 ? Math.max(3, (v / maxVal) * plotH) : 0;
+        const x = PAD.left + i * slot + (slot - barW) / 2;
+        const y = H - PAD.bottom - h;
+        return (
+          <g>
+            {v > 0 ? (
+              <rect x={x} y={y} width={barW} height={h} rx="3" fill="#F97316" opacity="0.85">
+                <title>{`${b.label} ${b.year} — ${b.count} ${noun}${b.total > 0 ? ` · $${fmtMoney(b.total)}` : ''}`}</title>
+              </rect>
+            ) : (
+              <rect x={x} y={H - PAD.bottom - 3} width={barW} height="3" rx="1.5" fill="#EAECF0" />
+            )}
+            {v > 0 && (
+              <text x={x + barW / 2} y={Math.max(12, y - 6)} text-anchor="middle"
+                fill="#667085" font-size="10" font-weight="600">
+                {hasMoney ? `$${fmt(b.total)}` : b.count}
+              </text>
+            )}
+            {i % labelEvery === 0 && (
+              <text x={x + barW / 2} y={H - 10} text-anchor="middle" fill="#9ca3af" font-size="10">
+                {b.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  </div>
+)}

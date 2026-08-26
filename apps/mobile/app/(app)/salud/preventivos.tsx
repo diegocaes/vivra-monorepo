@@ -14,6 +14,9 @@ import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { schedulePreventiveReminder, requestPushPermissionAndRegister } from '../../../hooks/useNotifications';
 import type { PreventiveTreatment } from '../../../types/supabase';
+import { track } from '../../../lib/analytics';
+import { HistoryChart } from '../../../components/pet/HistoryChart';
+import { useSubscription } from '../../../contexts/SubscriptionContext';
 
 type TreatmentType = 'antipulgas' | 'desparasitante' | 'combinado';
 
@@ -69,14 +72,21 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
         <Text style={styles.statusLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{config.label}</Text>
         <Text style={[styles.statusText, { color: statusColor, fontWeight: isUrgent ? FontWeight.bold : FontWeight.medium }]}>{statusText}</Text>
       </View>
-      <Ionicons name="add-circle-outline" size={24} color={Colors.accent} />
+      <Ionicons name="add-circle" size={26} color={Colors.accent} />
     </TouchableOpacity>
   );
+}
+
+/** Quita duplicados por id: un 'combinado' aparece en antipulgas Y en
+ *  desparasitante, y sin esto se contaría (y cobraría) dos veces. */
+function dedupePorId<T extends { id: string }>(items: T[]): T[] {
+  return [...new Map(items.map(i => [i.id, i])).values()];
 }
 
 export default function PreventivosScreen() {
   const router = useRouter();
   const { pet } = usePetContext();
+  const { isPremium } = useSubscription();
   const [antipulgas, setAntipulgas] = useState<PreventiveTreatment[]>([]);
   const [desparasitante, setDesparasitante] = useState<PreventiveTreatment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,6 +179,10 @@ export default function PreventivosScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `preventivo_${editingTreatment ? 'editar' : 'crear'}`);
 
     // Schedule reminder only on new entries
     if (!editingTreatment) {
@@ -280,6 +294,14 @@ export default function PreventivosScreen() {
           </View>
           <Ionicons name="add-circle" size={22} color={Colors.accent} />
         </TouchableOpacity>
+
+        {/* Una sola gráfica con todas las dosis: lo que importa aquí es la
+            constancia, y separarla por tipo la haría ilegible. */}
+        <HistoryChart
+          items={dedupePorId([...antipulgas, ...desparasitante]).map(t => ({ date: t.date_given, amount: t.cost }))}
+          noun="dosis"
+          showMoney={isPremium}
+        />
 
         {/* History lists */}
         {renderList(antipulgas, 'Historial Antipulgas')}

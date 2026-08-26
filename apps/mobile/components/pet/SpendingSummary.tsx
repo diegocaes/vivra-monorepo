@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { Card } from '../ui/Card';
-import { formatCurrency } from '@vivra/shared';
+import { formatCurrency, sumAmounts } from '@vivra/shared';
+import { track } from '../../lib/analytics';
 
 interface SpendingSummaryProps {
   petId: string;
@@ -43,16 +44,15 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
         if (res.error) console.warn(`[SpendingSummary] ${name} error:`, res.error.message);
       }
 
-      const sum = (arr: any[] | null, key: string) =>
-        (arr ?? []).reduce((s: number, r: any) => s + (Number(r[key]) || 0), 0);
-
+      // `sumAmounts` es la misma función que usa el perfil web y la pantalla
+      // de alimentación: un solo criterio para que los totales cuadren.
       setCategories([
-        { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sum(foodRes.data, 'price') },
-        { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sum(vetRes.data, 'cost') },
-        { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sum(groomRes.data, 'cost') },
-        { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sum(flightRes.data, 'ticket_price') },
-        { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: sum(treatRes.data, 'price') },
-        { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: sum(prevRes.data, 'cost') },
+        { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sumAmounts(foodRes.data, 'price') },
+        { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sumAmounts(vetRes.data, 'cost') },
+        { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sumAmounts(groomRes.data, 'cost') },
+        { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sumAmounts(flightRes.data, 'ticket_price') },
+        { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: sumAmounts(treatRes.data, 'price') },
+        { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: sumAmounts(prevRes.data, 'cost') },
       ]);
     } catch (e: any) {
       console.warn('[SpendingSummary] unexpected error:', e?.message ?? e);
@@ -63,7 +63,7 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
 
   useEffect(() => { fetchSpending(); }, [fetchSpending]);
 
-  const grandTotal = categories.reduce((s, c) => s + c.total, 0);
+  const grandTotal = Math.round(categories.reduce((s, c) => s + c.total, 0) * 100) / 100;
 
   if (loading) return null;
 
@@ -88,7 +88,15 @@ export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
           ))}
         </View>
       ) : (
-        <TouchableOpacity onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+        <TouchableOpacity
+          onPress={() => {
+            // Saber QUÉ candado empuja al paywall vale más que el total de
+            // aperturas: dice qué función vale la pena vender.
+            track('click', 'upsell_desglose_gastos');
+            router.push('/paywall' as any);
+          }}
+          activeOpacity={0.8}
+        >
           <View style={styles.lockedRow}>
             <View style={styles.lockedLeft}>
               <Ionicons name="lock-closed" size={16} color={Colors.muted} />

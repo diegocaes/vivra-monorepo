@@ -1,12 +1,16 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
+import HistoryChart from '../../components/HistoryChart.astro';
 
 import { formatDate, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
+import { getPremiumStatus } from '../../lib/premium';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
+
+const premium = await getPremiumStatus(supabase, user.id);
 
 // POST handler
 if (Astro.request.method === 'POST') {
@@ -122,14 +126,14 @@ const openForm = Astro.url.searchParams.get('new');
 
   {/* ── ADD BUTTONS ── */}
   <div class="flex gap-2 mb-3 animate-fade-up">
-    <a href="/salud/preventivos?new=antipulgas" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-card border border-card-border px-4 py-3 text-sm font-semibold text-ink hover:border-accent/30 transition-all active:scale-95">
+    <a href="/salud/preventivos?new=antipulgas" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/20 hover:bg-accent-dark transition-all active:scale-95">
       <span>🐛</span> Registrar antipulgas
     </a>
-    <a href="/salud/preventivos?new=desparasitante" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-card border border-card-border px-4 py-3 text-sm font-semibold text-ink hover:border-accent/30 transition-all active:scale-95">
+    <a href="/salud/preventivos?new=desparasitante" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/20 hover:bg-accent-dark transition-all active:scale-95">
       <span>💊</span> Registrar desparasitante
     </a>
   </div>
-  <a href="/salud/preventivos?new=combinado" class="flex items-center justify-center gap-2 rounded-2xl bg-accent-light border border-accent/30 px-4 py-3 text-sm font-semibold text-ink hover:border-accent transition-all active:scale-95 mb-6 animate-fade-up">
+  <a href="/salud/preventivos?new=combinado" class="flex items-center justify-center gap-2 rounded-2xl bg-card border-2 border-accent/40 px-4 py-3 text-sm font-semibold text-accent-dark hover:bg-accent-light transition-all active:scale-95 mb-6 animate-fade-up">
     <span>✨</span> Registrar combinado (antipulgas + desparasitante)
   </a>
 
@@ -216,6 +220,14 @@ const openForm = Astro.url.searchParams.get('new');
       </div>
     </div>
   )}
+
+  {/* ── GRÁFICO HISTÓRICO ── */}
+  <HistoryChart
+    items={(treatments ?? []).map(t => ({ date: t.date_given, amount: t.cost }))}
+    showMoney={premium.isPremium}
+    noun="dosis"
+    class="mb-5 animate-fade-up"
+  />
 
   {/* ── ANTIPULGAS LIST ── */}
   <div class="mb-6 animate-fade-up">

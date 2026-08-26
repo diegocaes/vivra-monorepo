@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
+import { Colors, Spacing, FontSize, FontWeight } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
 import { formatDate, timeUntil, friendlyError } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
@@ -14,6 +14,8 @@ import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
 import type { Vaccine } from '../../../types/supabase';
+import { track } from '../../../lib/analytics';
+import { AddButton } from '../../../components/ui/AddButton';
 
 const VACCINE_OPTIONS = [
   { key: 'Rabia', label: 'Rabia' },
@@ -24,23 +26,6 @@ const VACCINE_OPTIONS = [
   { key: 'Hepatitis', label: 'Hepatitis' },
   { key: 'Otra', label: 'Otra' },
 ];
-
-const BADGE_IMAGES: Record<string, any> = {
-  rabia: require('../../../assets/badges/vacunas/rabia.png'),
-  parvo: require('../../../assets/badges/vacunas/parvo.png'),
-  moquillo: require('../../../assets/badges/vacunas/moquillo.png'),
-  bordetella: require('../../../assets/badges/vacunas/bordetella.png'),
-  lepto: require('../../../assets/badges/vacunas/lepto.png'),
-  hepatitis: require('../../../assets/badges/vacunas/hepatitis.png'),
-};
-
-function getVaccineBadgeImage(name: string): any | null {
-  const lower = name.toLowerCase();
-  for (const [keyword, img] of Object.entries(BADGE_IMAGES)) {
-    if (lower.includes(keyword)) return img;
-  }
-  return null;
-}
 
 export default function VacunasScreen() {
   const router = useRouter();
@@ -120,6 +105,10 @@ export default function VacunasScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `vacuna_${editingVaccine ? 'editar' : 'crear'}`);
     resetForm();
     setShowForm(false);
     fetchData();
@@ -137,13 +126,6 @@ export default function VacunasScreen() {
     ]);
   };
 
-  // Badge gallery: count unique vaccine names
-  const badgeCounts = new Map<string, number>();
-  vaccines.forEach(v => {
-    const key = v.name.toLowerCase();
-    badgeCounts.set(key, (badgeCounts.get(key) ?? 0) + 1);
-  });
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
@@ -152,9 +134,7 @@ export default function VacunasScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Vacunas</Text>
-        <TouchableOpacity onPress={() => { resetForm(); setShowForm(true); }}>
-          <Ionicons name="add-circle" size={28} color={Colors.accent} />
-        </TouchableOpacity>
+        <AddButton label="Vacuna" onPress={() => { resetForm(); setShowForm(true); }} />
       </View>
 
       <ScrollView
@@ -162,35 +142,6 @@ export default function VacunasScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Badge gallery */}
-        {badgeCounts.size > 0 && (
-          <Card>
-            <Text style={styles.sectionTitle}>Badges de vacunación</Text>
-            <View style={styles.badgeGrid}>
-              {Array.from(badgeCounts.entries()).map(([key, count]) => {
-                const img = getVaccineBadgeImage(key);
-                return (
-                  <View key={key} style={styles.badgeItem}>
-                    {img ? (
-                      <Image source={img} style={styles.badgeImg} />
-                    ) : (
-                      <View style={[styles.badgeImg, styles.badgePlaceholder]}>
-                        <Ionicons name="medkit" size={24} color={Colors.accent} />
-                      </View>
-                    )}
-                    <Text style={styles.badgeName} numberOfLines={1}>{key}</Text>
-                    {count > 1 && (
-                      <View style={styles.doseBadge}>
-                        <Text style={styles.doseText}>×{count}</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          </Card>
-        )}
-
         {/* Vaccine list */}
         {vaccines.length === 0 && !loading ? (
           <View style={styles.empty}>
@@ -304,45 +255,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     color: Colors.ink,
     marginBottom: Spacing.sm,
-  },
-  badgeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.md,
-  },
-  badgeItem: {
-    alignItems: 'center',
-    width: 64,
-  },
-  badgeImg: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.md,
-  },
-  badgePlaceholder: {
-    backgroundColor: Colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeName: {
-    fontSize: FontSize.xs,
-    color: Colors.muted,
-    marginTop: 4,
-    textTransform: 'capitalize',
-  },
-  doseBadge: {
-    position: 'absolute',
-    top: -4,
-    right: 2,
-    backgroundColor: Colors.accent,
-    borderRadius: Radius.full,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
-  doseText: {
-    fontSize: 10,
-    fontWeight: FontWeight.bold,
-    color: Colors.white,
   },
   vaccineRow: {
     flexDirection: 'row',

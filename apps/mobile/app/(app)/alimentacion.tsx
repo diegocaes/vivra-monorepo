@@ -17,6 +17,8 @@ import { FormField } from '../../components/ui/FormField';
 import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
 import type { Food, Treat } from '../../types/supabase';
+import { track } from '../../lib/analytics';
+import { AddButton } from '../../components/ui/AddButton';
 
 const FOOD_OPTIONS = Object.entries(FOOD_TYPES).map(([key, label]) => ({ key, label }));
 const UNIT_OPTIONS = [
@@ -307,6 +309,10 @@ export default function AlimentacionScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `alimento_${editingFood ? 'editar' : 'crear'}`);
     resetFoodForm();
     setShowFoodForm(false);
     fetchData();
@@ -362,6 +368,7 @@ export default function AlimentacionScreen() {
       Alert.alert('Error', friendlyError(error));
       return;
     }
+    track('crud', `snack_${editingTreat ? 'editar' : 'crear'}`);
     resetTreatForm();
     setShowTreatForm(false);
     fetchData();
@@ -386,9 +393,7 @@ export default function AlimentacionScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Alimentación</Text>
-        <TouchableOpacity onPress={openAddFood}>
-          <Ionicons name="add-circle" size={28} color={Colors.accent} />
-        </TouchableOpacity>
+        <AddButton label="Alimento" onPress={openAddFood} />
       </View>
 
       <ScrollView
@@ -435,7 +440,13 @@ export default function AlimentacionScreen() {
                 Total gastado en alimentación: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.ink }}>${formatCurrency(stats.totalSpent)}</Text>
               </Text>
             ) : (
-              <TouchableOpacity onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+              <TouchableOpacity
+                onPress={() => {
+                  track('click', 'upsell_total_alimentacion');
+                  router.push('/paywall' as any);
+                }}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.totalSpentText}>
                   <Ionicons name="lock-closed" size={11} color={Colors.muted} /> Total gastado en alimentación: <Text style={{ fontWeight: FontWeight.semibold, color: Colors.accent }}>ver con Premium</Text>
                 </Text>

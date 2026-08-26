@@ -14,6 +14,8 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import type { WeightRecord } from '../../../types/supabase';
+import { track } from '../../../lib/analytics';
+import { AddButton } from '../../../components/ui/AddButton';
 
 // Mini weight chart
 function WeightChart({ records }: { records: WeightRecord[] }) {
@@ -189,6 +191,10 @@ export default function PesoScreen() {
       return;
     }
 
+    // Solo se registra el guardado exitoso: los intentos fallidos ya se ven
+    // en Sentry y aquí solo ensuciarían las métricas de uso.
+    track('crud', `peso_${editingRecord ? 'editar' : 'crear'}`);
+
     resetForm();
     setShowForm(false);
     fetchData();
@@ -218,9 +224,7 @@ export default function PesoScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Peso</Text>
-        <TouchableOpacity onPress={() => setShowForm(true)}>
-          <Ionicons name="add-circle" size={28} color={Colors.accent} />
-        </TouchableOpacity>
+        <AddButton label="Peso" onPress={() => setShowForm(true)} />
       </View>
 
       <ScrollView

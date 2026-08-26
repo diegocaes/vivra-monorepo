@@ -4,7 +4,6 @@ import Card from '../../components/ui/Card.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
 import { formatDate } from '@vivra/shared';
-import { getVaccineBadge } from '../../lib/vaccine-badges';
 import { getActivePet } from '../../lib/pet';
 import { uploadPetPhoto } from '../../lib/storage';
 
@@ -61,10 +60,6 @@ const { data: vaccines } = await supabase
   .eq('pet_id', pet.id)
   .order('date_given', { ascending: false });
 
-const countMap: Record<string, number> = {};
-vaccines?.forEach(v => { const k = v.name.toLowerCase(); countMap[k] = (countMap[k] || 0) + 1; });
-const badgeList = [...new Map(vaccines?.map(v => [v.name.toLowerCase(), v]) ?? []).values()];
-
 // Analytics
 const overdueCount = vaccines?.filter(v => v.next_due && new Date(v.next_due + 'T00:00:00') < new Date()).length ?? 0;
 const upcomingCount = vaccines?.filter(v => {
@@ -80,36 +75,9 @@ const upcomingCount = vaccines?.filter(v => {
     Salud
   </a>
 
-  {/* ── ANALYTICS ── */}
+  {/* ── RESUMEN ── */}
   {vaccines && vaccines.length > 0 ? (
     <div class="mb-5 animate-fade-up">
-      {/* Badge Gallery */}
-      <div class="flex flex-wrap gap-4 mb-4 px-1">
-        {badgeList.map(v => {
-          const { src, label } = getVaccineBadge(v.name);
-          const count = countMap[v.name.toLowerCase()] ?? 1;
-          return (
-            <div class="flex flex-col items-center gap-1.5 relative">
-              <div class="relative">
-                {src ? (
-                  <img src={src} alt={label} class="h-16 w-16 object-contain drop-shadow-sm" loading="lazy" />
-                ) : (
-                  <div class="h-16 w-16 rounded-2xl bg-accent/10 flex items-center justify-center">
-                    <svg class="h-7 w-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/></svg>
-                  </div>
-                )}
-                {count > 1 && (
-                  <span class="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-black text-white ring-2 ring-canvas">
-                    ×{count}
-                  </span>
-                )}
-              </div>
-              <p class="text-[10px] font-medium text-muted text-center leading-tight max-w-16 truncate">{label}</p>
-            </div>
-          );
-        })}
-      </div>
-
       {/* Stats row */}
       <div class="grid grid-cols-3 gap-3">
         <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
@@ -138,11 +106,11 @@ const upcomingCount = vaccines?.filter(v => {
     <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
       <button type="button" id="toggle-vaccine-card" class="w-full flex items-center justify-between px-4 py-3.5 hover:bg-canvas transition-colors">
         <div class="flex items-center gap-2.5">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
             <svg class="h-3.5 w-3.5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
           </div>
           <div class="text-left">
-            <p class="text-sm font-semibold text-ink">Carné de vacunas</p>
+            <p class="text-sm font-semibold text-white">Carné de vacunas</p>
             <p class="text-xs text-muted">{pet.vaccine_card_url ? 'Foto guardada' : 'Sube una foto de tu carné físico'}</p>
           </div>
         </div>
@@ -199,15 +167,15 @@ const upcomingCount = vaccines?.filter(v => {
     <button
       type="button"
       id="toggle-vaccine-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95"
+      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10">
-          <svg class="h-3.5 w-3.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         </div>
         <p class="text-sm font-semibold text-ink">Registrar vacuna</p>
       </div>
-      <svg id="toggle-vaccine-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      <svg id="toggle-vaccine-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
     <div id="vaccine-form-body" class="hidden mt-2">

@@ -122,6 +122,98 @@ const iosCount = events.filter(e => e.platform === 'ios').length;
 
 const recentEvents = events.slice(0, 40);
 
+// ── PESTAÑA PREMIUM ────────────────────────────────────────────────────────
+// La pregunta que responde: ¿los que pagan usan la app distinto a los que no?
+// Si un premium deja de aparecer aquí, es churn antes de que se note en la
+// facturación — que es cuando todavía se puede hacer algo.
+const tab = Astro.url.searchParams.get('tab') === 'premium' ? 'premium' : 'general';
+
+const { data: allSubsRaw } = await admin
+  .from('user_subscriptions')
+  .select('user_id, plan, source, premium_until, trial_ends_at, created_at, cancel_scheduled_at')
+  .order('created_at', { ascending: false });
+
+const emailById = new Map(allUsers.map((u: any) => [u.id, u.email ?? '—']));
+
+const ahora = Date.now();
+const DIA = 86400000;
+
+// Última actividad y volumen por usuario, de los eventos ya filtrados.
+const lastSeen = new Map<string, string>();
+const eventsByUser = new Map<string, number>();
+const screensByUser = new Map<string, Map<string, number>>();
+for (const e of events) {
+  if (!e.user_id) continue;
+  if (!lastSeen.has(e.user_id)) lastSeen.set(e.user_id, e.created_at);
+  eventsByUser.set(e.user_id, (eventsByUser.get(e.user_id) ?? 0) + 1);
+  if (e.event === 'page_view' || e.event === 'screen_view') {
+    let m = screensByUser.get(e.user_id);
+    if (!m) { m = new Map(); screensByUser.set(e.user_id, m); }
+    m.set(e.name, (m.get(e.name) ?? 0) + 1);
+  }
+}
+
+const subs = (allSubsRaw ?? [])
+  .filter((sb: any) => !hidden(sb.user_id))
+  .map((sb: any) => {
+    const until = sb.premium_until ? new Date(sb.premium_until).getTime() : 0;
+    const vigente = Number.isFinite(until) && until > ahora;
+    const visto = lastSeen.get(sb.user_id);
+    return {
+      userId: sb.user_id as string,
+      email: emailById.get(sb.user_id) ?? '—',
+      plan: sb.plan as string,
+      source: (sb.source ?? '—') as string,
+      vigente,
+      diasRestantes: vigente ? Math.ceil((until - ahora) / DIA) : 0,
+      cancelado: !!sb.cancel_scheduled_at,
+      esTrial: !!sb.trial_ends_at && new Date(sb.trial_ends_at).getTime() > ahora,
+      desde: sb.created_at as string,
+      ultimaActividad: visto ?? null,
+      diasSinVerse: visto ? Math.floor((ahora - new Date(visto).getTime()) / DIA) : null,
+      eventos: eventsByUser.get(sb.user_id) ?? 0,
+    };
+  });
+
+const premiumVigentes = subs.filter(sb => sb.vigente);
+const premiumIds = new Set(premiumVigentes.map(sb => sb.userId));
+
+// Premium que llevan >7 días sin abrir la app: son los que se van a ir.
+const enRiesgo = premiumVigentes.filter(sb => sb.diasSinVerse === null || sb.diasSinVerse >= 7);
+const cancelados = subs.filter(sb => sb.cancelado && sb.vigente);
+
+// Origen del pago: dice qué canal de cobro sostiene el negocio.
+const porFuente = new Map<string, number>();
+for (const sb of premiumVigentes) porFuente.set(sb.source, (porFuente.get(sb.source) ?? 0) + 1);
+
+// Comparativa premium vs free. Solo cuentan los usuarios con actividad:
+// promediar sobre gente que nunca abrió la app diluye la señal.
+const idsConActividad = [...eventsByUser.keys()];
+const freeConActividad = idsConActividad.filter(id => !premiumIds.has(id));
+const premiumConActividad = idsConActividad.filter(id => premiumIds.has(id));
+const prom = (ids: string[]) =>
+  ids.length === 0 ? 0 : Math.round(ids.reduce((s, id) => s + (eventsByUser.get(id) ?? 0), 0) / ids.length);
+const promPremium = prom(premiumConActividad);
+const promFree = prom(freeConActividad);
+
+/** Pantallas más vistas por un grupo de usuarios, normalizadas a % del grupo. */
+function pantallasDe(ids: string[], n = 8): [string, number][] {
+  const m = new Map<string, number>();
+  for (const id of ids) {
+    for (const [name, c] of screensByUser.get(id) ?? []) m.set(name, (m.get(name) ?? 0) + c);
+  }
+  const total = [...m.values()].reduce((s, v) => s + v, 0) || 1;
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([name, v]) => [name, Math.round((v / total) * 100)]);
+}
+const pantallasPremium = pantallasDe(premiumConActividad);
+const pantallasFree = pantallasDe(freeConActividad);
+
+const fmtFecha = (d: string) =>
+  new Date(d).toLocaleDateString('es', { day: 'numeric', month: 'short', year: '2-digit' });
+
 const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' });
 ---
 
@@ -138,20 +230,37 @@ const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es',
         </p>
       </div>
 
-      {/* Sin este filtro las métricas quedan infladas por el uso propio. */}
-      <div class="flex rounded-xl border border-card-border bg-card p-1 text-xs font-semibold shrink-0">
-        <a
-          href="/admin"
-          class:list={['px-3 py-1.5 rounded-lg transition-colors', !includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
-        >
-          Solo usuarios
-        </a>
-        <a
-          href="/admin?mios=1"
-          class:list={['px-3 py-1.5 rounded-lg transition-colors', includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
-        >
-          Incluirme
-        </a>
+      <div class="flex flex-wrap items-center gap-2 shrink-0">
+        <div class="flex rounded-xl border border-card-border bg-card p-1 text-xs font-semibold">
+          <a
+            href={includeMine ? '/admin?mios=1' : '/admin'}
+            class:list={['px-3 py-1.5 rounded-lg transition-colors', tab === 'general' ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+          >
+            General
+          </a>
+          <a
+            href={includeMine ? '/admin?tab=premium&mios=1' : '/admin?tab=premium'}
+            class:list={['px-3 py-1.5 rounded-lg transition-colors', tab === 'premium' ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+          >
+            Premium {premiumVigentes.length > 0 && `(${premiumVigentes.length})`}
+          </a>
+        </div>
+
+        {/* Sin este filtro las métricas quedan infladas por el uso propio. */}
+        <div class="flex rounded-xl border border-card-border bg-card p-1 text-xs font-semibold">
+          <a
+            href={tab === 'premium' ? '/admin?tab=premium' : '/admin'}
+            class:list={['px-3 py-1.5 rounded-lg transition-colors', !includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+          >
+            Solo usuarios
+          </a>
+          <a
+            href={tab === 'premium' ? '/admin?tab=premium&mios=1' : '/admin?mios=1'}
+            class:list={['px-3 py-1.5 rounded-lg transition-colors', includeMine ? 'bg-accent text-white' : 'text-muted hover:text-ink']}
+          >
+            Incluirme
+          </a>
+        </div>
       </div>
     </div>
 
@@ -164,106 +273,241 @@ const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es',
       </div>
     )}
 
-    <!-- Stat tiles -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      {[
-        { label: 'Usuarios', value: totalUsers },
-        { label: 'Activos 7d', value: active7d },
-        { label: 'Mascotas', value: `${totalPets}${totalCats > 0 ? ` (${totalCats} 🐱)` : ''}` },
-        { label: 'Premium activos', value: premiumActive },
-        { label: 'Push tokens', value: pushTokens },
-        { label: 'Notifs enviadas 7d', value: notifs7d },
-      ].map(s => (
-        <div class="rounded-2xl border border-card-border bg-card px-4 py-4">
-          <p class="text-2xl font-bold text-ink">{s.value}</p>
-          <p class="text-xs text-muted mt-0.5">{s.label}</p>
-        </div>
-      ))}
-    </div>
-
-    <!-- Actividad 14 días -->
-    <div class="rounded-2xl border border-card-border bg-card p-5">
-      <div class="flex items-baseline justify-between mb-4">
-        <p class="text-sm font-semibold text-ink">Eventos por día</p>
-        <p class="text-xs text-muted">web {webCount} · iOS {iosCount}</p>
-      </div>
-      <div class="flex items-end gap-1 h-28">
-        {dayEntries.map(([d, v]) => (
-          <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${fmtDay(d)}: ${v} eventos`}>
-            <div
-              class="w-full rounded-t"
-              style={`height:${Math.max(3, Math.round((v / maxDay) * 96))}px;background:#F97316;opacity:${v === 0 ? 0.15 : 0.9}`}
-            ></div>
+    {tab === 'general' && (
+      <>
+      {/* Stat tiles */}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {[
+          { label: 'Usuarios', value: totalUsers },
+          { label: 'Activos 7d', value: active7d },
+          { label: 'Mascotas', value: `${totalPets}${totalCats > 0 ? ` (${totalCats} 🐱)` : ''}` },
+          { label: 'Premium activos', value: premiumActive },
+          { label: 'Push tokens', value: pushTokens },
+          { label: 'Notifs enviadas 7d', value: notifs7d },
+        ].map(s => (
+          <div class="rounded-2xl border border-card-border bg-card px-4 py-4">
+            <p class="text-2xl font-bold text-ink">{s.value}</p>
+            <p class="text-xs text-muted mt-0.5">{s.label}</p>
           </div>
         ))}
       </div>
-      <div class="flex justify-between mt-2">
-        <p class="text-[10px] text-muted">{fmtDay(dayEntries[0][0])}</p>
-        <p class="text-[10px] text-muted">{fmtDay(dayEntries[dayEntries.length - 1][0])}</p>
-      </div>
-    </div>
 
-    <!-- Top pantallas + top clicks -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Actividad 14 días */}
       <div class="rounded-2xl border border-card-border bg-card p-5">
-        <p class="text-sm font-semibold text-ink mb-4">Pantallas más vistas</p>
-        {topScreens.length === 0 && <p class="text-xs text-muted">Sin datos aún — los eventos empiezan a registrarse con este deploy.</p>}
-        <div class="space-y-2">
-          {topScreens.map(([name, v]) => (
-            <div class="flex items-center gap-2" title={`${name}: ${v} vistas`}>
-              <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
-              <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
-                <div class="h-full rounded" style={`width:${Math.round((v / maxScreen) * 100)}%;background:#F97316;opacity:.9`}></div>
-              </div>
-              <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
+        <div class="flex items-baseline justify-between mb-4">
+          <p class="text-sm font-semibold text-ink">Eventos por día</p>
+          <p class="text-xs text-muted">web {webCount} · iOS {iosCount}</p>
+        </div>
+        <div class="flex items-end gap-1 h-28">
+          {dayEntries.map(([d, v]) => (
+            <div class="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${fmtDay(d)}: ${v} eventos`}>
+              <div
+                class="w-full rounded-t"
+                style={`height:${Math.max(3, Math.round((v / maxDay) * 96))}px;background:#F97316;opacity:${v === 0 ? 0.15 : 0.9}`}
+              ></div>
             </div>
           ))}
         </div>
-      </div>
-      <div class="rounded-2xl border border-card-border bg-card p-5">
-        <p class="text-sm font-semibold text-ink mb-4">Clicks más frecuentes</p>
-        {topClicks.length === 0 && <p class="text-xs text-muted">Sin datos aún.</p>}
-        <div class="space-y-2">
-          {topClicks.map(([name, v]) => (
-            <div class="flex items-center gap-2" title={`${name}: ${v} clicks`}>
-              <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
-              <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
-                <div class="h-full rounded" style={`width:${Math.round((v / maxClick) * 100)}%;background:#F97316;opacity:.9`}></div>
-              </div>
-              <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
-            </div>
-          ))}
+        <div class="flex justify-between mt-2">
+          <p class="text-[10px] text-muted">{fmtDay(dayEntries[0][0])}</p>
+          <p class="text-[10px] text-muted">{fmtDay(dayEntries[dayEntries.length - 1][0])}</p>
         </div>
       </div>
-    </div>
 
-    <!-- Eventos recientes -->
-    <div class="rounded-2xl border border-card-border bg-card p-5 overflow-x-auto">
-      <p class="text-sm font-semibold text-ink mb-4">Eventos recientes</p>
-      {recentEvents.length === 0 ? (
-        <p class="text-xs text-muted">Todavía no hay eventos registrados.</p>
-      ) : (
-        <table class="w-full text-xs">
-          <thead>
-            <tr class="text-left text-muted border-b border-card-border">
-              <th class="py-2 pr-3 font-medium">Cuándo</th>
-              <th class="py-2 pr-3 font-medium">Evento</th>
-              <th class="py-2 pr-3 font-medium">Nombre</th>
-              <th class="py-2 font-medium">Plataforma</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentEvents.map(e => (
-              <tr class="border-b border-card-border/50">
-                <td class="py-1.5 pr-3 text-muted whitespace-nowrap">{new Date(e.created_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-                <td class="py-1.5 pr-3 text-ink">{e.event}</td>
-                <td class="py-1.5 pr-3 text-ink truncate max-w-50">{e.name}</td>
-                <td class="py-1.5 text-muted">{e.platform}</td>
-              </tr>
+      {/* Top pantallas + top clicks */}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="rounded-2xl border border-card-border bg-card p-5">
+          <p class="text-sm font-semibold text-ink mb-4">Pantallas más vistas</p>
+          {topScreens.length === 0 && <p class="text-xs text-muted">Sin datos aún — los eventos empiezan a registrarse con este deploy.</p>}
+          <div class="space-y-2">
+            {topScreens.map(([name, v]) => (
+              <div class="flex items-center gap-2" title={`${name}: ${v} vistas`}>
+                <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
+                <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
+                  <div class="h-full rounded" style={`width:${Math.round((v / maxScreen) * 100)}%;background:#F97316;opacity:.9`}></div>
+                </div>
+                <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
+              </div>
             ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-card-border bg-card p-5">
+          <p class="text-sm font-semibold text-ink mb-4">Clicks más frecuentes</p>
+          {topClicks.length === 0 && <p class="text-xs text-muted">Sin datos aún.</p>}
+          <div class="space-y-2">
+            {topClicks.map(([name, v]) => (
+              <div class="flex items-center gap-2" title={`${name}: ${v} clicks`}>
+                <p class="text-xs text-ink w-32 truncate shrink-0">{name}</p>
+                <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
+                  <div class="h-full rounded" style={`width:${Math.round((v / maxClick) * 100)}%;background:#F97316;opacity:.9`}></div>
+                </div>
+                <p class="text-xs font-semibold text-ink w-8 text-right">{v}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Eventos recientes */}
+      <div class="rounded-2xl border border-card-border bg-card p-5 overflow-x-auto">
+        <p class="text-sm font-semibold text-ink mb-4">Eventos recientes</p>
+        {recentEvents.length === 0 ? (
+          <p class="text-xs text-muted">Todavía no hay eventos registrados.</p>
+        ) : (
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-muted border-b border-card-border">
+                <th class="py-2 pr-3 font-medium">Cuándo</th>
+                <th class="py-2 pr-3 font-medium">Evento</th>
+                <th class="py-2 pr-3 font-medium">Nombre</th>
+                <th class="py-2 font-medium">Plataforma</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentEvents.map(e => (
+                <tr class="border-b border-card-border/50">
+                  <td class="py-1.5 pr-3 text-muted whitespace-nowrap">{new Date(e.created_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td class="py-1.5 pr-3 text-ink">{e.event}</td>
+                  <td class="py-1.5 pr-3 text-ink truncate max-w-50">{e.name}</td>
+                  <td class="py-1.5 text-muted">{e.platform}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      </>
+    )}
+
+
+    {tab === 'premium' && (
+      <>
+        {premiumVigentes.length === 0 ? (
+          <div class="rounded-2xl border border-dashed border-card-border bg-card px-5 py-8 text-center">
+            <p class="text-sm font-semibold text-ink mb-1">Todavía no hay suscriptores activos</p>
+            <p class="text-xs text-muted">
+              {includeMine ? 'Ni siquiera contando tus cuentas.' : 'Prueba con "Incluirme" si estás testeando con tu propia cuenta.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Salud de la suscripción de un vistazo */}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Activos', value: premiumVigentes.length, tono: 'text-ink' },
+                { label: 'En riesgo (7d sin abrir)', value: enRiesgo.length, tono: enRiesgo.length > 0 ? 'text-amber-600' : 'text-ink' },
+                { label: 'Cancelación agendada', value: cancelados.length, tono: cancelados.length > 0 ? 'text-red-500' : 'text-ink' },
+                { label: 'Eventos/usuario premium', value: promPremium, tono: 'text-ink' },
+              ].map(t => (
+                <div class="rounded-2xl border border-card-border bg-card px-4 py-4">
+                  <p class:list={['text-2xl font-bold', t.tono]}>{t.value}</p>
+                  <p class="text-xs text-muted mt-0.5">{t.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Origen del cobro: qué canal sostiene el negocio */}
+            <div class="rounded-2xl border border-card-border bg-card p-5">
+              <p class="text-sm font-semibold text-ink mb-3">Origen de la suscripción</p>
+              <div class="flex flex-wrap gap-2">
+                {[...porFuente.entries()].sort((a, b) => b[1] - a[1]).map(([fuente, n]) => (
+                  <span class="rounded-lg bg-canvas px-3 py-1.5 text-xs">
+                    <strong class="text-ink">{n}</strong>
+                    <span class="text-muted ml-1">{fuente}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* La pregunta del millón: ¿pagar cambia cómo usan la app? */}
+            <div class="rounded-2xl border border-card-border bg-card p-5">
+              <div class="flex items-baseline justify-between mb-1">
+                <p class="text-sm font-semibold text-ink">Premium vs. free</p>
+                <p class="text-xs text-muted">
+                  {promPremium}
+                  {' vs '}
+                  {promFree} eventos por usuario activo
+                </p>
+              </div>
+              <p class="text-xs text-muted mb-4">
+                Sobre usuarios con actividad en 14 días: {premiumConActividad.length} premium, {freeConActividad.length} free.
+                {promFree > 0 && promPremium > 0 && (
+                  <span class="text-ink font-medium">
+                    {' '}Los premium usan la app {(promPremium / promFree).toFixed(1)}× más.
+                  </span>
+                )}
+              </p>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {[
+                  { titulo: 'Qué usan los premium', datos: pantallasPremium, vacio: 'Sin actividad de premium aún.' },
+                  { titulo: 'Qué usan los free', datos: pantallasFree, vacio: 'Sin actividad de free aún.' },
+                ].map(col => (
+                  <div>
+                    <p class="text-xs font-semibold text-muted uppercase tracking-wider mb-3">{col.titulo}</p>
+                    {col.datos.length === 0 ? (
+                      <p class="text-xs text-muted">{col.vacio}</p>
+                    ) : (
+                      <div class="space-y-2">
+                        {col.datos.map(([name, pct]) => (
+                          <div class="flex items-center gap-2" title={`${name}: ${pct}% de sus vistas`}>
+                            <p class="text-xs text-ink w-28 truncate shrink-0">{name}</p>
+                            <div class="flex-1 h-4 bg-canvas rounded overflow-hidden">
+                              <div class="h-full rounded" style={`width:${pct}%;background:#F97316;opacity:.9`}></div>
+                            </div>
+                            <p class="text-xs font-semibold text-ink w-9 text-right">{pct}%</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Uno por uno: aquí se ve el churn antes de que llegue a la factura */}
+            <div class="rounded-2xl border border-card-border bg-card p-5 overflow-x-auto">
+              <p class="text-sm font-semibold text-ink mb-4">Suscriptores</p>
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="text-left text-muted border-b border-card-border">
+                    <th class="py-2 pr-3 font-medium">Usuario</th>
+                    <th class="py-2 pr-3 font-medium">Origen</th>
+                    <th class="py-2 pr-3 font-medium">Desde</th>
+                    <th class="py-2 pr-3 font-medium">Renueva en</th>
+                    <th class="py-2 pr-3 font-medium">Última vez</th>
+                    <th class="py-2 font-medium">Eventos 14d</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {premiumVigentes.map(sb => (
+                    <tr class:list={['border-b border-card-border/50', sb.cancelado && 'bg-red-50/40']}>
+                      <td class="py-1.5 pr-3 text-ink truncate max-w-50">
+                        {sb.email}
+                        {sb.cancelado && <span class="ml-1.5 text-red-500 font-semibold">cancela</span>}
+                        {sb.esTrial && <span class="ml-1.5 text-amber-600 font-semibold">trial</span>}
+                      </td>
+                      <td class="py-1.5 pr-3 text-muted">{sb.source}</td>
+                      <td class="py-1.5 pr-3 text-muted whitespace-nowrap">{fmtFecha(sb.desde)}</td>
+                      <td class="py-1.5 pr-3 text-muted whitespace-nowrap">{sb.diasRestantes}d</td>
+                      <td class:list={[
+                        'py-1.5 pr-3 whitespace-nowrap',
+                        sb.diasSinVerse === null || sb.diasSinVerse >= 7 ? 'text-amber-600 font-semibold' : 'text-muted',
+                      ]}>
+                        {sb.diasSinVerse === null ? 'nunca (14d)' : sb.diasSinVerse === 0 ? 'hoy' : `hace ${sb.diasSinVerse}d`}
+                      </td>
+                      <td class="py-1.5 text-ink">{sb.eventos}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p class="text-[10px] text-muted mt-3">
+                "Última vez" se calcula sobre la ventana de 14 días de eventos. Un premium en ámbar lleva una semana sin abrir la app: ahí es donde todavía se puede hacer algo.
+              </p>
+            </div>
+          </>
+        )}
+      </>
+    )}
   </div>
 </MainLayout>
