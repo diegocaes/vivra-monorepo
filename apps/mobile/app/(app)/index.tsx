@@ -122,8 +122,13 @@ export default function DashboardScreen() {
 
   // Whether the user has logged any food at all (drives empty-state CTA below)
   const hasFood = petData.foods.length > 0;
+  const hasPreventiveHistory = Boolean(petData.lastAntipulgas?.date_given || petData.lastDesparasitante?.date_given);
+  const isProfileStarting = !hasFood
+    && !hasPreventiveHistory
+    && petData.groomings.length === 0
+    && petData.vetVisits.length === 0;
 
-  // Preventive critical banner — show if overdue OR never registered
+  // Preventive critical banner — only for treatments that are actually overdue.
   const preventiveStatus = (() => {
     const compute = (dateStr: string | null | undefined) => {
       if (!dateStr) return { status: 'never' as const, days: 0 };
@@ -135,15 +140,14 @@ export default function DashboardScreen() {
     };
     const anti = compute(petData.lastAntipulgas?.date_given);
     const des = compute(petData.lastDesparasitante?.date_given);
-    const neverTypes: string[] = [];
     const overdueTypes: { label: string; days: number }[] = [];
-    if (anti.status === 'never') neverTypes.push('antipulgas');
-    else if (anti.status === 'overdue') overdueTypes.push({ label: 'antipulgas', days: anti.days });
-    if (des.status === 'never') neverTypes.push('desparasitante');
-    else if (des.status === 'overdue') overdueTypes.push({ label: 'desparasitante', days: des.days });
-    return { neverTypes, overdueTypes };
+    if (anti.status === 'overdue') overdueTypes.push({ label: 'antipulgas', days: anti.days });
+    if (des.status === 'overdue') overdueTypes.push({ label: 'desparasitante', days: des.days });
+    return { overdueTypes };
   })();
-  const showPreventiveBanner = preventiveStatus.neverTypes.length > 0 || preventiveStatus.overdueTypes.length > 0;
+  // Missing data is not a medical warning. Only show a red banner when a
+  // previously registered treatment is actually overdue.
+  const showPreventiveBanner = preventiveStatus.overdueTypes.length > 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -177,7 +181,22 @@ export default function DashboardScreen() {
         {/* Hero card */}
         <PetHeroCard pet={petData.pet} />
 
-        {/* Preventivo critical banner — overdue or never registered */}
+        {/* A newly created pet needs an invitation, not health alarms. */}
+        {isProfileStarting && (
+          <Card style={styles.setupCard}>
+            <View style={styles.setupIcon}>
+              <Ionicons name="sparkles" size={20} color={Colors.accent} />
+            </View>
+            <View style={styles.setupCopy}>
+              <Text style={styles.setupTitle}>¡{petData.pet.name} ya está en Vivra!</Text>
+              <Text style={styles.setupText}>
+                Agrega su alimentación, peso y preventivos poco a poco, cuando tengas la información.
+              </Text>
+            </View>
+          </Card>
+        )}
+
+        {/* Preventivo critical banner — only after a registered treatment expires */}
         {showPreventiveBanner && (
           <TouchableOpacity
             style={styles.preventiveBanner}
@@ -187,18 +206,12 @@ export default function DashboardScreen() {
             <Ionicons name="alert-circle" size={22} color={Colors.bad} />
             <View style={{ flex: 1 }}>
               <Text style={styles.preventiveBannerTitle}>
-                {preventiveStatus.neverTypes.length === 2
-                  ? `${petData.pet.name} no tiene protección preventiva`
-                  : preventiveStatus.overdueTypes.length === 2
+                {preventiveStatus.overdueTypes.length === 2
                     ? 'Preventivos vencidos'
-                    : preventiveStatus.neverTypes.length > 0
-                      ? `Falta ${preventiveStatus.neverTypes[0]}`
-                      : `${preventiveStatus.overdueTypes[0].label} vencido ${preventiveStatus.overdueTypes[0].days}d`}
+                    : `${preventiveStatus.overdueTypes[0].label} vencido ${preventiveStatus.overdueTypes[0].days}d`}
               </Text>
               <Text style={styles.preventiveBannerDesc}>
-                {preventiveStatus.neverTypes.length > 0 && preventiveStatus.overdueTypes.length === 0
-                  ? 'Registra la última dosis para activar recordatorios'
-                  : 'Aplica y registra la nueva dosis'}
+                Aplica y registra la nueva dosis
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.bad} />
@@ -206,9 +219,26 @@ export default function DashboardScreen() {
         )}
 
         {/* Vitality Score */}
-        {vitality && (
+        {vitality && !isProfileStarting && (
           <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/salud' as any)}>
             <VitalityWidget vitality={vitality} compact />
+          </TouchableOpacity>
+        )}
+
+        {isProfileStarting && (
+          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/perfil' as any)}>
+            <Card style={styles.vitalitySetupCard}>
+              <View style={styles.vitalitySetupIcon}>
+                <Ionicons name="heart-outline" size={24} color={Colors.accent} />
+              </View>
+              <View style={styles.setupCopy}>
+                <Text style={styles.vitalitySetupTitle}>Vitality Score en preparación</Text>
+                <Text style={styles.vitalitySetupText}>
+                  Lo activaremos cuando conozcamos un poco más a {petData.pet.name}.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+            </Card>
           </TouchableOpacity>
         )}
 
@@ -418,7 +448,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentLight,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.accent + '30',
+    borderColor: `${Colors.accent}30`,
     padding: Spacing.md,
   },
   foodCtaText: {
@@ -426,6 +456,39 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.ink,
   },
+  setupCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    backgroundColor: Colors.accentLight,
+    borderColor: `${Colors.accent}28`,
+  },
+  setupIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setupCopy: { flex: 1 },
+  setupTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.ink },
+  setupText: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 18 },
+  vitalitySetupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  vitalitySetupIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vitalitySetupTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink },
+  vitalitySetupText: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 17 },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
@@ -473,7 +536,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.accent + '20',
+    borderColor: `${Colors.accent}20`,
   },
   premiumBannerInfo: { flex: 1 },
   premiumBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
@@ -486,7 +549,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.accent + '30',
+    borderColor: `${Colors.accent}30`,
   },
   trialExpiringBanner: {
     flexDirection: 'row',
@@ -513,7 +576,7 @@ const styles = StyleSheet.create({
   preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.bad },
   preventiveBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
   errorCard: {
-    backgroundColor: Colors.bad + '12',
+    backgroundColor: `${Colors.bad}12`,
     borderColor: Colors.bad,
   },
   errorText: {

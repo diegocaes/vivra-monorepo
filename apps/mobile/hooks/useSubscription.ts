@@ -15,43 +15,21 @@ interface SubscriptionState {
   refresh: () => Promise<void>;
 }
 
-// Tracks the RevenueCat-configured user. Cleared on signOut to prevent stale
-// state when switching accounts on the same device.
+// RevenueCat must be configured exactly once per app process. Afterwards,
+// identities change through logIn/logOut; re-calling configure() does not
+// reliably switch the SDK's customer on a shared device.
+let revenueCatConfigured = false;
 let configuredUserId: string | null = null;
-export function clearRevenueCatUser() {
+export async function clearRevenueCatUser() {
   configuredUserId = null;
-}
-
-/**
- * Mirror RevenueCat entitlement state to Supabase user_subscriptions.
- * Called after purchase / restore / customerInfo updates so web and analytics
- * see consistent premium status. Best-effort: failure here doesn't block the
- * user — RevenueCat is the source of truth for IAP, this is just sync.
- */
-async function syncIapPremiumToSupabase(info: CustomerInfo) {
-  const entitlement = info.entitlements.active[ENTITLEMENT_ID];
+  if (!revenueCatConfigured) return;
 
   try {
-    if (entitlement) {
-      // Active IAP: write premium_until to Supabase
-      // expirationDate is ISO string when set; null for lifetime entitlements.
-      // Default to ~1 year out if missing (lifetime / no expiry available).
-      const expiration = entitlement.expirationDate
-        ? entitlement.expirationDate
-        : new Date(Date.now() + 365 * 86400000).toISOString();
-
-      const { error } = await supabase.rpc('set_iap_premium', {
-        p_premium_until: expiration,
-        p_iap_product_id: entitlement.productIdentifier ?? null,
-      });
-      if (error) console.warn('[useSubscription] set_iap_premium error:', error.message);
-    } else {
-      // No active IAP: clear any stale 'iap' rows in Supabase
-      const { error } = await supabase.rpc('clear_iap_premium');
-      if (error) console.warn('[useSubscription] clear_iap_premium error:', error.message);
-    }
+    await Purchases.logOut();
   } catch (e: any) {
-    console.warn('[useSubscription] iap sync threw:', e?.message ?? e);
+    // A failed SDK logout must not block the app's own Supabase logout. The
+    // next successful login still calls logIn() with the correct user ID.
+    console.warn('[useSubscription] RevenueCat logout failed:', e?.message ?? e);
   }
 }
 
@@ -82,13 +60,16 @@ export function useSubscriptionState(): SubscriptionState {
     async function init() {
       if (!user) { setIsLoading(false); return; }
 
-      // Only reconfigure if user changed
+      // Configure once, then identify the authenticated Supabase user with
+      // RevenueCat's supported logIn flow. This prevents entitlements from a
+      // previous account being shown on a shared device.
       if (configuredUserId !== user.id) {
         try {
-          Purchases.configure({
-            apiKey: REVENUECAT_API_KEY,
-            appUserID: user.id,
-          });
+          if (!revenueCatConfigured) {
+            Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+            revenueCatConfigured = true;
+          }
+          await Purchases.logIn(user.id);
           configuredUserId = user.id;
         } catch (e) {
           console.error('RevenueCat init error:', e);
@@ -121,8 +102,8 @@ export function useSubscriptionState(): SubscriptionState {
     const handler = (info: CustomerInfo) => {
       const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
       setIsPremium(premium);
-      // Mirror state change to Supabase so web + analytics stay consistent.
-      syncIapPremiumToSupabase(info);
+      // The server receives RevenueCat's signed webhook. Never let a mobile
+      // client write its own entitlement or expiry into Supabase.
     };
 
     Purchases.addCustomerInfoUpdateListener(handler);
@@ -140,8 +121,6 @@ export function useSubscriptionState(): SubscriptionState {
       const rcPremium = rcInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
       if (rcPremium) {
         setIsPremium(true);
-        // Sync to Supabase so web sees the same state
-        syncIapPremiumToSupabase(rcInfo);
         return;
       }
     } catch (e: any) {
@@ -149,12 +128,6 @@ export function useSubscriptionState(): SubscriptionState {
     }
 
     if (!user) { setIsPremium(false); return; }
-
-    // If RC says no IAP, opportunistically clear any stale 'iap' Supabase row.
-    // Cheap RPC, idempotent.
-    if (rcInfo && !rcInfo.entitlements.active[ENTITLEMENT_ID]) {
-      syncIapPremiumToSupabase(rcInfo);
-    }
 
     // 2. Own Supabase subscription row (referral / trial / promo)
     try {
@@ -200,8 +173,12 @@ export function useSubscriptionState(): SubscriptionState {
       if (myShares.error) console.warn('[useSubscription] pet_shares (owner_id) error:', myShares.error.message);
 
       const partnerIds = new Set<string>();
-      sharedWithMe.data?.forEach((s: any) => s.owner_id && partnerIds.add(s.owner_id));
-      myShares.data?.forEach((s: any) => s.shared_with && partnerIds.add(s.shared_with));
+      sharedWithMe.data?.forEach((s: any) => {
+        if (s.owner_id) partnerIds.add(s.owner_id);
+      });
+      myShares.data?.forEach((s: any) => {
+        if (s.shared_with) partnerIds.add(s.shared_with);
+      });
 
       if (partnerIds.size > 0) {
         const { data: partnerSubs, error: partnerErr } = await supabase
@@ -244,8 +221,6 @@ export function useSubscriptionState(): SubscriptionState {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const premium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
       setIsPremium(premium);
-      // Mirror to Supabase immediately so web + analytics see it
-      await syncIapPremiumToSupabase(customerInfo);
       return premium;
     } catch (e: any) {
       if (e.userCancelled) return false;
@@ -260,8 +235,6 @@ export function useSubscriptionState(): SubscriptionState {
       const info = await Purchases.restorePurchases();
       const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
       setIsPremium(premium);
-      // Sync restored state to Supabase
-      await syncIapPremiumToSupabase(info);
       return premium;
     } catch (e) {
       console.error('Restore error:', e);

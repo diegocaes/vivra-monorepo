@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Alert,
   Animated,
-  useWindowDimensions,
   KeyboardAvoidingView,
   Platform,
   Image,
@@ -35,9 +34,9 @@ try { ImageManipulator = require('expo-image-manipulator'); } catch { /* unavail
 const PENDING_REF_KEY = 'pending_referral';
 
 const STEPS = [
-  { title: 'Nombre', subtitle: 'Cómo se llama tu mascota?' },
+  { title: 'Bienvenida', subtitle: '¡Conozcamos a tu mascota!' },
   { title: 'Raza', subtitle: 'Qué raza es?' },
-  { title: 'Datos básicos', subtitle: 'Últimos detalles' },
+  { title: 'Datos básicos', subtitle: 'Unos detalles más' },
 ];
 
 const GENDER_OPTIONS = [
@@ -63,7 +62,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 export default function OnboardingScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { width } = useWindowDimensions();
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -153,7 +151,7 @@ export default function OnboardingScreen() {
         return null;
       }
       const { data: urlData } = supabase.storage.from('pet-photos').getPublicUrl(fileName);
-      return urlData.publicUrl + '?t=' + Date.now();
+      return `${urlData.publicUrl}?t=${Date.now()}`;
     } catch (e: any) {
       console.warn('[onboarding] photo upload threw:', e?.message ?? e);
       return null;
@@ -267,7 +265,7 @@ const animateProgress = (toStep: number) => {
       // plan='free'. With RLS enabled the authenticated client can't write
       // to this table directly anyway, and "no row = free" is the default
       // both in evaluatePremium and getPremiumStatus. Rows are created when
-      // a real subscription event happens: IAP purchase (set_iap_premium),
+      // a real subscription event happens: signed RevenueCat webhook,
       // referral redeem (redeem_referral), or admin promo grant.
     } catch (e) {
       console.warn('[onboarding] post-pet setup error:', e);
@@ -423,28 +421,25 @@ const animateProgress = (toStep: number) => {
           {/* Step 0: Name + optional photo */}
           {step === 0 && (
             <View style={styles.stepContent}>
-              <TouchableOpacity onPress={pickPhoto} activeOpacity={0.8} style={styles.avatarWrap}>
-                <View style={styles.avatar}>
-                  {photoUri ? (
-                    <Image source={{ uri: photoUri }} style={styles.avatarImg} />
-                  ) : (
-                    <Ionicons name="paw" size={40} color={Colors.accent} />
-                  )}
-                </View>
-                <View style={styles.cameraBadge}>
-                  <Ionicons name="camera" size={16} color={Colors.white} />
-                </View>
-              </TouchableOpacity>
+              <Text style={styles.stepIntro}>
+                Empecemos por lo básico. Podrás completar el resto cuando quieras.
+              </Text>
 
-              <TouchableOpacity onPress={pickPhoto} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.addPhoto}>
-                  {photoUri ? 'Cambiar foto' : 'Agregar foto (opcional)'}
-                </Text>
-              </TouchableOpacity>
-
-              <Text style={styles.welcomeBadge}>Bienvenido a Vivra</Text>
+              <Text style={styles.firstFieldLabel}>¿Cómo se llama?</Text>
+              <TextInput
+                style={styles.bigInput}
+                placeholder="Ej: Max, Luna, Rocky..."
+                placeholderTextColor={Colors.cardBorder}
+                value={petName}
+                onChangeText={setPetName}
+                autoCapitalize="words"
+                maxLength={30}
+                textAlign="center"
+              />
+              <Text style={styles.hint}>Así aparecerá en Vivra</Text>
 
               {/* Species picker — perros piden raza, gatos no */}
+              <Text style={styles.fieldLabel}>¿Es perro o gato?</Text>
               <View style={styles.speciesRow}>
                 {SPECIES_OPTIONS.map(opt => (
                   <TouchableOpacity
@@ -468,17 +463,20 @@ const animateProgress = (toStep: number) => {
                 ))}
               </View>
 
-              <TextInput
-                style={styles.bigInput}
-                placeholder="Ej: Max, Luna, Rocky..."
-                placeholderTextColor={Colors.cardBorder}
-                value={petName}
-                onChangeText={setPetName}
-                autoCapitalize="words"
-                maxLength={30}
-                textAlign="center"
-              />
-              <Text style={styles.hint}>Así la verás en toda la app</Text>
+              <TouchableOpacity onPress={pickPhoto} activeOpacity={0.75} style={styles.photoRow}>
+                <View style={styles.photoThumb}>
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.photoThumbImg} />
+                  ) : (
+                    <Ionicons name="camera-outline" size={24} color={Colors.accent} />
+                  )}
+                </View>
+                <View style={styles.photoCopy}>
+                  <Text style={styles.addPhoto}>{photoUri ? 'Cambiar foto' : 'Agregar foto (opcional)'}</Text>
+                  <Text style={styles.photoHint}>Puedes hacerlo después</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.muted} />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -554,7 +552,7 @@ const animateProgress = (toStep: number) => {
                 keyboardType="decimal-pad"
               />
 
-              <Text style={styles.hint}>No te preocupes, puedes completar estos datos después</Text>
+              <Text style={styles.hint}>Todo esto es opcional; puedes completarlo después</Text>
             </View>
           )}
         </ScrollView>
@@ -586,7 +584,7 @@ const animateProgress = (toStep: number) => {
               style={styles.skipBtn}
               disabled={saving}
             >
-              <Text style={styles.skipBtnText}>Saltar — agregar mascota luego</Text>
+              <Text style={styles.skipBtnText}>Explorar Vivra sin mascota</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -631,24 +629,17 @@ const styles = StyleSheet.create({
     color: Colors.ink,
   },
   stepContent: { flex: 1 },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: Spacing.md,
+  stepIntro: {
+    fontSize: FontSize.md,
+    color: Colors.muted,
+    lineHeight: 23,
+    marginBottom: Spacing.xl,
   },
-  welcomeBadge: {
-    fontSize: FontSize.xs,
+  firstFieldLabel: {
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.accent,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: Spacing.lg,
+    color: Colors.ink,
+    marginBottom: Spacing.xs,
   },
   bigInput: {
     fontSize: FontSize.xxl,
@@ -755,43 +746,35 @@ const styles = StyleSheet.create({
   speciesText: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
   speciesTextActive: { color: Colors.white },
 
-  // ── Step 0 avatar with optional photo ──
-  avatarWrap: {
-    alignSelf: 'center',
-    marginBottom: Spacing.sm,
-    width: 100,
-    height: 100,
+  // ── Step 0 optional photo ──
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginTop: Spacing.sm,
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  photoThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
     backgroundColor: Colors.accentLight,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarImg: { width: 100, height: 100 },
-  cameraBadge: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.accent,
-    borderWidth: 3,
-    borderColor: Colors.canvas,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  photoThumbImg: { width: 52, height: 52 },
+  photoCopy: { flex: 1 },
   addPhoto: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.accent,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
+    color: Colors.ink,
   },
+  photoHint: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
 
   // ── Success screen ──
   successBody: {

@@ -24,18 +24,19 @@ const CONFIG = {
 export function ReminderCard({ type, lastDate, productName, onPress }: ReminderCardProps) {
   const { icon, iconColor, label, cycleDays } = CONFIG[type];
 
-  // Never registered → loud red warning
+  // No history is not evidence that the pet is unprotected. New users often
+  // add the information later, so this stays neutral and inviting.
   if (!lastDate) {
     return (
       <CareCard
         icon={icon}
-        iconColor={Colors.bad}
-        badge={{ text: 'Nunca aplicado', color: Colors.bad }}
+        iconColor={iconColor}
+        badge={{ text: 'Sin registro', color: Colors.muted }}
         title={label}
-        subtitle="Sin protección activa"
-        emptyText={onPress ? 'Registrar ahora →' : 'Toca para registrar'}
+        subtitle="Agrega la última dosis cuando la tengas"
+        emptyText={onPress ? 'Agregar fecha →' : 'Toca para agregar'}
         onPress={onPress}
-        variant="never"
+        variant="normal"
       />
     );
   }

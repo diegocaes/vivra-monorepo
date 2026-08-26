@@ -105,7 +105,10 @@ export function DatePickerField({
             <DateTimePicker
               value={pickerDate}
               mode="date"
-              display="inline"
+              // The inline calendar sits poorly inside our custom sheet on
+              // iOS. The native spinner is centered and reliable on all
+              // supported iPhone sizes.
+              display="spinner"
               locale="es"
               maximumDate={maxDate}
               minimumDate={minDate}
@@ -192,6 +195,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    alignItems: 'center',
     paddingBottom: Spacing.xl + 8,
   },
   sheetHeader: {
@@ -214,7 +218,8 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   picker: {
-    marginHorizontal: Spacing.md,
+    alignSelf: 'center',
+    width: '100%',
   },
   clearBtn: {
     alignItems: 'center',

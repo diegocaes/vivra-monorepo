@@ -14,7 +14,7 @@ import { clearRevenueCatUser } from './useSubscription';
  * a module cycle: useNotifications already imports useAuth.
  */
 function clearPerUserDeviceState() {
-  clearRevenueCatUser();
+  void clearRevenueCatUser();
   Notifications.cancelAllScheduledNotificationsAsync().catch((e) => {
     console.warn('[auth] failed to cancel scheduled notifications on signOut:', e?.message ?? e);
   });

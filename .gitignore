@@ -16,6 +16,9 @@ web-build/
 .expo/
 expo-env.d.ts
 
+# Supabase CLI local metadata
+supabase/.temp/
+
 # Native
 ios/
 android/

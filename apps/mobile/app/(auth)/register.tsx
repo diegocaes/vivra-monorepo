@@ -56,6 +56,39 @@ export default function RegisterScreen() {
     })();
   }, [params.ref]);
 
+  /**
+   * Referral attribution must survive every sign-up path, not only email.
+   * Apple and Google hand control to their own auth screens, so persist the
+   * validated code before opening either flow.
+   */
+  async function persistPendingReferral(): Promise<boolean> {
+    const cleanRef = refCode.trim().toUpperCase();
+    if (!cleanRef) return true;
+
+    const { data: code, error } = await supabase
+      .from('referral_codes')
+      .select('user_id')
+      .eq('code', cleanRef)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[register] referral validation failed:', error.message);
+      Alert.alert('No pudimos validar el código', 'Inténtalo de nuevo antes de crear tu cuenta.');
+      return false;
+    }
+
+    if (!code) {
+      Alert.alert(
+        'Código inválido',
+        'El código de referido no existe. Puedes continuar sin código o corregirlo.',
+      );
+      return false;
+    }
+
+    await AsyncStorage.setItem(PENDING_REF_KEY, cleanRef);
+    return true;
+  }
+
   async function handleRegister() {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Error', 'Completa todos los campos');
@@ -72,22 +105,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    // Validate ref code up-front if provided
-    const cleanRef = refCode.trim().toUpperCase();
-    if (cleanRef) {
-      const { data: code } = await supabase
-        .from('referral_codes')
-        .select('user_id')
-        .eq('code', cleanRef)
-        .maybeSingle();
-      if (!code) {
-        Alert.alert(
-          'Código inválido',
-          'El código de referido no existe. Puedes continuar sin código o corregirlo.',
-        );
-        return;
-      }
-    }
+    if (!(await persistPendingReferral())) return;
 
     setLoading(true);
     const { data: signUpData, error } = await supabase.auth.signUp({
@@ -107,10 +125,6 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (cleanRef) {
-      await AsyncStorage.setItem(PENDING_REF_KEY, cleanRef);
-    }
-
     if (signUpData.session) {
       router.replace('/onboarding' as any);
     } else {
@@ -123,6 +137,7 @@ export default function RegisterScreen() {
   }
 
   async function handleAppleSignUp() {
+    if (!(await persistPendingReferral())) return;
     setAppleLoading(true);
     try {
       const credential = await AppleAuthentication.signInAsync({
@@ -153,6 +168,7 @@ export default function RegisterScreen() {
   }
 
   async function handleGoogleSignUp() {
+    if (!(await persistPendingReferral())) return;
     setGoogleLoading(true);
     try {
       const redirectUrl = Linking.createURL('auth/callback');
@@ -174,8 +190,8 @@ export default function RegisterScreen() {
         const { params: urlParams, errorCode } = QueryParams.getQueryParams(result.url);
         if (errorCode) throw new Error(errorCode);
 
-        const accessToken = urlParams['access_token'];
-        const refreshToken = urlParams['refresh_token'];
+        const accessToken = urlParams.access_token;
+        const refreshToken = urlParams.refresh_token;
 
         if (accessToken && refreshToken) {
           await supabase.auth.setSession({

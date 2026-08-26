@@ -26,7 +26,9 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  // Astro's CSRF protection is enabled explicitly because this SSR app uses
+  // native POST forms for data creation, editing and deletion.
   security: {
-    checkOrigin: false,
+    checkOrigin: true,
   },
 });
