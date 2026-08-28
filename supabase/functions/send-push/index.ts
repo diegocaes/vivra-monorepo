@@ -7,8 +7,9 @@
 // push_tokens the mobile app has been collecting.
 //
 // REGLAS DE NOTIFICACIÓN (todas también se insertan in-app en `notifications`):
-//   preventive_due   — antipulgas/desparasitante: only from a confirmed
-//                      `next_due` date. Cooldown 7d.
+//   preventive_due   — antipulgas/desparasitante: uses `next_due`, or the
+//                      dog's calendar-month default when it is missing.
+//                      Cat cadence remains explicit. Cooldown 7d.
 //   vaccine_due      — only from a confirmed `next_due`: 7 days before and
 //                      when due. Cooldown 30d.
 //   food_low         — bolsa activa (sin end_date, con bag_size y daily_grams):
@@ -58,6 +59,16 @@ function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
 
+function addMonthsToDate(dateStr: string, months: number): string {
+  const date = new Date(`${dateStr}T12:00:00`);
+  const day = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + months);
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
+  return date.toISOString().slice(0, 10);
+}
+
 Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
@@ -84,8 +95,8 @@ Deno.serve(async (req) => {
     // evaluate in memory; revisit with SQL-side filtering at >10k users.
     const [tokensRes, petsRes, preventivesRes, vaccinesRes, weightsRes, foodsRes, recentNotifsRes] = await Promise.all([
       admin.from('push_tokens').select('user_id, token, platform'),
-      admin.from('pets').select('id, user_id, name, birth_date'),
-      admin.from('preventive_treatments').select('pet_id, type, next_due').order('date_given', { ascending: false }),
+      admin.from('pets').select('id, user_id, name, birth_date, species'),
+      admin.from('preventive_treatments').select('pet_id, type, date_given, next_due').order('date_given', { ascending: false }),
       admin.from('vaccines').select('pet_id, name, next_due').order('date_given', { ascending: false }),
       admin.from('weight_records').select('pet_id, date').order('date', { ascending: false }),
       admin.from('foods').select('pet_id, brand, daily_grams, bag_size, bag_unit, start_date, end_date, created_at')
@@ -109,6 +120,8 @@ Deno.serve(async (req) => {
       tokensByUser.set(t.user_id, list);
     }
 
+    const speciesByPetId = new Map(pets.map(pet => [pet.id, pet.species]));
+
     const recentByKey = new Map<string, string>(); // `${user}|${pet}|${type}` → created_at
     for (const n of recentNotifsRes.data ?? []) {
       const key = `${n.user_id}|${n.pet_id ?? ''}|${n.type}`;
@@ -123,7 +136,10 @@ Deno.serve(async (req) => {
       for (const ty of types) {
         const key = `${p.pet_id}|${ty}`;
         if (!lastPreventiveByPetType.has(key)) {
-          lastPreventiveByPetType.set(key, { next_due: p.next_due });
+          const nextDue = p.next_due ?? (
+            speciesByPetId.get(p.pet_id) === 'dog' ? addMonthsToDate(p.date_given, 1) : null
+          );
+          lastPreventiveByPetType.set(key, { next_due: nextDue });
         }
       }
     }
@@ -247,7 +263,7 @@ Deno.serve(async (req) => {
 
       // Rule 5: cumpleaños 🎂
       if (pet.birth_date && cooledDown(pet.user_id, pet.id, 'birthday')) {
-        const birth = new Date(pet.birth_date + 'T00:00:00');
+        const birth = new Date(`${pet.birth_date}T00:00:00`);
         const today = new Date();
         if (birth.getMonth() === today.getMonth() && birth.getDate() === today.getDate()) {
           const age = today.getFullYear() - birth.getFullYear();

@@ -2,8 +2,9 @@
 import MainLayout from '../../layouts/MainLayout.astro';
 import HistoryChart from '../../components/HistoryChart.astro';
 import Icon from '../../components/ui/Icon.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
 
-import { formatDate, parseNumericField } from '@vivra/shared';
+import { formatDate, parseNumericField, preventiveNextDue } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { getPremiumStatus } from '../../lib/premium';
 
@@ -19,11 +20,12 @@ if (Astro.request.method === 'POST') {
   const action = formData.get('_action') as string;
 
   if (action === 'add') {
+    const dateGiven = formData.get('date_given') as string;
     await supabase.from('preventive_treatments').insert({
       pet_id: pet.id,
       type: formData.get('type') as string,
-      date_given: formData.get('date_given') as string,
-      next_due: (formData.get('next_due') as string) || null,
+      date_given: dateGiven,
+      next_due: preventiveNextDue((pet as any).species, dateGiven, (formData.get('next_due') as string) || null),
       product_name: (formData.get('product_name') as string) || null,
       lot_number: (formData.get('lot_number') as string) || null,
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
@@ -39,16 +41,26 @@ if (Astro.request.method === 'POST') {
 }
 
 // Load data
-const { data: treatments } = await supabase
+const { data: rawTreatments } = await supabase
   .from('preventive_treatments')
   .select('*')
   .eq('pet_id', pet.id)
   .order('date_given', { ascending: false });
 
+// Dogs use Vivra's calendar-month default. This normalization makes historical rows
+// saved before next_due existed show their real dose instead of a false empty
+// status. Cats continue to require an explicit date.
+const treatments = (rawTreatments ?? []).map(treatment => ({
+  ...treatment,
+  next_due: preventiveNextDue((pet as any).species, treatment.date_given, treatment.next_due),
+}));
+
 // A 'combinado' row acts as both antipulgas and desparasitante. Include it in
 // both lists so "last dose" + history reflect reality for each specific type.
-const antipulgasList = (treatments ?? []).filter(t => t.type === 'antipulgas' || t.type === 'combinado');
-const desparasitanteList = (treatments ?? []).filter(t => t.type === 'desparasitante' || t.type === 'combinado');
+const antipulgasList = treatments.filter(t => t.type === 'antipulgas' || t.type === 'combinado');
+const desparasitanteList = treatments.filter(t => t.type === 'desparasitante' || t.type === 'combinado');
+const isDog = (pet as any).species === 'dog';
+const defaultNextDue = isDog ? preventiveNextDue('dog', new Date().toISOString().slice(0, 10), null) ?? '' : '';
 
 function daysUntilNext(nextDue: string | null | undefined) {
   if (!nextDue) return { daysLeft: null, overdue: false, nextDate: null };
@@ -71,6 +83,7 @@ const openForm = Astro.url.searchParams.get('new');
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
+  <SectionHeader title="Preventivos" subtitle={`Antipulgas y desparasitación de ${pet.name}`} />
 
   {/* ── STATUS CARDS ── */}
   <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up">
@@ -130,10 +143,10 @@ const openForm = Astro.url.searchParams.get('new');
 
   {/* ── ADD BUTTONS ── */}
   <div class="flex gap-2 mb-3 animate-fade-up">
-    <a href="/salud/preventivos?new=antipulgas" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/20 hover:bg-accent-dark transition-all active:scale-95">
+    <a href="/salud/preventivos?new=antipulgas" class="action-primary flex-1 justify-center gap-2">
       <Icon name="preventivo" class="h-4 w-4" /> Registrar antipulgas
     </a>
-    <a href="/salud/preventivos?new=desparasitante" class="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/20 hover:bg-accent-dark transition-all active:scale-95">
+    <a href="/salud/preventivos?new=desparasitante" class="action-primary flex-1 justify-center gap-2">
       <Icon name="pastilla" class="h-4 w-4" /> Registrar desparasitante
     </a>
   </div>
@@ -181,9 +194,9 @@ const openForm = Astro.url.searchParams.get('new');
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-muted mb-1">Próxima aplicación (opcional)</label>
-            <input type="date" name="next_due" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
-            <p class="mt-1 text-[11px] text-muted">Confirma esta fecha con la etiqueta del producto o tu veterinario.</p>
+            <label class="block text-xs font-medium text-muted mb-1">Próxima aplicación{isDog ? '' : ' (opcional)'}</label>
+            <input type="date" name="next_due" value={defaultNextDue} class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            <p class="mt-1 text-[11px] text-muted">{isDog ? 'Se completa automáticamente un mes después de la aplicación.' : 'Confirma esta fecha con la etiqueta del producto o tu veterinario.'}</p>
           </div>
 
           <div>
@@ -233,7 +246,7 @@ const openForm = Astro.url.searchParams.get('new');
 
   {/* ── GRÁFICO HISTÓRICO ── */}
   <HistoryChart
-    items={(treatments ?? []).map(t => ({ date: t.date_given, amount: t.cost }))}
+    items={treatments.map(t => ({ date: t.date_given, amount: t.cost }))}
     showMoney={premium.isPremium}
     noun="dosis"
     class="mb-5 animate-fade-up"

@@ -1,7 +1,7 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
-import { isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate } from '@vivra/shared';
+import { isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, preventiveNextDue } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -76,7 +76,10 @@ const [
 ]);
 
 // Split preventives — 'combinado' counts for both
-const preventives = allPreventives ?? [];
+const preventives = (allPreventives ?? []).map(treatment => ({
+  ...treatment,
+  next_due: preventiveNextDue((pet as any).species, treatment.date_given, treatment.next_due),
+}));
 const lastAntipulgas = preventives.filter(p => p.type === 'antipulgas' || p.type === 'combinado');
 const lastDesparasitante = preventives.filter(p => p.type === 'desparasitante' || p.type === 'combinado');
 

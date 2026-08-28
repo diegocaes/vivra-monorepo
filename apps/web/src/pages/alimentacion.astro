@@ -6,6 +6,7 @@ import SectionHeader from '../components/ui/SectionHeader.astro';
 import { formatDate, formatDateShort, computeFoodStats, formatCurrency, parseNumericField, sumAmounts } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { getPremiumStatus } from '../lib/premium';
+import MetricGrid from '../components/ui/MetricGrid.astro';
 import { FOOD_TYPES } from '@vivra/shared';
 
 const { supabase, user, activePetId } = Astro.locals;
@@ -197,24 +198,12 @@ const hayGastoMensual = monthlySpend.some(m => m.total > 0);
             {stats.latestFood.type && ` · ${FOOD_TYPES[stats.latestFood.type] || stats.latestFood.type}`}
           </p>
         )}
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
-            <p class="text-lg font-black text-ink">{stats.avgPricePerDay !== null ? `$${formatCurrency(stats.avgPricePerDay)}` : '—'}</p>
-            <p class="text-[10px] text-muted font-medium mt-0.5">$/día prom.</p>
-          </div>
-          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
-            <p class="text-lg font-black text-ink">{stats.avgDaysPerBag !== null ? `${stats.avgDaysPerBag}d` : '—'}</p>
-            <p class="text-[10px] text-muted font-medium mt-0.5">dura/bolsa</p>
-          </div>
-          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
-            <p class="text-lg font-black text-ink">{stats.avgDailyGrams !== null ? `${stats.avgDailyGrams}g` : '—'}</p>
-            <p class="text-[10px] text-muted font-medium mt-0.5">g/día prom.</p>
-          </div>
-          <div class="rounded-xl bg-canvas px-3 py-3 text-center">
-            <p class="text-lg font-black text-ink">{stats.totalBags}</p>
-            <p class="text-[10px] text-muted font-medium mt-0.5">{stats.totalBags === 1 ? 'bolsa' : 'bolsas'}</p>
-          </div>
-        </div>
+        <MetricGrid items={[
+          { value: stats.avgPricePerDay !== null ? `$${formatCurrency(stats.avgPricePerDay)}` : '—', label: '$/día prom.' },
+          { value: stats.avgDaysPerBag !== null ? `${stats.avgDaysPerBag}d` : '—', label: 'dura/bolsa' },
+          { value: stats.avgDailyGrams !== null ? `${stats.avgDailyGrams}g` : '—', label: 'g/día prom.' },
+          { value: String(stats.totalBags), label: stats.totalBags === 1 ? 'bolsa' : 'bolsas' },
+        ]} />
         {stats.totalSpent > 0 && (
           <p class="mt-3 pt-3 border-t border-card-border text-xs text-muted text-center">
             Total gastado en alimentación:{' '}
@@ -296,7 +285,7 @@ const hayGastoMensual = monthlySpend.some(m => m.total > 0);
       <button
         type="button"
         id="toggle-food-form"
-        class="flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
+        class="action-primary"
       >
         <div class="flex items-center gap-2">
           <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">
@@ -310,7 +299,7 @@ const hayGastoMensual = monthlySpend.some(m => m.total > 0);
       <button
         type="button"
         id="toggle-treat-form"
-        class="flex items-center justify-between rounded-2xl bg-card border-2 border-amber-300 px-4 py-3.5 transition-all hover:bg-amber-50 active:scale-95"
+        class="action-secondary border-amber-300 hover:bg-amber-50"
       >
         <div class="flex items-center gap-2">
           <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100">

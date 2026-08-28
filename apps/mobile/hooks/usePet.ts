@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
+import { preventiveNextDue } from '@vivra/shared';
 
 export interface CoOwner {
   id: string;
@@ -114,7 +115,13 @@ export function usePet(): PetData {
         supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
 
-      const allPreventives = (preventivesRes.data as PreventiveRow[]) ?? [];
+      // Dog records created before next_due existed still represent real
+      // applications. Apply the monthly dog default here so the Home and its
+      // reminder cards cannot incorrectly say “Sin registro”.
+      const allPreventives = ((preventivesRes.data as PreventiveRow[]) ?? []).map(treatment => ({
+        ...treatment,
+        next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
+      }));
       // 'combinado' counts as both antipulgas AND desparasitante for "last dose".
       const lastAnti = allPreventives.find(p => p.type === 'antipulgas' || p.type === 'combinado') ?? null;
       const lastDes = allPreventives.find(p => p.type === 'desparasitante' || p.type === 'combinado') ?? null;

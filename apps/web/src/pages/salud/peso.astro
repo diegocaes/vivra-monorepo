@@ -1,8 +1,9 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
-
 import EmptyState from '../../components/ui/EmptyState.astro';
+import MetricGrid from '../../components/ui/MetricGrid.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
 import WeightChart from '../../components/WeightChart.tsx';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
@@ -61,6 +62,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
+  <SectionHeader title="Control de peso" subtitle={`Evolución de ${pet.name}`} />
 
   {/* ── ANALYTICS ── */}
   {records && records.length > 0 ? (
@@ -80,21 +82,11 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
         {records.length >= 2 && <WeightChart records={records} client:load />}
       </div>
 
-      {/* Stats row */}
-      <div class="grid grid-cols-3 gap-3">
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{records.length}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">registros</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{minWeight ?? '—'}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">mínimo kg</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{maxWeight ?? '—'}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">máximo kg</p>
-        </div>
-      </div>
+      <MetricGrid items={[
+        { value: String(records.length), label: 'registros' },
+        { value: minWeight !== null ? `${minWeight} kg` : '—', label: 'mínimo' },
+        { value: maxWeight !== null ? `${maxWeight} kg` : '—', label: 'máximo' },
+      ]} />
     </div>
   ) : (
     <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
@@ -108,7 +100,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     <button
       type="button"
       id="toggle-peso-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
+      class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">

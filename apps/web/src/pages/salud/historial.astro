@@ -2,8 +2,9 @@
 import MainLayout from '../../layouts/MainLayout.astro';
 import HistoryChart from '../../components/HistoryChart.astro';
 import Card from '../../components/ui/Card.astro';
-
 import EmptyState from '../../components/ui/EmptyState.astro';
+import MetricGrid from '../../components/ui/MetricGrid.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
 import { formatDate, parseNumericField, formatCurrency, sumAmounts } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { getPremiumStatus } from '../../lib/premium';
@@ -73,31 +74,20 @@ const lastVisitDays = visits?.[0]
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
+  <SectionHeader title="Historial veterinario" subtitle={`Visitas y tratamientos de ${pet.name}`} />
 
   {/* ── ANALYTICS ── */}
   {visits && visits.length > 0 ? (
     <div class="mb-5 animate-fade-up">
-      <div class="grid grid-cols-3 gap-3">
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{visits.length}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">visitas</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{lastVisitDays !== null ? `${lastVisitDays}d` : '—'}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">última visita</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          {/* Los totales en plata por sección son Premium, igual que en el móvil. */}
-          {totalCost === 0 ? (
-            <p class="text-lg font-black text-ink">—</p>
-          ) : premium.isPremium ? (
-            <p class="text-lg font-black text-ink">${formatCurrency(totalCost)}</p>
-          ) : (
-            <a href="/premium" class="text-lg font-black text-accent hover:text-accent-dark transition-colors">$•••</a>
-          )}
-          <p class="text-[10px] text-muted font-medium mt-0.5">total gastado</p>
-        </div>
-      </div>
+      <MetricGrid items={[
+        { value: String(visits.length), label: 'visitas' },
+        { value: lastVisitDays !== null ? `${lastVisitDays}d` : '—', label: 'última visita' },
+        {
+          value: totalCost === 0 ? '—' : premium.isPremium ? `$${formatCurrency(totalCost)}` : '$•••',
+          label: 'total gastado',
+          href: totalCost === 0 || premium.isPremium ? undefined : '/premium',
+        },
+      ]} />
     </div>
   ) : (
     <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
@@ -111,7 +101,7 @@ const lastVisitDays = visits?.[0]
     <button
       type="button"
       id="toggle-historial-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
+      class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">

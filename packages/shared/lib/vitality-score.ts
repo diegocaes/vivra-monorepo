@@ -24,6 +24,7 @@
  */
 
 import { getSpeciesProfile } from './breed-data';
+import { preventiveNextDue } from './preventives';
 
 // ─── Tipos de entrada ───────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ export interface BloodTestRecord {
 export interface PreventiveRecord {
   type: 'antipulgas' | 'desparasitante' | 'combinado';
   date_given: string; // ISO date
-  /** Owner/veterinarian-confirmed date. No interval is inferred when absent. */
+  /** Explicit date, or Vivra's derived 30-day dog default when absent. */
   next_due?: string | null;
 }
 
@@ -386,8 +387,8 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     }
   }
 
-  // Sub-score preventivos (4 pts) — only explicit, owner/vet-confirmed due
-  // dates count. Product cadence varies by species and product.
+  // Sub-score preventivos (4 pts). Dogs use Vivra's calendar-month default when the
+  // historical row predates next_due; cats still require an explicit date.
   const lastAnti = preventives
     .filter(p => p.type === 'antipulgas' || p.type === 'combinado')
     .sort((a, b) => b.date_given.localeCompare(a.date_given))[0];
@@ -395,20 +396,24 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     .filter(p => p.type === 'desparasitante' || p.type === 'combinado')
     .sort((a, b) => b.date_given.localeCompare(a.date_given))[0];
 
+  function dueFor(record: PreventiveRecord | undefined): string | null {
+    return record ? preventiveNextDue(input.pet.species, record.date_given, record.next_due) : null;
+  }
   function scoreOne(record: PreventiveRecord | undefined): number {
-    if (!record?.next_due) return 0;
-    const daysLeft = Math.ceil((new Date(`${record.next_due}T00:00:00`).getTime() - Date.now()) / 86400000);
+    const nextDue = dueFor(record);
+    if (!nextDue) return 0;
+    const daysLeft = Math.ceil((new Date(`${nextDue}T00:00:00`).getTime() - Date.now()) / 86400000);
     if (daysLeft >= 0) return 2;
     if (daysLeft >= -20) return 1;
     return 0;
   }
   const preventiveScore = scoreOne(lastAnti) + scoreOne(lastDes);
-  if (!lastAnti?.next_due) {
+  if (!dueFor(lastAnti)) {
     tips.push('Registra el antipulgas y su próxima fecha para completar el cuidado preventivo');
   } else if (scoreOne(lastAnti) < 2) {
     tips.push('La próxima fecha de antipulgas ya pasó — revisa el plan con tu vet');
   }
-  if (!lastDes?.next_due) {
+  if (!dueFor(lastDes)) {
     tips.push('Registra el desparasitante y su próxima fecha para completar el cuidado preventivo');
   } else if (scoreOne(lastDes) < 2) {
     tips.push('La próxima fecha de desparasitación ya pasó — revisa el plan con tu vet');
@@ -875,7 +880,7 @@ export function calculateVitalityScore(input: ScoreInput): VitalityScoreResult {
 
   if (!showScore) {
     headline = 'Completando el perfil';
-    subline = 'Agrega unos datos más para ver cómo está ' + (pet.species === 'cat' ? 'tu gato' : 'tu perro');
+    subline = `Agrega unos datos más para ver cómo está ${pet.species === 'cat' ? 'tu gato' : 'tu perro'}`;
     color = '#94a3b8';
   } else if (sufficiency === 'building') {
     headline = cat.headline;

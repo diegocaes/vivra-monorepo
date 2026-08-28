@@ -3,6 +3,8 @@ import MainLayout from '../../layouts/MainLayout.astro';
 import HistoryChart from '../../components/HistoryChart.astro';
 import Icon from '../../components/ui/Icon.astro';
 import Card from '../../components/ui/Card.astro';
+import MetricGrid from '../../components/ui/MetricGrid.astro';
+import SectionHeader from '../../components/ui/SectionHeader.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
 import { formatDate, parseNumericField } from '@vivra/shared';
@@ -69,30 +71,16 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
+  <SectionHeader title="Grooming" subtitle={`Baños, cortes y cuidado de ${pet.name}`} />
 
   {/* ── ANALYTICS ── */}
   {groomings && groomings.length > 0 ? (
     <div class="mb-5 animate-fade-up">
-      <div class="grid grid-cols-3 gap-3">
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{groomings.length}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">sesiones</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          <p class="text-lg font-black text-ink">{lastGroomDays !== null ? `${lastGroomDays}d` : '—'}</p>
-          <p class="text-[10px] text-muted font-medium mt-0.5">último grooming</p>
-        </div>
-        <div class="rounded-2xl bg-card border border-card-border px-4 py-3 text-center">
-          {!avgCost ? (
-            <p class="text-lg font-black text-ink">—</p>
-          ) : premium.isPremium ? (
-            <p class="text-lg font-black text-ink">${avgCost}</p>
-          ) : (
-            <a href="/premium" class="text-lg font-black text-accent hover:text-accent-dark transition-colors">$•••</a>
-          )}
-          <p class="text-[10px] text-muted font-medium mt-0.5">costo prom.</p>
-        </div>
-      </div>
+      <MetricGrid items={[
+        { value: String(groomings.length), label: 'sesiones' },
+        { value: lastGroomDays !== null ? `${lastGroomDays}d` : '—', label: 'último grooming' },
+        { value: !avgCost ? '—' : premium.isPremium ? `$${avgCost}` : '$•••', label: 'costo prom.', href: !avgCost || premium.isPremium ? undefined : '/premium' },
+      ]} />
     </div>
   ) : (
     <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
@@ -106,7 +94,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     <button
       type="button"
       id="toggle-grooming-form"
-      class="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3.5 shadow-lg shadow-accent/20 transition-all hover:bg-accent-dark active:scale-95"
+      class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">

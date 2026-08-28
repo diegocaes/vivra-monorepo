@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, friendlyError } from '@vivra/shared';
+import { formatDate, friendlyError, preventiveNextDue } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -88,11 +88,10 @@ function dedupePorId<T extends { id: string }>(items: T[]): T[] {
 
 export default function PreventivosScreen() {
   const router = useRouter();
-  const { pet } = usePetContext();
+  const { pet, refresh: refreshPetData } = usePetContext();
   const { isPremium } = useSubscription();
   const [antipulgas, setAntipulgas] = useState<PreventiveTreatment[]>([]);
   const [desparasitante, setDesparasitante] = useState<PreventiveTreatment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
@@ -120,13 +119,15 @@ export default function PreventivosScreen() {
 
     if (error) console.warn('[Preventivos] fetch error:', error.message);
 
-    const all = (data as PreventiveTreatment[]) ?? [];
+    const all = ((data as PreventiveTreatment[]) ?? []).map(treatment => ({
+      ...treatment,
+      next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
+    }));
     const anti = all.filter(t => t.type === 'antipulgas' || t.type === 'combinado');
     const des = all.filter(t => t.type === 'desparasitante' || t.type === 'combinado');
 
     setAntipulgas(anti);
     setDesparasitante(des);
-    setLoading(false);
   }, [pet?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -139,7 +140,7 @@ export default function PreventivosScreen() {
 
   const resetForm = () => {
     setDateApplied(new Date().toISOString().slice(0, 10));
-    setNextDue('');
+    setNextDue(pet?.species === 'dog' ? preventiveNextDue('dog', new Date().toISOString().slice(0, 10), null) ?? '' : '');
     setProductName('');
     setCost('');
     setNotes('');
@@ -156,7 +157,7 @@ export default function PreventivosScreen() {
     setEditingTreatment(item);
     setFormType(item.type as TreatmentType);
     setDateApplied(item.date_given);
-    setNextDue(item.next_due ?? '');
+    setNextDue(preventiveNextDue(pet?.species, item.date_given, item.next_due) ?? '');
     setProductName(item.product_name ?? '');
     setCost(item.cost?.toString() ?? '');
     setNotes(item.notes ?? '');
@@ -168,10 +169,11 @@ export default function PreventivosScreen() {
     if (!dateApplied) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
+    const effectiveNextDue = preventiveNextDue(pet.species, dateApplied, nextDue);
     const payload = {
       type: formType,
       date_given: dateApplied,
-      next_due: nextDue || null,
+      next_due: effectiveNextDue,
       product_name: productName || null,
       cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
@@ -198,8 +200,8 @@ export default function PreventivosScreen() {
         // IS the benefit. If they haven't granted notification permission
         // yet (e.g. skipped at onboarding), ask now with full context.
         await requestPushPermissionAndRegister();
-        if (nextDue) {
-          await schedulePreventiveReminder({ petName: pet.name, type: formType, nextDueDate: new Date(`${nextDue}T09:00:00`) });
+        if (effectiveNextDue) {
+          await schedulePreventiveReminder({ petName: pet.name, type: formType, nextDueDate: new Date(`${effectiveNextDue}T09:00:00`) });
         }
       } catch (e) {
         console.warn('[Preventivos] schedule reminder failed:', e);
@@ -209,6 +211,7 @@ export default function PreventivosScreen() {
     resetForm();
     setShowForm(false);
     fetchData();
+    refreshPetData().catch(() => {});
   };
 
   const handleDelete = (id: string) => {
@@ -218,6 +221,7 @@ export default function PreventivosScreen() {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
           await supabase.from('preventive_treatments').delete().eq('id', id).eq('pet_id', pet!.id);
           fetchData();
+          refreshPetData().catch(() => {});
         },
       },
     ]);
@@ -315,18 +319,21 @@ export default function PreventivosScreen() {
         <DatePickerField
           label="Fecha de aplicación"
           value={dateApplied}
-          onChange={setDateApplied}
+          onChange={date => {
+            setDateApplied(date);
+            if (pet?.species === 'dog') setNextDue(preventiveNextDue('dog', date, null) ?? '');
+          }}
           maxDate={new Date()}
         />
         <DatePickerField
-          label="Próxima aplicación (opcional)"
+          label={pet?.species === 'dog' ? 'Próxima aplicación' : 'Próxima aplicación (opcional)'}
           value={nextDue}
           onChange={setNextDue}
-          clearable
+          clearable={pet?.species !== 'dog'}
         />
         <Text style={styles.nextDueHint}>
           {pet?.species === 'dog'
-            ? 'Para algunos productos mensuales puedes usar ~30 días como sugerencia; confirma la fecha con tu vet.'
+            ? 'Se completa automáticamente un mes después de la aplicación.'
             : 'Confirma la fecha con tu veterinario o la etiqueta del producto.'}
         </Text>
         <FormField
