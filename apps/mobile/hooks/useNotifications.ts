@@ -298,7 +298,7 @@ export async function scheduleBirthdayNotification(opts: {
   birthDate: string;
 }) {
   const { petName, birthDate } = opts;
-  const birth = new Date(birthDate + 'T00:00:00');
+  const birth = new Date(`${birthDate}T00:00:00`);
   const now = new Date();
 
   // Calculate next birthday
@@ -323,21 +323,15 @@ export async function scheduleBirthdayNotification(opts: {
   });
 }
 
-/** Schedule a vaccine reminder when it's been more than 1 year since the last
- *  vaccine was given (i.e. on or after the next-due date). */
+/** Schedule from the next date confirmed by the user or veterinarian.
+ * A vaccine name alone must never make us infer a medical schedule. */
 async function scheduleVaccineReminderImpl(opts: {
   petName: string;
   vaccineName: string;
-  /** Date the vaccine was last given. We schedule the alert for +1 year. */
-  lastGivenDate: Date;
+  /** Null removes a legacy locally inferred reminder for this vaccine. */
+  nextDueDate: Date | null;
 }) {
-  const { petName, vaccineName, lastGivenDate } = opts;
-
-  const alertDate = new Date(lastGivenDate);
-  alertDate.setFullYear(alertDate.getFullYear() + 1);
-  alertDate.setHours(9, 0, 0, 0); // 9am of due day
-
-  if (alertDate <= new Date()) return;
+  const { petName, vaccineName, nextDueDate } = opts;
 
   // Cancel any prior reminder for this (pet, vaccineName) to avoid stacking.
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -348,10 +342,17 @@ async function scheduleVaccineReminderImpl(opts: {
     }
   }
 
+  if (!nextDueDate) return;
+
+  const alertDate = new Date(nextDueDate);
+  alertDate.setDate(alertDate.getDate() - 7);
+  alertDate.setHours(9, 0, 0, 0);
+  if (alertDate <= new Date()) return;
+
   await Notifications.scheduleNotificationAsync({
     content: {
       title: `${petName}: vacuna pendiente`,
-      body: `Llevas más de un año sin registrar la vacuna de ${vaccineName} de ${petName}.`,
+      body: `La vacuna de ${vaccineName} de ${petName} tiene una próxima fecha registrada en una semana.`,
       data: { type: 'vaccine_reminder', vaccineName, petName },
       sound: true,
     },
@@ -408,7 +409,7 @@ export function schedulePreventiveReminder(opts: Parameters<typeof schedulePreve
   return enCola(() => schedulePreventiveReminderImpl(opts));
 }
 
-/** Recordatorio de vacuna, un año después de la última dosis. */
+/** Recordatorio de vacuna según la próxima fecha confirmada. */
 export function scheduleVaccineReminder(opts: Parameters<typeof scheduleVaccineReminderImpl>[0]) {
   return enCola(() => scheduleVaccineReminderImpl(opts));
 }

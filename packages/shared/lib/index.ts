@@ -1,4 +1,5 @@
 export * from './vitality-score';
+export * from './vaccines';
 export * from './breed-data';
 export * from './breeds';
 export * from './constants';

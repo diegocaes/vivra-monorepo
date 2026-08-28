@@ -26,6 +26,8 @@ export interface Vaccine {
   date_given: string;
   next_due: string | null;
   vet_name: string | null;
+  brand: string | null;
+  lot_number: string | null;
   notes: string | null;
   created_at: string;
 }

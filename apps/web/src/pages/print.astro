@@ -11,7 +11,7 @@ if (!pet) return Astro.redirect('/perfil?new=1');
 
 const { data: vaccines } = await supabase
   .from('vaccines')
-  .select('name, date_given')
+  .select('name, date_given, next_due, brand, lot_number')
   .eq('pet_id', pet.id)
   .order('date_given', { ascending: false });
 
@@ -244,6 +244,11 @@ const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
         font-weight: 600;
         color: var(--ink);
       }
+      .vaccine-meta {
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
       .vaccine-date {
         font-size: 11px;
         color: var(--muted);
@@ -449,9 +454,16 @@ const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
           <div class="vaccine-list">
             {vaccines.map((v) => (
               <div class="vaccine-row">
-                <div style="display:flex;align-items:center;">
+                <div style="display:flex;align-items:flex-start;">
                   <div class="vaccine-dot"></div>
-                  <span class="vaccine-name">{v.name}</span>
+                  <div>
+                    <span class="vaccine-name">{v.name}</span>
+                    {(v.brand || v.lot_number || v.next_due) && (
+                      <p class="vaccine-meta">
+                        {[v.brand, v.lot_number ? `Lote ${v.lot_number}` : null, v.next_due ? `Próxima: ${formatDate(v.next_due)}` : null].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <span class="vaccine-date">{formatDate(v.date_given)}</span>
               </div>
@@ -506,6 +518,10 @@ const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       Volver
     </a>
+
+    <p style="max-width:520px;margin-top:16px;text-align:center;font-size:11px;line-height:1.45;color:#6B7280;">
+      Resumen personal de Vivra. No es un documento oficial de viaje ni un certificado sanitario.
+    </p>
 
   </body>
 </html>

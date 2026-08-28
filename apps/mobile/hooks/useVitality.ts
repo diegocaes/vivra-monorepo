@@ -31,7 +31,7 @@ export function useVitality(petData: PetData): VitalityScoreResult | null {
         created_at: f.created_at,
       })),
       bloodTests: bloodTests.map(b => ({ date: b.date })),
-      preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
+      preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given, next_due: p.next_due })),
     };
 
     return calculateVitalityScore(input);

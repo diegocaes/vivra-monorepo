@@ -23,7 +23,7 @@ function NavCard({ icon, iconColor, title, subtitle, onPress, badge }: NavCardPr
     <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
       <Card>
         <View style={styles.navRow}>
-          <View style={[styles.navIconCircle, { backgroundColor: iconColor + '15' }]}>
+          <View style={[styles.navIconCircle, { backgroundColor: `${iconColor}15` }]}>
             <Ionicons name={icon} size={22} color={iconColor} />
           </View>
           <View style={styles.navInfo}>
@@ -135,6 +135,14 @@ export default function SaludScreen() {
 
         {/* Navigation cards — ordered by frequency of use */}
         <NavCard
+          icon="medkit"
+          iconColor={Colors.good}
+          title="Vacunas"
+          subtitle="Dosis, próximas fechas y carné"
+          onPress={() => router.push('/(app)/salud/vacunas')}
+          badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
+        />
+        <NavCard
           icon="shield-checkmark"
           iconColor={Colors.warn}
           title="Preventivos"
@@ -156,14 +164,6 @@ export default function SaludScreen() {
           subtitle="Visitas, diagnósticos y costos"
           onPress={() => router.push('/(app)/salud/historial')}
           badge={visitCount > 0 ? `${visitCount}` : undefined}
-        />
-        <NavCard
-          icon="medkit"
-          iconColor={Colors.good}
-          title="Vacunas"
-          subtitle="Historial de dosis y próximas fechas"
-          onPress={() => router.push('/(app)/salud/vacunas')}
-          badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />
         <NavCard
           icon="cut"

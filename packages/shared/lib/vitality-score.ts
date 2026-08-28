@@ -78,6 +78,8 @@ export interface BloodTestRecord {
 export interface PreventiveRecord {
   type: 'antipulgas' | 'desparasitante' | 'combinado';
   date_given: string; // ISO date
+  /** Owner/veterinarian-confirmed date. No interval is inferred when absent. */
+  next_due?: string | null;
 }
 
 export interface ScoreInput {
@@ -384,33 +386,32 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     }
   }
 
-  // Sub-score preventivos (4 pts) — antipulgas + desparasitante cada 30 días
-  // 'combinado' cuenta como ambos. 2 pts si cada categoría está al día (< 40d), 1 si < 60d, 0 si no.
+  // Sub-score preventivos (4 pts) — only explicit, owner/vet-confirmed due
+  // dates count. Product cadence varies by species and product.
   const lastAnti = preventives
     .filter(p => p.type === 'antipulgas' || p.type === 'combinado')
-    .map(p => daysBetween(p.date_given))
-    .sort((a, b) => a - b)[0];
+    .sort((a, b) => b.date_given.localeCompare(a.date_given))[0];
   const lastDes = preventives
     .filter(p => p.type === 'desparasitante' || p.type === 'combinado')
-    .map(p => daysBetween(p.date_given))
-    .sort((a, b) => a - b)[0];
+    .sort((a, b) => b.date_given.localeCompare(a.date_given))[0];
 
-  function scoreOne(d: number | undefined): number {
-    if (d === undefined) return 0;
-    if (d <= 40) return 2;  // al día (ciclo mensual + 10d de margen)
-    if (d <= 60) return 1;  // apenas vencido
+  function scoreOne(record: PreventiveRecord | undefined): number {
+    if (!record?.next_due) return 0;
+    const daysLeft = Math.ceil((new Date(`${record.next_due}T00:00:00`).getTime() - Date.now()) / 86400000);
+    if (daysLeft >= 0) return 2;
+    if (daysLeft >= -20) return 1;
     return 0;
   }
   const preventiveScore = scoreOne(lastAnti) + scoreOne(lastDes);
-  if (lastAnti === undefined) {
-    tips.push('Registra el antipulgas para completar el cuidado preventivo');
-  } else if (lastAnti > 40) {
-    tips.push(`Han pasado ${lastAnti}d desde el último antipulgas — aplicar cada ~30d ideal`);
+  if (!lastAnti?.next_due) {
+    tips.push('Registra el antipulgas y su próxima fecha para completar el cuidado preventivo');
+  } else if (scoreOne(lastAnti) < 2) {
+    tips.push('La próxima fecha de antipulgas ya pasó — revisa el plan con tu vet');
   }
-  if (lastDes === undefined) {
-    tips.push('Registra el desparasitante para completar el cuidado preventivo');
-  } else if (lastDes > 40) {
-    tips.push(`Han pasado ${lastDes}d desde el último desparasitante — aplicar cada ~30d ideal`);
+  if (!lastDes?.next_due) {
+    tips.push('Registra el desparasitante y su próxima fecha para completar el cuidado preventivo');
+  } else if (scoreOne(lastDes) < 2) {
+    tips.push('La próxima fecha de desparasitación ya pasó — revisa el plan con tu vet');
   }
 
   // Bonus: examen de sangre anual (+2 pts si hay uno reciente)

@@ -4,13 +4,15 @@ import Card from '../../components/ui/Card.astro';
 import Icon from '../../components/ui/Icon.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
-import { formatDate } from '@vivra/shared';
+import { formatDate, vaccineOptionsForSpecies } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { subirImagen, borrarImagenPorUrl } from '../../lib/storage';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
+
+const vaccineOptions = vaccineOptionsForSpecies((pet as any).species);
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
@@ -22,6 +24,8 @@ if (Astro.request.method === 'POST') {
       date_given: formData.get('date_given') as string,
       next_due: (formData.get('next_due') as string) || null,
       vet_name: (formData.get('vet_name') as string) || null,
+      brand: (formData.get('brand') as string)?.trim() || null,
+      lot_number: (formData.get('lot_number') as string)?.trim() || null,
       notes: (formData.get('notes') as string) || null,
     });
   }
@@ -32,6 +36,8 @@ if (Astro.request.method === 'POST') {
       date_given: formData.get('date_given') as string,
       next_due: (formData.get('next_due') as string) || null,
       vet_name: (formData.get('vet_name') as string) || null,
+      brand: (formData.get('brand') as string)?.trim() || null,
+      lot_number: (formData.get('lot_number') as string)?.trim() || null,
       notes: (formData.get('notes') as string) || null,
     }).eq('id', vaccineId).eq('pet_id', pet.id);
   }
@@ -89,6 +95,18 @@ const upcomingCount = vaccines?.filter(v => {
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
+
+  <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 animate-fade-up">
+    <div class="flex gap-3">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-accent">
+        <Icon name="vacuna" class="h-5 w-5" />
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-ink">Historial de vacunación</p>
+        <p class="mt-0.5 text-xs leading-relaxed text-muted">Registra la dosis como aparece en el carné. La próxima fecha la confirma tu veterinario.</p>
+      </div>
+    </div>
+  </div>
 
   {/* ── RESUMEN ── */}
   {vaccines && vaccines.length > 0 ? (
@@ -253,13 +271,7 @@ const upcomingCount = vaccines?.filter(v => {
             <label class="block text-sm font-medium text-ink mb-1.5">Vacuna <span class="text-red-500">*</span></label>
             <select id="vaccine-select" class="field-input">
               <option value="">Seleccionar vacuna</option>
-              <option value="Rabia">Rabia</option>
-              <option value="Parvovirus">Parvovirus</option>
-              <option value="Moquillo">Moquillo</option>
-              <option value="Bordetella">Bordetella</option>
-              <option value="Leptospirosis">Leptospirosis</option>
-              <option value="Hepatitis">Hepatitis</option>
-              <option value="Otra">Otra...</option>
+              {vaccineOptions.map(option => <option value={option.key}>{option.label}</option>)}
             </select>
             <input type="text" name="name" id="vaccine-name-input" required placeholder="Nombre de la vacuna" class="mt-2 hidden field-input" />
           </div>
@@ -276,6 +288,16 @@ const upcomingCount = vaccines?.filter(v => {
           <div>
             <label class="block text-sm font-medium text-ink mb-1.5">Veterinario</label>
             <input type="text" name="vet_name" placeholder="Dr. García" class="field-input" />
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Marca o laboratorio</label>
+              <input type="text" name="brand" placeholder="Como aparece en el carné" class="field-input" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-ink mb-1.5">Lote</label>
+              <input type="text" name="lot_number" placeholder="Número de lote" class="field-input" />
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-ink mb-1.5">Notas</label>
@@ -314,6 +336,7 @@ const upcomingCount = vaccines?.filter(v => {
                   <div class="flex-1 min-w-0">
                     <p class="font-semibold text-ink">{vaccine.name}</p>
                     <p class="text-xs text-gray-400 mt-0.5">Aplicada: {formatDate(vaccine.date_given)}{vaccine.vet_name && ` · ${vaccine.vet_name}`}</p>
+                    {vaccine.brand && <p class="text-xs text-muted mt-1">{vaccine.brand}{vaccine.lot_number && ` · Lote ${vaccine.lot_number}`}</p>}
                     {vaccine.next_due ? (
                       <div class:list={['mt-2 flex items-center gap-1.5 text-xs font-medium',
                         overdue ? 'text-red-500' : daysLeft !== null && daysLeft <= 30 ? 'text-amber-600' : 'text-accent'
@@ -365,6 +388,10 @@ const upcomingCount = vaccines?.filter(v => {
                 <input type="date" name="next_due" value={vaccine.next_due || ''} placeholder="Próx. dosis" class="field-input-sm" />
               </div>
               <input type="text" name="vet_name" value={vaccine.vet_name || ''} placeholder="Veterinario" class="field-input-sm" />
+              <div class="grid grid-cols-2 gap-3">
+                <input type="text" name="brand" value={vaccine.brand || ''} placeholder="Marca o laboratorio" class="field-input-sm" />
+                <input type="text" name="lot_number" value={vaccine.lot_number || ''} placeholder="Lote" class="field-input-sm" />
+              </div>
               <textarea name="notes" rows="2" placeholder="Notas" class="field-input-sm resize-none">{vaccine.notes || ''}</textarea>
               <button type="submit" class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">Guardar cambios</button>
             </form>

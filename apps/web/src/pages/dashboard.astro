@@ -1,7 +1,7 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
-import { isBirthday, calculateAge, formatDate, computeFoodStats, formatCurrency } from '@vivra/shared';
+import { isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -66,13 +66,13 @@ const [
   { data: allPreventives },
 ] = await Promise.all([
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-  supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('vaccines').select('name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, food_type, start_date, end_date, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
   // All preventives (antipulgas, desparasitante, combinado) in one call.
   // 'combinado' rows count as BOTH antipulgas and desparasitante for next-due.
-  supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);
 
 // Split preventives — 'combinado' counts for both
@@ -90,6 +90,28 @@ try {
 // Derived counts and recent items from full queries
 const vaccineCount = allVaccines?.length ?? 0;
 const visitCount = allVetVisits?.length ?? 0;
+
+// The dashboard uses the latest record of each vaccine name. Only a saved
+// next_due date can make a dose pending — never an inferred annual schedule.
+const latestVaccineByName = new Map<string, { name: string; date_given: string; next_due: string | null }>();
+for (const vaccine of allVaccines ?? []) {
+  if (!latestVaccineByName.has(vaccine.name)) latestVaccineByName.set(vaccine.name, vaccine);
+}
+const latestVaccines = [...latestVaccineByName.values()];
+const todayForVaccines = new Date();
+todayForVaccines.setHours(0, 0, 0, 0);
+const datedVaccines = latestVaccines
+  .filter(vaccine => vaccine.next_due)
+  .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
+  .sort((a, b) => a.due.getTime() - b.due.getTime());
+const nextVaccine = datedVaccines[0] ?? null;
+const vaccineSummary = !latestVaccines.length
+  ? { state: 'empty' as const, title: 'Registra la primera vacuna', detail: 'Guarda la dosis tal como aparece en el carné' }
+  : nextVaccine && nextVaccine.due < todayForVaccines
+    ? { state: 'overdue' as const, title: `${nextVaccine.vaccine.name} pendiente`, detail: 'Confirma el refuerzo con tu veterinario' }
+    : nextVaccine
+      ? { state: 'scheduled' as const, title: `Próxima: ${nextVaccine.vaccine.name}`, detail: formatDate(nextVaccine.vaccine.next_due!) }
+      : { state: 'recorded' as const, title: `${latestVaccines.length} vacuna${latestVaccines.length === 1 ? '' : 's'} registrada${latestVaccines.length === 1 ? '' : 's'}`, detail: 'Aún no hay una próxima fecha registrada' };
 
 // Food insights — averages across all logged bags. The owner already knows
 // when food runs out; we surface trazabilidad (cost, duration) instead.
@@ -123,7 +145,7 @@ const vitalityInput: ScoreInput = {
   groomings: (allGroomings ?? []).map(g => ({ date: g.date })),
   foods: (foods ?? []).filter(f => f.daily_grams && f.bag_size),
   bloodTests,
-  preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given })),
+  preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given, next_due: p.next_due })),
 };
 const dashScore = calculateVitalityScore(vitalityInput);
 
@@ -135,21 +157,25 @@ const SHORT_PILLAR: Record<string, string> = {
   'Nutrición': 'Nutrición',
 };
 
-// Preventive treatment reminders (30-day cycle)
-function daysUntilNext(lastDateStr: string | null | undefined): { daysLeft: number; overdue: boolean; lastDate: string | null } {
-  if (!lastDateStr) return { daysLeft: 0, overdue: true, lastDate: null };
-  const last = new Date(lastDateStr);
-  const next = new Date(last);
-  next.setDate(next.getDate() + 30);
+// Preventive treatment reminders use a confirmed next date, never an inferred interval.
+// A past application without a next date is a valid historical record, not an
+// overdue treatment and not a "never applied" state.
+function preventiveStatus(
+  lastDate: string | null | undefined,
+  nextDue: string | null | undefined,
+): { hasRecord: boolean; hasDue: boolean; daysLeft: number; overdue: boolean } {
+  if (!lastDate) return { hasRecord: false, hasDue: false, daysLeft: 0, overdue: false };
+  if (!nextDue) return { hasRecord: true, hasDue: false, daysLeft: 0, overdue: false };
+  const next = new Date(`${nextDue}T00:00:00`);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   next.setHours(0, 0, 0, 0);
   const daysLeft = Math.ceil((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  return { daysLeft, overdue: daysLeft < 0, lastDate: lastDateStr };
+  return { hasRecord: true, hasDue: true, daysLeft, overdue: daysLeft < 0 };
 }
 
-const antipulgasInfo = daysUntilNext(lastAntipulgas?.[0]?.date_given);
-const desparasitanteInfo = daysUntilNext(lastDesparasitante?.[0]?.date_given);
+const antipulgasInfo = preventiveStatus(lastAntipulgas?.[0]?.date_given, lastAntipulgas?.[0]?.next_due);
+const desparasitanteInfo = preventiveStatus(lastDesparasitante?.[0]?.date_given, lastDesparasitante?.[0]?.next_due);
 
 const birthday = pet.birth_date ? isBirthday(pet.birth_date) : false;
 const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
@@ -249,12 +275,13 @@ try {
     });
   }
 
-  // Preventivos vencidos o por vencer (ciclo de 30 días)
+  // Preventivos vencidos o por vencer, únicamente si el usuario confirmó
+  // una próxima fecha para ese producto.
   for (const [info, etiqueta] of [
     [antipulgasInfo, 'antipulgas'],
     [desparasitanteInfo, 'desparasitante'],
   ] as const) {
-    if (!info.lastDate || info.daysLeft > 1) continue;
+    if (!info.hasDue || info.daysLeft > 1) continue;
     if (!puedeAvisar('preventive_due')) break;
     newNotifications.push({
       type: 'preventive_due',
@@ -270,23 +297,29 @@ try {
     break; // un solo aviso de preventivos por ciclo, no uno de cada tipo
   }
 
-  // Vacuna con más de un año desde la última dosis
+  // Vaccines use the next date confirmed by the user or veterinarian.
+  // Never infer an annual booster from a past dose.
   if (puedeAvisar('vaccine_due')) {
     const { data: allVaccinesByDate } = await supabase
       .from('vaccines')
-      .select('name, date_given')
+      .select('name, date_given, next_due')
       .eq('pet_id', pet.id)
       .order('date_given', { ascending: false });
     const vistas = new Set<string>();
     for (const v of allVaccinesByDate ?? []) {
       if (!v.date_given || vistas.has(v.name)) continue;
       vistas.add(v.name); // solo la dosis más reciente de cada vacuna
-      const dias = Math.floor((Date.now() - new Date(v.date_given + 'T00:00:00').getTime()) / 86400000);
-      if (dias > 365) {
+      if (!v.next_due) continue;
+      const dias = Math.ceil((new Date(`${v.next_due}T00:00:00`).getTime() - Date.now()) / 86400000);
+      if (dias <= 7) {
         newNotifications.push({
           type: 'vaccine_due',
           title: `${pet.name}: vacuna pendiente`,
-          message: `Llevas más de un año sin registrar la vacuna de ${v.name} de ${pet.name}`,
+          message: dias < 0
+            ? `La vacuna de ${v.name} de ${pet.name} está vencida. Confirma el refuerzo con tu vet.`
+            : dias === 0
+              ? `Hoy corresponde la vacuna de ${v.name} de ${pet.name}.`
+              : `La vacuna de ${v.name} de ${pet.name} tiene próxima fecha en ${dias} días.`,
           icon: 'vacuna',
           href: '/salud/vacunas',
         });
@@ -328,7 +361,7 @@ try {
 }
 
 // Build "Qué hacer hoy" actions
-if (antipulgasInfo.lastDate && (antipulgasInfo.overdue || antipulgasInfo.daysLeft <= 3)) {
+if (antipulgasInfo.hasDue && (antipulgasInfo.overdue || antipulgasInfo.daysLeft <= 3)) {
   todoActions.push({
     href: '/salud/preventivos',
     icon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
@@ -338,7 +371,7 @@ if (antipulgasInfo.lastDate && (antipulgasInfo.overdue || antipulgasInfo.daysLef
     detail: 'Aplicar tratamiento',
     urgent: antipulgasInfo.overdue,
   });
-} else if (!antipulgasInfo.lastDate) {
+} else if (!antipulgasInfo.hasRecord) {
   todoActions.push({
     href: '/salud/preventivos',
     icon: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
@@ -347,7 +380,7 @@ if (antipulgasInfo.lastDate && (antipulgasInfo.overdue || antipulgasInfo.daysLef
   });
 }
 
-if (desparasitanteInfo.lastDate && (desparasitanteInfo.overdue || desparasitanteInfo.daysLeft <= 3)) {
+if (desparasitanteInfo.hasDue && (desparasitanteInfo.overdue || desparasitanteInfo.daysLeft <= 3)) {
   todoActions.push({
     href: '/salud/preventivos',
     icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -357,7 +390,7 @@ if (desparasitanteInfo.lastDate && (desparasitanteInfo.overdue || desparasitante
     detail: 'Aplicar tratamiento',
     urgent: desparasitanteInfo.overdue,
   });
-} else if (!desparasitanteInfo.lastDate) {
+} else if (!desparasitanteInfo.hasRecord) {
   todoActions.push({
     href: '/salud/preventivos',
     icon: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -727,6 +760,33 @@ const topActions = todoActions.slice(0, 4);
     </div>
   </a>
 
+  {/* ── VACUNAS: acceso prioritario ── */}
+  <a
+    href="/salud/vacunas"
+    class:list={[
+      'mb-6 flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all hover:shadow-sm active:scale-[0.98] animate-fade-up animate-fade-up-delay-2',
+      vaccineSummary.state === 'overdue'
+        ? 'border-red-200 bg-red-50'
+        : vaccineSummary.state === 'scheduled'
+          ? 'border-amber-200 bg-amber-50'
+          : 'border-emerald-200 bg-emerald-50',
+    ]}
+  >
+    <div class:list={[
+      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+      vaccineSummary.state === 'overdue' ? 'bg-red-100 text-red-500' : 'bg-emerald-100 text-emerald-600',
+    ]}>
+      <Icon name="vacuna" class="h-5 w-5" />
+    </div>
+    <div class="min-w-0 flex-1">
+      <p class:list={['text-sm font-semibold truncate', vaccineSummary.state === 'overdue' ? 'text-red-700' : 'text-ink']}>
+        {vaccineSummary.title}
+      </p>
+      <p class="mt-0.5 text-xs text-muted truncate">{vaccineSummary.detail}</p>
+    </div>
+    <svg class:list={['h-4 w-4 shrink-0', vaccineSummary.state === 'overdue' ? 'text-red-400' : 'text-emerald-600']} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+  </a>
+
   {/* ── RESUMEN RAPIDO: Peso + Comida ── */}
   <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
     <a href="/salud/peso" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
@@ -781,9 +841,9 @@ const topActions = todoActions.slice(0, 4);
   <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
     <a href="/salud/preventivos" class:list={[
       'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
-      !antipulgasInfo.lastDate || antipulgasInfo.overdue
+      !antipulgasInfo.hasRecord || (antipulgasInfo.hasDue && antipulgasInfo.overdue)
         ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
-        : antipulgasInfo.daysLeft <= 5
+        : antipulgasInfo.hasDue && antipulgasInfo.daysLeft <= 5
           ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
           : 'border border-card-border bg-card'
     ]}>
@@ -791,7 +851,17 @@ const topActions = todoActions.slice(0, 4);
         <span class="text-accent-dark"><Icon name="preventivo" class="h-4 w-4" /></span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Antipulgas</p>
       </div>
-      {antipulgasInfo.lastDate ? (
+      {!antipulgasInfo.hasRecord ? (
+        <>
+          <p class="text-base font-black text-red-600">Sin registro</p>
+          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
+        </>
+      ) : !antipulgasInfo.hasDue ? (
+        <>
+          <p class="text-base font-black text-ink">Registrado</p>
+          <p class="text-[11px] text-muted mt-1">Sin próxima fecha</p>
+        </>
+      ) : (
         <>
           <div class="flex items-baseline gap-1.5">
             <span class:list={[
@@ -806,21 +876,16 @@ const topActions = todoActions.slice(0, 4);
             'text-[11px] mt-1',
             antipulgasInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(antipulgasInfo.lastDate)}`}
+            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : 'Próxima aplicación registrada'}
           </p>
-        </>
-      ) : (
-        <>
-          <p class="text-base font-black text-red-600">Nunca aplicado</p>
-          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
         </>
       )}
     </a>
     <a href="/salud/preventivos" class:list={[
       'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
-      !desparasitanteInfo.lastDate || desparasitanteInfo.overdue
+      !desparasitanteInfo.hasRecord || (desparasitanteInfo.hasDue && desparasitanteInfo.overdue)
         ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
-        : desparasitanteInfo.daysLeft <= 5
+        : desparasitanteInfo.hasDue && desparasitanteInfo.daysLeft <= 5
           ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
           : 'border border-card-border bg-card'
     ]}>
@@ -828,7 +893,17 @@ const topActions = todoActions.slice(0, 4);
         <span class="text-blue-500"><Icon name="pastilla" class="h-4 w-4" /></span>
         <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Desparasitante</p>
       </div>
-      {desparasitanteInfo.lastDate ? (
+      {!desparasitanteInfo.hasRecord ? (
+        <>
+          <p class="text-base font-black text-red-600">Sin registro</p>
+          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
+        </>
+      ) : !desparasitanteInfo.hasDue ? (
+        <>
+          <p class="text-base font-black text-ink">Registrado</p>
+          <p class="text-[11px] text-muted mt-1">Sin próxima fecha</p>
+        </>
+      ) : (
         <>
           <div class="flex items-baseline gap-1.5">
             <span class:list={[
@@ -843,13 +918,8 @@ const topActions = todoActions.slice(0, 4);
             'text-[11px] mt-1',
             desparasitanteInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
           ]}>
-            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : `Aplicado ${formatDate(desparasitanteInfo.lastDate)}`}
+            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : 'Próxima aplicación registrada'}
           </p>
-        </>
-      ) : (
-        <>
-          <p class="text-base font-black text-red-600">Nunca aplicado</p>
-          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
         </>
       )}
     </a>

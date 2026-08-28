@@ -20,6 +20,7 @@
       "autoIncrement": true,
       "node": "22.23.2",
       "pnpm": "9.15.9",
+      "environment": "production",
       "channel": "production",
       "ios": {
         "buildConfiguration": "Release"

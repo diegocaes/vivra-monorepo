@@ -7,10 +7,13 @@ import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
+import { StartupRecoveryScreen } from '../components/shared/StartupRecoveryScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
-import { initSentry, setSentryUser } from '../lib/sentry';
+import { captureError, initSentry, setSentryUser } from '../lib/sentry';
+
+const PET_LOOKUP_TIMEOUT_MS = 8_000;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -18,10 +21,12 @@ SplashScreen.preventAutoHideAsync();
 initSentry();
 
 export default function RootLayout() {
-  const { session, user, loading } = useAuth();
+  const { session, user, loading, startupError, retryStartup } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [hasPets, setHasPets] = useState<boolean | null>(null);
+  const [petLookupError, setPetLookupError] = useState(false);
+  const [petLookupAttempt, setPetLookupAttempt] = useState(0);
   useNotifications();
 
   // Solo el id, nunca el email: permite distinguir "le pasa a todos" de
@@ -34,10 +39,26 @@ export default function RootLayout() {
   useEffect(() => {
     if (!user) {
       setHasPets(null);
+      setPetLookupError(false);
       return;
     }
 
     let cancelled = false;
+    let settled = false;
+    setHasPets(null);
+    setPetLookupError(false);
+
+    const failLookup = (error: unknown, context: string) => {
+      if (cancelled || settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      setPetLookupError(true);
+      captureError(error, { phase: 'startup_pet_lookup', context });
+    };
+
+    const timeout = setTimeout(() => {
+      failLookup(new Error('Pet lookup timed out'), 'timeout');
+    }, PET_LOOKUP_TIMEOUT_MS);
 
     // Check owned + shared pets
     Promise.all([
@@ -54,35 +75,38 @@ export default function RootLayout() {
         .limit(1),
     ])
       .then(([ownedRes, sharedRes]) => {
-        if (cancelled) return;
+        if (cancelled || settled) return;
         // If either query errored, we can't trust the result — keep hasPets
-        // as null so the loading screen stays visible rather than wrongly
-        // routing the user to /onboarding and risking a duplicate pet.
+        // as null and offer retry rather than routing the user to onboarding
+        // and risking a duplicate pet.
         if (ownedRes.error || sharedRes.error) {
           console.warn(
             '[layout] pets fetch error:',
             ownedRes.error?.message || sharedRes.error?.message,
           );
+          failLookup(ownedRes.error || sharedRes.error, 'query_error');
           return;
         }
+        settled = true;
+        clearTimeout(timeout);
         const has = ((ownedRes.count ?? 0) + (sharedRes.count ?? 0)) > 0;
         setHasPets(has);
       })
       .then(undefined, (e) => {
-        if (cancelled) return;
         console.warn('[layout] pets fetch threw:', e);
-        // Leave hasPets as null on transient errors
+        failLookup(e, 'query_threw');
       });
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
-  }, [user]);
+  }, [user?.id, petLookupAttempt]);
 
   // `router` de expo-router es un singleton estable entre renders, así que no
   // agrega valor en las deps y solo generaría ruido.
   useEffect(() => {
-    if (loading || (session && hasPets === null)) return;
+    if (loading || startupError || (session && hasPets === null && !petLookupError)) return;
 
     SplashScreen.hideAsync();
 
@@ -98,10 +122,30 @@ export default function RootLayout() {
         router.replace('/(app)');
       }
     }
-  }, [session, loading, segments, hasPets]);
+  }, [session, loading, startupError, segments, hasPets, petLookupError]);
 
-  if (loading || (session && hasPets === null)) {
+  if (loading || (session && hasPets === null && !petLookupError)) {
     return <LoadingScreen />;
+  }
+
+  if (startupError) {
+    return (
+      <StartupRecoveryScreen
+        title="No pudimos iniciar Vivra"
+        message="Revisa tu conexión e inténtalo de nuevo. Tus datos no se han modificado."
+        onRetry={retryStartup}
+      />
+    );
+  }
+
+  if (session && petLookupError) {
+    return (
+      <StartupRecoveryScreen
+        title="No pudimos cargar a tu mascota"
+        message="Revisa tu conexión e inténtalo de nuevo. No te enviaremos al registro por este error."
+        onRetry={() => setPetLookupAttempt(current => current + 1)}
+      />
+    );
   }
 
   return (

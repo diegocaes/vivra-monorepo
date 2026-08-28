@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, timeUntil, friendlyError } from '@vivra/shared';
+import { formatDate, timeUntil, friendlyError, vaccineOptionsForSpecies } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -16,16 +16,6 @@ import { SelectField } from '../../../components/ui/SelectField';
 import type { Vaccine } from '../../../types/supabase';
 import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
-
-const VACCINE_OPTIONS = [
-  { key: 'Rabia', label: 'Rabia' },
-  { key: 'Parvovirus', label: 'Parvovirus' },
-  { key: 'Moquillo', label: 'Moquillo' },
-  { key: 'Bordetella', label: 'Bordetella' },
-  { key: 'Leptospirosis', label: 'Leptospirosis' },
-  { key: 'Hepatitis', label: 'Hepatitis' },
-  { key: 'Otra', label: 'Otra' },
-];
 
 export default function VacunasScreen() {
   const router = useRouter();
@@ -43,7 +33,10 @@ export default function VacunasScreen() {
   const [dateGiven, setDateGiven] = useState(new Date().toISOString().slice(0, 10));
   const [nextDue, setNextDue] = useState('');
   const [vetName, setVetName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [lotNumber, setLotNumber] = useState('');
   const [notes, setNotes] = useState('');
+  const vaccineOptions = vaccineOptionsForSpecies(pet?.species);
 
   const fetchData = useCallback(async () => {
     if (!pet?.id) return;
@@ -63,7 +56,7 @@ export default function VacunasScreen() {
   }, [fetchData]);
 
   const resetForm = () => {
-    setName(''); setCustomName(''); setNextDue(''); setVetName(''); setNotes('');
+    setName(''); setCustomName(''); setNextDue(''); setVetName(''); setBrand(''); setLotNumber(''); setNotes('');
     setDateGiven(new Date().toISOString().slice(0, 10));
     setEditingVaccine(null);
   };
@@ -71,12 +64,14 @@ export default function VacunasScreen() {
   const openEdit = (v: Vaccine) => {
     setEditingVaccine(v);
     // If the stored name matches a known option, select it; otherwise use "Otra"
-    const knownOption = VACCINE_OPTIONS.find(o => o.key === v.name);
+    const knownOption = vaccineOptions.find(o => o.key === v.name);
     setName(knownOption ? v.name : 'Otra');
     setCustomName(knownOption ? '' : v.name);
     setDateGiven(v.date_given);
     setNextDue(v.next_due ?? '');
     setVetName(v.vet_name ?? '');
+    setBrand(v.brand ?? '');
+    setLotNumber(v.lot_number ?? '');
     setNotes(v.notes ?? '');
     setShowForm(true);
   };
@@ -93,6 +88,8 @@ export default function VacunasScreen() {
       date_given: dateGiven,
       next_due: nextDue || null,
       vet_name: vetName || null,
+      brand: brand.trim() || null,
+      lot_number: lotNumber.trim() || null,
       notes: notes || null,
     };
     const { error } = editingVaccine
@@ -142,6 +139,16 @@ export default function VacunasScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
+        <View style={styles.introCard}>
+          <View style={styles.introIcon}>
+            <Ionicons name="shield-checkmark" size={20} color={Colors.accent} />
+          </View>
+          <View style={styles.introCopy}>
+            <Text style={styles.introTitle}>Historial de vacunación</Text>
+            <Text style={styles.introText}>Guarda cada dosis tal como aparece en el carné. La próxima fecha la confirma tu veterinario.</Text>
+          </View>
+        </View>
+
         {/* Vaccine list */}
         {vaccines.length === 0 && !loading ? (
           <View style={styles.empty}>
@@ -150,7 +157,8 @@ export default function VacunasScreen() {
           </View>
         ) : (
           vaccines.map(v => {
-            const isOverdue = v.next_due && new Date(v.next_due) < new Date();
+            const isOverdue = Boolean(v.next_due && new Date(`${v.next_due}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)));
+            const isUpcoming = Boolean(v.next_due && !isOverdue);
             return (
               <TouchableOpacity key={v.id} activeOpacity={0.7} onPress={() => openEdit(v)}>
                 <Card>
@@ -158,12 +166,18 @@ export default function VacunasScreen() {
                     <View style={styles.vaccineInfo}>
                       <Text style={styles.vaccineName}>{v.name}</Text>
                       <Text style={styles.vaccineDate}>{formatDate(v.date_given)}</Text>
+                      {v.brand && <Text style={styles.vaccineMeta}>{v.brand}{v.lot_number ? ` · Lote ${v.lot_number}` : ''}</Text>}
                       {v.next_due && (
                         <Text style={[styles.vaccineNext, isOverdue && styles.overdue]}>
                           Próxima: {timeUntil(v.next_due)}
                         </Text>
                       )}
                       {v.vet_name && <Text style={styles.vaccineVet}>Dr. {v.vet_name}</Text>}
+                    </View>
+                    <View style={[styles.statusPill, isOverdue ? styles.statusPillOverdue : isUpcoming ? styles.statusPillUpcoming : styles.statusPillRecorded]}>
+                      <Text style={[styles.statusPillText, isOverdue ? styles.statusTextOverdue : isUpcoming ? styles.statusTextUpcoming : styles.statusTextRecorded]}>
+                        {isOverdue ? 'Pendiente' : isUpcoming ? 'Programada' : 'Registrada'}
+                      </Text>
                     </View>
                     <View style={styles.rowActions}>
                       <TouchableOpacity onPress={() => openEdit(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -186,7 +200,7 @@ export default function VacunasScreen() {
         <SelectField
           label="Vacuna"
           value={name}
-          options={VACCINE_OPTIONS}
+          options={vaccineOptions}
           onSelect={setName}
         />
         {name === 'Otra' && (
@@ -214,6 +228,18 @@ export default function VacunasScreen() {
           value={vetName}
           onChangeText={setVetName}
           placeholder="Nombre del veterinario"
+        />
+        <FormField
+          label="Marca o laboratorio (opcional)"
+          value={brand}
+          onChangeText={setBrand}
+          placeholder="Tal como aparece en el carné"
+        />
+        <FormField
+          label="Lote (opcional)"
+          value={lotNumber}
+          onChangeText={setLotNumber}
+          placeholder="Número de lote"
         />
         <FormField
           label="Notas (opcional)"
@@ -250,6 +276,35 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingBottom: Spacing.xxl,
   },
+  introCard: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  introIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEDD5',
+  },
+  introCopy: { flex: 1 },
+  introTitle: {
+    color: Colors.ink,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
+  introText: {
+    color: Colors.muted,
+    fontSize: FontSize.xs,
+    lineHeight: 17,
+    marginTop: 2,
+  },
   sectionTitle: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
@@ -262,7 +317,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   vaccineInfo: { flex: 1 },
-  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
+  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center', marginLeft: 2 },
   vaccineName: {
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
@@ -270,6 +325,11 @@ const styles = StyleSheet.create({
   },
   vaccineDate: {
     fontSize: FontSize.sm,
+    color: Colors.muted,
+    marginTop: 2,
+  },
+  vaccineMeta: {
+    fontSize: FontSize.xs,
     color: Colors.muted,
     marginTop: 2,
   },
@@ -286,6 +346,19 @@ const styles = StyleSheet.create({
     color: Colors.muted,
     marginTop: 2,
   },
+  statusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  statusPillRecorded: { backgroundColor: '#ECFDF5' },
+  statusPillUpcoming: { backgroundColor: '#FFF7ED' },
+  statusPillOverdue: { backgroundColor: '#FEF2F2' },
+  statusPillText: { fontSize: 10, fontWeight: FontWeight.semibold },
+  statusTextRecorded: { color: Colors.good },
+  statusTextUpcoming: { color: '#C2410C' },
+  statusTextOverdue: { color: Colors.bad },
   empty: {
     alignItems: 'center',
     paddingVertical: Spacing.xxl,

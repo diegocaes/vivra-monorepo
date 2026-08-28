@@ -28,8 +28,8 @@ interface StatusCardProps {
 
 function StatusCard({ type, last, onAdd }: StatusCardProps) {
   const config = {
-    antipulgas: { icon: 'shield-checkmark' as const, iconColor: Colors.warn, label: 'Antipulgas', cycleDays: 30 },
-    desparasitante: { icon: 'medical' as const, iconColor: '#E879F9', label: 'Desparasitante', cycleDays: 30 },
+    antipulgas: { icon: 'shield-checkmark' as const, iconColor: Colors.warn, label: 'Antipulgas' },
+    desparasitante: { icon: 'medical' as const, iconColor: '#E879F9', label: 'Desparasitante' },
   }[type];
 
   let statusColor = Colors.muted;
@@ -37,8 +37,10 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
   let isUrgent = false;
 
   if (last) {
-    const nextDate = new Date(last.date_given);
-    nextDate.setDate(nextDate.getDate() + config.cycleDays);
+    if (!last.next_due) {
+      statusText = 'Sin próxima fecha';
+    } else {
+    const nextDate = new Date(`${last.next_due}T00:00:00`);
     const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
     if (daysLeft < 0) {
@@ -53,6 +55,7 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
       statusColor = Colors.good;
       statusText = `En ${daysLeft}d`;
     }
+    }
   } else {
     isUrgent = true;
   }
@@ -63,7 +66,7 @@ function StatusCard({ type, last, onAdd }: StatusCardProps) {
       onPress={onAdd}
       style={[
         styles.statusCard,
-        isUrgent && { borderColor: statusColor, borderWidth: 2, backgroundColor: statusColor + '12' },
+        isUrgent && { borderColor: statusColor, borderWidth: 2, backgroundColor: `${statusColor}12` },
       ]}
     >
       <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
@@ -99,6 +102,7 @@ export default function PreventivosScreen() {
 
   // Form
   const [dateApplied, setDateApplied] = useState(new Date().toISOString().slice(0, 10));
+  const [nextDue, setNextDue] = useState('');
   const [productName, setProductName] = useState('');
   const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
@@ -135,6 +139,7 @@ export default function PreventivosScreen() {
 
   const resetForm = () => {
     setDateApplied(new Date().toISOString().slice(0, 10));
+    setNextDue('');
     setProductName('');
     setCost('');
     setNotes('');
@@ -151,6 +156,7 @@ export default function PreventivosScreen() {
     setEditingTreatment(item);
     setFormType(item.type as TreatmentType);
     setDateApplied(item.date_given);
+    setNextDue(item.next_due ?? '');
     setProductName(item.product_name ?? '');
     setCost(item.cost?.toString() ?? '');
     setNotes(item.notes ?? '');
@@ -165,6 +171,7 @@ export default function PreventivosScreen() {
     const payload = {
       type: formType,
       date_given: dateApplied,
+      next_due: nextDue || null,
       product_name: productName || null,
       cost: cost ? parseFloat(cost) : null,
       notes: notes || null,
@@ -191,13 +198,9 @@ export default function PreventivosScreen() {
         // IS the benefit. If they haven't granted notification permission
         // yet (e.g. skipped at onboarding), ask now with full context.
         await requestPushPermissionAndRegister();
-        const nextDue = new Date(dateApplied + 'T09:00:00');
-        nextDue.setDate(nextDue.getDate() + 30);
-        await schedulePreventiveReminder({
-          petName: pet.name,
-          type: formType,
-          nextDueDate: nextDue,
-        });
+        if (nextDue) {
+          await schedulePreventiveReminder({ petName: pet.name, type: formType, nextDueDate: new Date(`${nextDue}T09:00:00`) });
+        }
       } catch (e) {
         console.warn('[Preventivos] schedule reminder failed:', e);
       }
@@ -315,6 +318,17 @@ export default function PreventivosScreen() {
           onChange={setDateApplied}
           maxDate={new Date()}
         />
+        <DatePickerField
+          label="Próxima aplicación (opcional)"
+          value={nextDue}
+          onChange={setNextDue}
+          clearable
+        />
+        <Text style={styles.nextDueHint}>
+          {pet?.species === 'dog'
+            ? 'Para algunos productos mensuales puedes usar ~30 días como sugerencia; confirma la fecha con tu vet.'
+            : 'Confirma la fecha con tu veterinario o la etiqueta del producto.'}
+        </Text>
         <FormField
           label="Producto (opcional)"
           value={productName}
@@ -368,6 +382,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm,
   },
   noRecords: { fontSize: FontSize.sm, color: Colors.muted, fontStyle: 'italic' },
+  nextDueHint: { fontSize: FontSize.xs, color: Colors.muted, marginTop: -Spacing.sm, marginBottom: Spacing.sm, lineHeight: 17 },
   itemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   itemInfo: { flex: 1 },
   rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
@@ -383,7 +398,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
     backgroundColor: Colors.accentLight,
     borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.accent + '33',
+    borderWidth: 1, borderColor: `${Colors.accent}33`,
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
   },
   combinedCtaLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },

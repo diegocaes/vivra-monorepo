@@ -23,6 +23,7 @@ if (Astro.request.method === 'POST') {
       pet_id: pet.id,
       type: formData.get('type') as string,
       date_given: formData.get('date_given') as string,
+      next_due: (formData.get('next_due') as string) || null,
       product_name: (formData.get('product_name') as string) || null,
       lot_number: (formData.get('lot_number') as string) || null,
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
@@ -49,11 +50,9 @@ const { data: treatments } = await supabase
 const antipulgasList = (treatments ?? []).filter(t => t.type === 'antipulgas' || t.type === 'combinado');
 const desparasitanteList = (treatments ?? []).filter(t => t.type === 'desparasitante' || t.type === 'combinado');
 
-function daysUntilNext(lastDateStr: string | null | undefined) {
-  if (!lastDateStr) return { daysLeft: 0, overdue: true, nextDate: null };
-  const last = new Date(lastDateStr + 'T00:00:00');
-  const next = new Date(last);
-  next.setDate(next.getDate() + 30);
+function daysUntilNext(nextDue: string | null | undefined) {
+  if (!nextDue) return { daysLeft: null, overdue: false, nextDate: null };
+  const next = new Date(`${nextDue}T00:00:00`);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   next.setHours(0, 0, 0, 0);
@@ -61,8 +60,8 @@ function daysUntilNext(lastDateStr: string | null | undefined) {
   return { daysLeft, overdue: daysLeft < 0, nextDate: next.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) };
 }
 
-const antipulgasStatus = daysUntilNext(antipulgasList[0]?.date_given);
-const desparasitanteStatus = daysUntilNext(desparasitanteList[0]?.date_given);
+const antipulgasStatus = daysUntilNext(antipulgasList[0]?.next_due);
+const desparasitanteStatus = daysUntilNext(desparasitanteList[0]?.next_due);
 
 const openForm = Astro.url.searchParams.get('new');
 ---
@@ -79,12 +78,14 @@ const openForm = Astro.url.searchParams.get('new');
     {/* Antipulgas */}
     <div class:list={[
       'rounded-2xl p-4 border-2',
-      antipulgasStatus.overdue || !antipulgasList.length ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : antipulgasStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-green-50 border-green-200'
+      antipulgasStatus.overdue ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : antipulgasStatus.daysLeft !== null && antipulgasStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-card border-card-border'
     ]}>
       <div class="mb-2 text-accent-dark"><Icon name="preventivo" class="h-6 w-6" /></div>
       <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Antipulgas</p>
       {!antipulgasList.length ? (
-        <p class="text-base font-black text-red-600">Nunca aplicado</p>
+        <p class="text-base font-black text-ink">Sin registro</p>
+      ) : antipulgasStatus.daysLeft === null ? (
+        <p class="text-sm font-semibold text-muted">Sin próxima fecha</p>
       ) : antipulgasStatus.overdue ? (
         <>
           <p class="text-base font-black text-red-600">Vencido {Math.abs(antipulgasStatus.daysLeft)}d</p>
@@ -103,12 +104,14 @@ const openForm = Astro.url.searchParams.get('new');
     {/* Desparasitante */}
     <div class:list={[
       'rounded-2xl p-4 border-2',
-      desparasitanteStatus.overdue || !desparasitanteList.length ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : desparasitanteStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-green-50 border-green-200'
+      desparasitanteStatus.overdue ? 'bg-red-50 border-red-300 ring-2 ring-red-200/50' : desparasitanteStatus.daysLeft !== null && desparasitanteStatus.daysLeft <= 5 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200/50' : 'bg-card border-card-border'
     ]}>
       <div class="mb-2 text-blue-500"><Icon name="pastilla" class="h-6 w-6" /></div>
       <p class="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Desparasitante</p>
       {!desparasitanteList.length ? (
-        <p class="text-base font-black text-red-600">Nunca aplicado</p>
+        <p class="text-base font-black text-ink">Sin registro</p>
+      ) : desparasitanteStatus.daysLeft === null ? (
+        <p class="text-sm font-semibold text-muted">Sin próxima fecha</p>
       ) : desparasitanteStatus.overdue ? (
         <>
           <p class="text-base font-black text-red-600">Vencido {Math.abs(desparasitanteStatus.daysLeft)}d</p>
@@ -175,6 +178,12 @@ const openForm = Astro.url.searchParams.get('new');
               placeholder={openForm === 'antipulgas' ? 'Ej: Frontline, NexGard...' : openForm === 'desparasitante' ? 'Ej: Drontal, Milbemax...' : 'Ej: NexGard Spectra, Simparica Trio...'}
               class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors"
             />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-muted mb-1">Próxima aplicación (opcional)</label>
+            <input type="date" name="next_due" class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2.5 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
+            <p class="mt-1 text-[11px] text-muted">Confirma esta fecha con la etiqueta del producto o tu veterinario.</p>
           </div>
 
           <div>

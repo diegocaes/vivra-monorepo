@@ -17,6 +17,7 @@ import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { Card } from '../../components/ui/Card';
+import { formatDate } from '@vivra/shared';
 
 /**
  * Compact "time ago" formatter used for the care-card badges.
@@ -130,16 +131,15 @@ export default function DashboardScreen() {
 
   // Preventive critical banner — only for treatments that are actually overdue.
   const preventiveStatus = (() => {
-    const compute = (dateStr: string | null | undefined) => {
-      if (!dateStr) return { status: 'never' as const, days: 0 };
-      const next = new Date(dateStr);
-      next.setDate(next.getDate() + 30);
+    const compute = (nextDue: string | null | undefined) => {
+      if (!nextDue) return { status: 'unknown' as const, days: 0 };
+      const next = new Date(`${nextDue}T00:00:00`);
       const days = Math.ceil((next.getTime() - Date.now()) / 86400000);
       if (days < 0) return { status: 'overdue' as const, days: Math.abs(days) };
       return { status: 'ok' as const, days };
     };
-    const anti = compute(petData.lastAntipulgas?.date_given);
-    const des = compute(petData.lastDesparasitante?.date_given);
+    const anti = compute(petData.lastAntipulgas?.next_due);
+    const des = compute(petData.lastDesparasitante?.next_due);
     const overdueTypes: { label: string; days: number }[] = [];
     if (anti.status === 'overdue') overdueTypes.push({ label: 'antipulgas', days: anti.days });
     if (des.status === 'overdue') overdueTypes.push({ label: 'desparasitante', days: des.days });
@@ -148,6 +148,35 @@ export default function DashboardScreen() {
   // Missing data is not a medical warning. Only show a red banner when a
   // previously registered treatment is actually overdue.
   const showPreventiveBanner = preventiveStatus.overdueTypes.length > 0;
+
+  // The latest entry per vaccine type controls the summary. A date is only
+  // urgent when it was explicitly saved as the next dose; no annual schedule
+  // is inferred from a past application.
+  const vaccineSummary = (() => {
+    const latestByName = new Map<string, typeof petData.vaccines[number]>();
+    for (const vaccine of petData.vaccines) {
+      if (!latestByName.has(vaccine.name)) latestByName.set(vaccine.name, vaccine);
+    }
+    const latest = [...latestByName.values()];
+    if (latest.length === 0) {
+      return { state: 'empty' as const, title: 'Registra su primera vacuna', detail: 'Guarda la dosis tal como aparece en el carné' };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dated = latest
+      .filter(vaccine => vaccine.next_due)
+      .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
+      .sort((a, b) => a.due.getTime() - b.due.getTime());
+    const next = dated[0];
+    if (next && next.due < today) {
+      return { state: 'overdue' as const, title: `${next.vaccine.name} pendiente`, detail: 'Confirma el refuerzo con tu veterinario' };
+    }
+    if (next) {
+      return { state: 'scheduled' as const, title: `Próxima: ${next.vaccine.name}`, detail: formatDate(next.vaccine.next_due!) };
+    }
+    return { state: 'recorded' as const, title: `${latest.length} vacuna${latest.length === 1 ? '' : 's'} registrada${latest.length === 1 ? '' : 's'}`, detail: 'Aún no hay una próxima fecha registrada' };
+  })();
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -242,6 +271,28 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
+        <TouchableOpacity
+          style={[
+            styles.vaccineCta,
+            vaccineSummary.state === 'overdue' && styles.vaccineCtaOverdue,
+            vaccineSummary.state === 'scheduled' && styles.vaccineCtaScheduled,
+          ]}
+          onPress={() => router.navigate('/(app)/salud/vacunas' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={[
+            styles.vaccineCtaIcon,
+            vaccineSummary.state === 'overdue' && styles.vaccineCtaIconOverdue,
+          ]}>
+            <Ionicons name="medkit-outline" size={21} color={vaccineSummary.state === 'overdue' ? Colors.bad : Colors.good} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.vaccineCtaTitle, vaccineSummary.state === 'overdue' && styles.vaccineCtaTitleOverdue]}>{vaccineSummary.title}</Text>
+            <Text style={styles.vaccineCtaText}>{vaccineSummary.detail}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? Colors.bad : Colors.good} />
+        </TouchableOpacity>
+
         {/* Food summary — averages and trazabilidad, no countdown */}
         {hasFood ? (
           <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/alimentacion' as any)}>
@@ -269,6 +320,7 @@ export default function DashboardScreen() {
             <ReminderCard
               type="antipulgas"
               lastDate={petData.lastAntipulgas?.date_given ?? null}
+              nextDue={petData.lastAntipulgas?.next_due}
               productName={petData.lastAntipulgas?.product_name}
               onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
@@ -277,6 +329,7 @@ export default function DashboardScreen() {
             <ReminderCard
               type="desparasitante"
               lastDate={petData.lastDesparasitante?.date_given ?? null}
+              nextDue={petData.lastDesparasitante?.next_due}
               productName={petData.lastDesparasitante?.product_name}
               onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             />
@@ -393,6 +446,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.canvas,
   },
+  vaccineCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#ECFDF5',
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    padding: Spacing.md,
+  },
+  vaccineCtaScheduled: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
+  vaccineCtaOverdue: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  vaccineCtaIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+  },
+  vaccineCtaIconOverdue: { backgroundColor: '#FEE2E2' },
+  vaccineCtaTitle: { color: Colors.ink, fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
+  vaccineCtaTitleOverdue: { color: Colors.bad },
+  vaccineCtaText: { color: Colors.muted, fontSize: FontSize.xs, marginTop: 2 },
   dashHeader: {
     flexDirection: 'row',
     alignItems: 'center',

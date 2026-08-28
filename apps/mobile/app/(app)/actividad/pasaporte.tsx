@@ -9,6 +9,7 @@ import { usePetContext } from '../../../contexts/PetContext';
 import { calculateAge, formatDate } from '@vivra/shared';
 
 interface FlightRow {
+  id: string;
   origin: string | null;
   destination: string | null;
   flight_date: string | null;
@@ -33,7 +34,7 @@ export default function PasaporteScreen() {
     if (!pet?.id) return;
     supabase
       .from('flights')
-      .select('origin, destination, flight_date, airline, flight_number')
+      .select('id, origin, destination, flight_date, airline, flight_number')
       .eq('pet_id', pet.id)
       .order('flight_date', { ascending: false })
       .then(({ data }) => setFlights((data as FlightRow[]) ?? []));
@@ -118,11 +119,17 @@ export default function PasaporteScreen() {
           {vaccines.length > 0 && (
             <View style={styles.section}>
               <SectionTitle>Registro de vacunación</SectionTitle>
-              {vaccines.map((v, i) => (
-                <View key={i} style={styles.vaccineRow}>
+              {vaccines.map(v => (
+                <View key={v.id} style={styles.vaccineRow}>
                   <View style={styles.vaccineLeft}>
                     <View style={styles.vaccineDot} />
-                    <Text style={styles.vaccineName}>{v.name}</Text>
+                    <View style={styles.vaccineCopy}>
+                      <Text style={styles.vaccineName}>{v.name}</Text>
+                      {(v.brand || v.lot_number) && (
+                        <Text style={styles.vaccineMeta}>{[v.brand, v.lot_number ? `Lote ${v.lot_number}` : null].filter(Boolean).join(' · ')}</Text>
+                      )}
+                      {v.next_due && <Text style={styles.vaccineMeta}>Próxima: {formatDate(v.next_due)}</Text>}
+                    </View>
                   </View>
                   <Text style={styles.vaccineDate}>{formatDate(v.date_given)}</Text>
                 </View>
@@ -134,8 +141,8 @@ export default function PasaporteScreen() {
           {flights.length > 0 && (
             <View style={styles.section}>
               <SectionTitle>Historial de viajes</SectionTitle>
-              {flights.map((f, i) => (
-                <View key={i} style={styles.flightRow}>
+              {flights.map(f => (
+                <View key={f.id} style={styles.flightRow}>
                   <Text style={styles.flightRoute}>{f.origin ?? '—'} → {f.destination ?? '—'}</Text>
                   <Text style={styles.flightMeta}>
                     {f.flight_date ? formatDate(f.flight_date) : '—'}
@@ -155,6 +162,7 @@ export default function PasaporteScreen() {
         <Text style={styles.exportHint}>
           Abre una versión imprimible que puedes guardar o compartir.
         </Text>
+        <Text style={styles.legalHint}>Resumen personal de Vivra; no es un documento oficial de viaje ni sanitario.</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -285,9 +293,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: '#F1F3F5',
   },
-  vaccineLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  vaccineLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, flex: 1, paddingRight: Spacing.sm },
   vaccineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.accent },
+  vaccineCopy: { flex: 1 },
   vaccineName: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  vaccineMeta: { fontSize: 10, color: Colors.muted, marginTop: 2 },
   vaccineDate: { fontSize: FontSize.xs, color: Colors.muted },
 
   // Flights
@@ -303,6 +313,7 @@ const styles = StyleSheet.create({
   },
   exportBtnText: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: '#fff' },
   exportHint: { fontSize: FontSize.xs, color: Colors.muted, textAlign: 'center', marginTop: Spacing.sm },
+  legalHint: { fontSize: 10, color: Colors.muted, textAlign: 'center', marginTop: Spacing.sm, lineHeight: 14 },
 
   // Empty (no pet selected)
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.xl, gap: Spacing.sm },

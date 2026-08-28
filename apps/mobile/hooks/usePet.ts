@@ -12,14 +12,14 @@ export interface CoOwner {
   shared_with_name: string | null;
 }
 
-export type PreventiveRow = Pick<PreventiveTreatment, 'type' | 'date_given' | 'product_name'>;
+export type PreventiveRow = Pick<PreventiveTreatment, 'type' | 'date_given' | 'next_due' | 'product_name'>;
 
 export interface PetData {
   pet: Pet | null;
   pets: Pet[];
   isOwner: boolean;
   coOwners: CoOwner[];
-  vaccines: Pick<Vaccine, 'name' | 'date_given'>[];
+  vaccines: Pick<Vaccine, 'id' | 'name' | 'date_given' | 'next_due' | 'brand' | 'lot_number'>[];
   weightRecords: Pick<WeightRecord, 'weight_kg' | 'date'>[];
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
   vetVisits: { date: string; reason: string; location: string | null }[];
@@ -28,8 +28,8 @@ export interface PetData {
   bloodTests: { date: string }[];
   /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
   preventives: PreventiveRow[];
-  lastAntipulgas: { date_given: string; product_name: string | null } | null;
-  lastDesparasitante: { date_given: string; product_name: string | null } | null;
+  lastAntipulgas: { date_given: string; next_due: string | null; product_name: string | null } | null;
+  lastDesparasitante: { date_given: string; next_due: string | null; product_name: string | null } | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -105,13 +105,13 @@ export function usePet(): PetData {
         bloodTestsRes,
         preventivesRes,
       ] = await Promise.all([
-        supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+        supabase.from('vaccines').select('id, name, date_given, next_due, brand, lot_number').eq('pet_id', pet.id).order('date_given', { ascending: false }),
         supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
         supabase.from('vet_visits').select('date, reason, location').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('groomings').select('type, date, location, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('preventive_treatments').select('type, date_given, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+        supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);
 
       const allPreventives = (preventivesRes.data as PreventiveRow[]) ?? [];
@@ -140,23 +140,23 @@ export function usePet(): PetData {
         setCoOwners([]);
       }
 
-      // Schedule premium-only notifications: vaccines overdue (>1y since given)
+      // Schedule one reminder per vaccine, only from a confirmed next date.
       if (isPremium && pet) {
         // Un recordatorio por VACUNA, no por dosis. Las filas vienen ordenadas
         // por date_given DESC, así que la primera de cada nombre es la más
         // reciente. Sin esto, 3 dosis de "Rabia" programaban 3 avisos
         // idénticos para el mismo día.
-        const vacunaMasReciente = new Map<string, string>();
+        const vacunaMasReciente = new Map<string, { next_due: string | null }>();
         for (const v of vaccinesRes.data ?? []) {
           if (v.date_given && !vacunaMasReciente.has(v.name)) {
-            vacunaMasReciente.set(v.name, v.date_given);
+            vacunaMasReciente.set(v.name, { next_due: v.next_due });
           }
         }
-        for (const [nombre, fecha] of vacunaMasReciente) {
+        for (const [nombre, vacuna] of vacunaMasReciente) {
           scheduleVaccineReminder({
             petName: pet.name,
             vaccineName: nombre,
-            lastGivenDate: new Date(fecha + 'T09:00:00'),
+            nextDueDate: vacuna.next_due ? new Date(`${vacuna.next_due}T09:00:00`) : null,
           }).catch(() => {});
         }
 
@@ -165,25 +165,19 @@ export function usePet(): PetData {
         if (lastWeight?.date) {
           scheduleWeightReminder({
             petName: pet.name,
-            lastWeightDate: new Date(lastWeight.date + 'T09:00:00'),
+            lastWeightDate: new Date(`${lastWeight.date}T09:00:00`),
           }).catch(() => {});
         }
       }
 
-      // Preventive reminders — free + premium, everyone benefits. Schedule
-      // one reminder per "last dose" (antipulgas, desparasitante) 1 day before
-      // the next 30-day due date. For 'combinado', this fires twice (once
-      // per type) because both coverage types matter.
+      // Preventive reminders use the due date confirmed by the owner or vet.
+      // Never invent a medical interval from the last application date.
       if (pet) {
-        if (lastAnti?.date_given) {
-          const nextDue = new Date(lastAnti.date_given + 'T09:00:00');
-          nextDue.setDate(nextDue.getDate() + 30);
-          schedulePreventiveReminder({ petName: pet.name, type: 'antipulgas', nextDueDate: nextDue }).catch(() => {});
+        if (lastAnti?.next_due) {
+          schedulePreventiveReminder({ petName: pet.name, type: 'antipulgas', nextDueDate: new Date(`${lastAnti.next_due}T09:00:00`) }).catch(() => {});
         }
-        if (lastDes?.date_given) {
-          const nextDue = new Date(lastDes.date_given + 'T09:00:00');
-          nextDue.setDate(nextDue.getDate() + 30);
-          schedulePreventiveReminder({ petName: pet.name, type: 'desparasitante', nextDueDate: nextDue }).catch(() => {});
+        if (lastDes?.next_due) {
+          schedulePreventiveReminder({ petName: pet.name, type: 'desparasitante', nextDueDate: new Date(`${lastDes.next_due}T09:00:00`) }).catch(() => {});
         }
       }
     } catch (e: any) {

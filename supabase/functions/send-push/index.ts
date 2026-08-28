@@ -7,11 +7,10 @@
 // push_tokens the mobile app has been collecting.
 //
 // REGLAS DE NOTIFICACIÓN (todas también se insertan in-app en `notifications`):
-//   preventive_due   — antipulgas/desparasitante: ciclo de 30 días vencido.
-//                      Cooldown 7d.
-//   vaccine_due      — si la vacuna tiene `next_due`: avisa 7 días antes y
-//                      cuando vence. Si no tiene: avisa al pasar 1 año de la
-//                      última dosis. Cooldown 30d.
+//   preventive_due   — antipulgas/desparasitante: only from a confirmed
+//                      `next_due` date. Cooldown 7d.
+//   vaccine_due      — only from a confirmed `next_due`: 7 days before and
+//                      when due. Cooldown 30d.
 //   food_low         — bolsa activa (sin end_date, con bag_size y daily_grams):
 //                      avisa cuando quedan ≤4 días de comida. Cooldown 7d.
 //   weight_stale     — >30 días sin registro de peso. Cooldown 30d.
@@ -86,8 +85,8 @@ Deno.serve(async (req) => {
     const [tokensRes, petsRes, preventivesRes, vaccinesRes, weightsRes, foodsRes, recentNotifsRes] = await Promise.all([
       admin.from('push_tokens').select('user_id, token, platform'),
       admin.from('pets').select('id, user_id, name, birth_date'),
-      admin.from('preventive_treatments').select('pet_id, type, date_given').order('date_given', { ascending: false }),
-      admin.from('vaccines').select('pet_id, name, date_given, next_due').order('date_given', { ascending: false }),
+      admin.from('preventive_treatments').select('pet_id, type, next_due').order('date_given', { ascending: false }),
+      admin.from('vaccines').select('pet_id, name, next_due').order('date_given', { ascending: false }),
       admin.from('weight_records').select('pet_id, date').order('date', { ascending: false }),
       admin.from('foods').select('pet_id, brand, daily_grams, bag_size, bag_unit, start_date, end_date, created_at')
         .is('end_date', null).order('created_at', { ascending: false }),
@@ -117,20 +116,22 @@ Deno.serve(async (req) => {
       if (!prev || n.created_at > prev) recentByKey.set(key, n.created_at);
     }
 
-    const lastPreventiveByPetType = new Map<string, string>(); // `${pet}|${type}` → date
+    const lastPreventiveByPetType = new Map<string, { next_due: string | null }>();
     for (const p of preventivesRes.data ?? []) {
       // 'combinado' counts as both
       const types = p.type === 'combinado' ? ['antipulgas', 'desparasitante'] : [p.type];
       for (const ty of types) {
         const key = `${p.pet_id}|${ty}`;
-        if (!lastPreventiveByPetType.has(key)) lastPreventiveByPetType.set(key, p.date_given);
+        if (!lastPreventiveByPetType.has(key)) {
+          lastPreventiveByPetType.set(key, { next_due: p.next_due });
+        }
       }
     }
 
-    const lastVaccineByPetName = new Map<string, { date_given: string; next_due: string | null }>(); // `${pet}|${vaccine}`
+    const lastVaccineByPetName = new Map<string, { next_due: string | null }>(); // `${pet}|${vaccine}`
     for (const v of vaccinesRes.data ?? []) {
       const key = `${v.pet_id}|${v.name}`;
-      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, { date_given: v.date_given, next_due: v.next_due });
+      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, { next_due: v.next_due });
     }
 
     const lastWeightByPet = new Map<string, string>();
@@ -166,24 +167,26 @@ Deno.serve(async (req) => {
     for (const pet of pets) {
       if (!tokensByUser.has(pet.user_id)) continue; // no device to push to
 
-      // Rule 1: preventives overdue (30-day cycle)
+      // Rule 1: preventives due from a confirmed next date.
       for (const ty of ['antipulgas', 'desparasitante'] as const) {
         const last = lastPreventiveByPetType.get(`${pet.id}|${ty}`);
-        if (!last) continue; // never registered → the in-app banner handles it
-        const days = daysSince(last);
-        if (days > 30 && cooledDown(pet.user_id, pet.id, 'preventive_due')) {
-          const overdueDays = days - 30;
+        if (!last?.next_due) continue;
+        const daysToDue = -daysSince(last.next_due);
+        if (daysToDue <= 0 && cooledDown(pet.user_id, pet.id, 'preventive_due')) {
+          const overdueDays = Math.abs(daysToDue);
           pending.push({
             userId: pet.user_id, petId: pet.id, type: 'preventive_due',
-            title: `${pet.name}: ${ty} vencido`,
-            body: `Hace ${overdueDays} día${overdueDays !== 1 ? 's' : ''} que venció el ${ty} de ${pet.name}. Aplícalo y regístralo.`,
+            title: daysToDue < 0 ? `${pet.name}: ${ty} vencido` : `${pet.name}: ${ty} pendiente`,
+            body: daysToDue < 0
+              ? `Hace ${overdueDays} día${overdueDays !== 1 ? 's' : ''} que venció el ${ty} de ${pet.name}. Aplícalo y regístralo.`
+              : `Hoy corresponde el ${ty} de ${pet.name}. Confirma la aplicación y regístrala.`,
             href: '/salud/preventivos', icon: ty === 'antipulgas' ? 'preventivo' : 'pastilla',
           });
           break; // one preventive push per pet per run is enough
         }
       }
 
-      // Rule 2: vacunas — con next_due (7 días antes o vencida); sin next_due, >1 año de la dosis
+      // Rule 2: vaccines — only with a confirmed next_due date.
       let worstVaccine: { name: string; body: string; score: number } | null = null;
       for (const [key, v] of lastVaccineByPetName) {
         if (!key.startsWith(`${pet.id}|`)) continue;
@@ -196,15 +199,6 @@ Deno.serve(async (req) => {
               : `La vacuna de ${name} de ${pet.name} está vencida. Agenda el refuerzo con tu vet.`;
             const score = 1000 - daysToDue; // más vencida = más prioridad
             if (!worstVaccine || score > worstVaccine.score) worstVaccine = { name, body, score };
-          }
-        } else {
-          const days = daysSince(v.date_given);
-          if (days > 365 && (!worstVaccine || days > worstVaccine.score)) {
-            worstVaccine = {
-              name,
-              body: `Hace más de un año de la última dosis de ${name}. Agenda el refuerzo con tu vet.`,
-              score: days,
-            };
           }
         }
       }
