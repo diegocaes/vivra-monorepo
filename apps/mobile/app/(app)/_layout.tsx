@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { StackActions } from '@react-navigation/native';
 import { Colors, FontSize, FontWeight } from '../../constants/theme';
 import { PetProvider } from '../../contexts/PetContext';
 import { track } from '../../lib/analytics';
@@ -58,6 +59,19 @@ export default function AppLayout() {
             <Ionicons name={focused ? 'heart' : 'heart-outline'} size={24} color={color} />
           ),
         }}
+        // Salud contains a nested stack (Vacunas, Peso, etc.). On returning
+        // through its tab, always show the Salud home instead of reviving an
+        // old detail screen that may have been frozen while another tab was
+        // active. Targeting this stack avoids touching the other tab stacks.
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            const saludRoute = navigation.getState().routes.find((route: { name: string; state?: unknown }) => route.name === 'salud');
+            const saludStackKey = (saludRoute?.state as { key?: string } | undefined)?.key;
+            if (saludStackKey) {
+              navigation.dispatch({ ...StackActions.popToTop(), target: saludStackKey });
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="alimentacion"
