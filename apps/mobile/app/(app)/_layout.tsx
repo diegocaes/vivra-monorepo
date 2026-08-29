@@ -32,7 +32,6 @@ export default function AppLayout() {
           fontSize: FontSize.xs,
           fontWeight: FontWeight.medium,
         },
-        animation: 'fade',
       }}
     >
       <Tabs.Screen

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
@@ -123,6 +123,18 @@ export default function VacunasScreen() {
     ]);
   };
 
+  // The most actionable order is the chronological next-dose timeline first;
+  // historic doses without a confirmed next date follow newest-first. This
+  // keeps an overdue or upcoming vaccine from being buried in old records.
+  const orderedVaccines = [...vaccines].sort((a, b) => {
+    const aNext = a.next_due ? new Date(`${a.next_due}T00:00:00`).getTime() : null;
+    const bNext = b.next_due ? new Date(`${b.next_due}T00:00:00`).getTime() : null;
+    if (aNext !== null && bNext !== null) return aNext - bNext;
+    if (aNext !== null) return -1;
+    if (bNext !== null) return 1;
+    return b.date_given.localeCompare(a.date_given);
+  });
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
@@ -141,11 +153,11 @@ export default function VacunasScreen() {
       >
         <View style={styles.introCard}>
           <View style={styles.introIcon}>
-            <Ionicons name="shield-checkmark" size={20} color={Colors.accent} />
+            <Ionicons name="shield-checkmark" size={22} color={Colors.accent} />
           </View>
           <View style={styles.introCopy}>
             <Text style={styles.introTitle}>Historial de vacunación</Text>
-            <Text style={styles.introText}>Guarda cada dosis tal como aparece en el carné. La próxima fecha la confirma tu veterinario.</Text>
+            <Text style={styles.introText}>Tus próximas dosis aparecen primero. Guarda cada aplicación tal como aparece en el carné.</Text>
           </View>
         </View>
 
@@ -155,41 +167,61 @@ export default function VacunasScreen() {
             <Ionicons name="medkit-outline" size={48} color={Colors.cardBorder} />
             <Text style={styles.emptyText}>No hay vacunas registradas</Text>
           </View>
+        ) : loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator color={Colors.accent} />
+            <Text style={styles.loadingText}>Cargando vacunas…</Text>
+          </View>
         ) : (
-          vaccines.map(v => {
+          orderedVaccines.map(v => {
             const isOverdue = Boolean(v.next_due && new Date(`${v.next_due}T00:00:00`) < new Date(new Date().setHours(0, 0, 0, 0)));
             const isUpcoming = Boolean(v.next_due && !isOverdue);
             return (
-              <TouchableOpacity key={v.id} activeOpacity={0.7} onPress={() => openEdit(v)}>
-                <Card>
-                  <View style={styles.vaccineRow}>
+              <Card key={v.id} style={styles.vaccineCard}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => openEdit(v)}>
+                  <View style={styles.vaccineHeader}>
+                    <View style={[styles.vaccineIcon, isOverdue ? styles.vaccineIconOverdue : isUpcoming ? styles.vaccineIconUpcoming : styles.vaccineIconRecorded]}>
+                      <Ionicons name="shield-checkmark" size={22} color={isOverdue ? Colors.bad : isUpcoming ? '#C2410C' : Colors.good} />
+                    </View>
                     <View style={styles.vaccineInfo}>
                       <Text style={styles.vaccineName}>{v.name}</Text>
-                      <Text style={styles.vaccineDate}>{formatDate(v.date_given)}</Text>
-                      {v.brand && <Text style={styles.vaccineMeta}>{v.brand}{v.lot_number ? ` · Lote ${v.lot_number}` : ''}</Text>}
-                      {v.next_due && (
-                        <Text style={[styles.vaccineNext, isOverdue && styles.overdue]}>
-                          Próxima: {timeUntil(v.next_due)}
-                        </Text>
-                      )}
-                      {v.vet_name && <Text style={styles.vaccineVet}>Dr. {v.vet_name}</Text>}
+                      <Text style={styles.vaccineDate}>Aplicada: {formatDate(v.date_given)}</Text>
                     </View>
                     <View style={[styles.statusPill, isOverdue ? styles.statusPillOverdue : isUpcoming ? styles.statusPillUpcoming : styles.statusPillRecorded]}>
                       <Text style={[styles.statusPillText, isOverdue ? styles.statusTextOverdue : isUpcoming ? styles.statusTextUpcoming : styles.statusTextRecorded]}>
                         {isOverdue ? 'Pendiente' : isUpcoming ? 'Programada' : 'Registrada'}
                       </Text>
                     </View>
-                    <View style={styles.rowActions}>
-                      <TouchableOpacity onPress={() => openEdit(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                      </TouchableOpacity>
-                    </View>
                   </View>
-                </Card>
-              </TouchableOpacity>
+
+                  {v.next_due && (
+                    <View style={[styles.nextDose, isOverdue && styles.nextDoseOverdue]}>
+                      <Ionicons name={isOverdue ? 'alert-circle' : 'calendar-outline'} size={18} color={isOverdue ? Colors.bad : Colors.accent} />
+                      <View style={styles.nextDoseCopy}>
+                        <Text style={[styles.nextDoseLabel, isOverdue && styles.overdue]}>Próxima dosis</Text>
+                        <Text style={[styles.nextDoseValue, isOverdue && styles.overdue]}>{formatDate(v.next_due)} · {timeUntil(v.next_due)}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {(v.brand || v.lot_number || v.vet_name) && (
+                    <Text style={styles.vaccineMeta}>
+                      {[v.brand, v.lot_number ? `Lote ${v.lot_number}` : null, v.vet_name ? `Dr. ${v.vet_name}` : null].filter(Boolean).join(' · ')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.cardActions}>
+                  <TouchableOpacity style={styles.editAction} onPress={() => openEdit(v)} activeOpacity={0.7}>
+                    <Ionicons name="pencil-outline" size={17} color={Colors.accent} />
+                    <Text style={styles.editActionText}>Editar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteAction} onPress={() => handleDelete(v.id)} activeOpacity={0.7}>
+                    <Ionicons name="trash-outline" size={17} color={Colors.bad} />
+                    <Text style={styles.deleteActionText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
             );
           })
         )}
@@ -305,47 +337,73 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 2,
   },
-  sectionTitle: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-    color: Colors.ink,
-    marginBottom: Spacing.sm,
+  loading: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xxl,
   },
-  vaccineRow: {
+  loadingText: {
+    color: Colors.muted,
+    fontSize: FontSize.sm,
+  },
+  vaccineCard: {
+    padding: Spacing.md,
+  },
+  vaccineHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.sm,
   },
+  vaccineIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vaccineIconRecorded: { backgroundColor: '#ECFDF5' },
+  vaccineIconUpcoming: { backgroundColor: '#FFF7ED' },
+  vaccineIconOverdue: { backgroundColor: '#FEF2F2' },
   vaccineInfo: { flex: 1 },
-  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center', marginLeft: 2 },
   vaccineName: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
     color: Colors.ink,
   },
   vaccineDate: {
     fontSize: FontSize.sm,
     color: Colors.muted,
-    marginTop: 2,
+    marginTop: 3,
   },
   vaccineMeta: {
     fontSize: FontSize.xs,
     color: Colors.muted,
-    marginTop: 2,
+    marginTop: Spacing.sm,
+    lineHeight: 17,
   },
-  vaccineNext: {
-    fontSize: FontSize.xs,
+  nextDose: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: 12,
+    backgroundColor: Colors.accentLight,
+  },
+  nextDoseOverdue: { backgroundColor: '#FEF2F2' },
+  nextDoseCopy: { flex: 1 },
+  nextDoseLabel: {
     color: Colors.accent,
-    marginTop: 2,
-  },
-  overdue: {
-    color: Colors.bad,
-  },
-  vaccineVet: {
     fontSize: FontSize.xs,
-    color: Colors.muted,
+    fontWeight: FontWeight.medium,
+  },
+  nextDoseValue: {
+    color: Colors.ink,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
     marginTop: 2,
   },
+  overdue: { color: Colors.bad },
   statusPill: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -359,6 +417,43 @@ const styles = StyleSheet.create({
   statusTextRecorded: { color: Colors.good },
   statusTextUpcoming: { color: '#C2410C' },
   statusTextOverdue: { color: Colors.bad },
+  cardActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+  },
+  editAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    borderRadius: 10,
+    backgroundColor: Colors.accentLight,
+  },
+  editActionText: {
+    color: Colors.accent,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
+  deleteAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+  },
+  deleteActionText: {
+    color: Colors.bad,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
   empty: {
     alignItems: 'center',
     paddingVertical: Spacing.xxl,
