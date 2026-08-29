@@ -46,6 +46,7 @@ export default function AppLayout() {
         name="index"
         options={{
           title: 'Inicio',
+          tabBarAccessibilityLabel: 'Tab Inicio',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
           ),
@@ -55,6 +56,7 @@ export default function AppLayout() {
         name="salud"
         options={{
           title: 'Salud',
+          tabBarAccessibilityLabel: 'Tab Salud',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'heart' : 'heart-outline'} size={24} color={color} />
           ),
@@ -77,6 +79,7 @@ export default function AppLayout() {
         name="alimentacion"
         options={{
           title: 'Comida',
+          tabBarAccessibilityLabel: 'Tab Comida',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'restaurant' : 'restaurant-outline'} size={24} color={color} />
           ),
@@ -88,6 +91,7 @@ export default function AppLayout() {
         name="perfil"
         options={{
           title: 'Perfil',
+          tabBarAccessibilityLabel: 'Tab Perfil',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
           ),

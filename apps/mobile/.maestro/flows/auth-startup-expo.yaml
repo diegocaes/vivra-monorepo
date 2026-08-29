@@ -1,0 +1,25 @@
+appId: host.exp.Exponent
+name: Inicio estable sin sesión en Expo Go
+tags:
+  - smoke
+  - startup
+  - expo-go
+---
+- launchApp
+- tapOn: "http://localhost:8081"
+- extendedWaitUntil:
+    visible: "Iniciar sesión"
+    timeout: 15000
+- assertVisible:
+    id: "login-email"
+- assertVisible:
+    id: "login-password"
+- repeat:
+    times: 3
+    commands:
+      - stopApp
+      - launchApp
+      - tapOn: "http://localhost:8081"
+      - extendedWaitUntil:
+          visible: "Iniciar sesión"
+          timeout: 10000

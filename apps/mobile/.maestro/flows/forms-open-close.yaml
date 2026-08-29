@@ -1,0 +1,40 @@
+appId: ${APP_ID}
+name: Formularios principales abren y cierran sin bloquear
+tags:
+  - smoke
+  - forms
+---
+- launchApp
+- runFlow:
+    when:
+      visible: "http://localhost:8081"
+    commands:
+      - tapOn: "http://localhost:8081"
+- tapOn: "Tab Inicio"
+- extendedWaitUntil:
+    visible:
+      text: "Tab Inicio"
+      selected: true
+    timeout: 15000
+- tapOn: "Tab Salud"
+- assertVisible:
+    text: "Tab Salud"
+    selected: true
+- scrollUntilVisible:
+    element:
+      id: "health-grooming"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "health-grooming"
+- assertVisible:
+    id: "screen-grooming"
+- tapOn:
+    id: "grooming-add"
+    point: "15%,50%"
+- assertVisible: "Agregar grooming"
+- assertVisible: "Cancelar"
+- tapOn: "Cancelar"
+- assertNotVisible: "Agregar grooming"
+- assertVisible:
+    id: "screen-grooming"

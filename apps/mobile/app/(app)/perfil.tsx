@@ -310,7 +310,7 @@ export default function PerfilScreen() {
   const themeColor = PetThemeColors[pet?.theme_color ?? 'orange'] ?? Colors.accent;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-profile" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Perfil</Text>
         {pet && (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
-import { clearRevenueCatUser } from './useSubscription';
+import { clearRevenueCatUser } from '../lib/revenueCatSession';
 import { captureError } from '../lib/sentry';
 
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 8_000;

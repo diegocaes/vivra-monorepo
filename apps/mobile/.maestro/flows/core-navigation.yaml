@@ -1,0 +1,66 @@
+appId: ${APP_ID}
+name: Navegación principal sin pantallas blancas
+tags:
+  - smoke
+  - navigation
+---
+- launchApp
+- runFlow:
+    when:
+      visible: "http://localhost:8081"
+    commands:
+      - tapOn: "http://localhost:8081"
+- tapOn: "Tab Inicio"
+- extendedWaitUntil:
+    visible:
+      text: "Tab Inicio"
+      selected: true
+    timeout: 15000
+- repeat:
+    times: 3
+    commands:
+      - tapOn: "Tab Salud"
+      - assertVisible:
+          text: "Tab Salud"
+          selected: true
+      - tapOn: "Tab Comida"
+      - assertVisible:
+          text: "Tab Comida"
+          selected: true
+      - tapOn: "Tab Perfil"
+      - assertVisible:
+          text: "Tab Perfil"
+          selected: true
+      - tapOn: "Tab Inicio"
+      - assertVisible:
+          text: "Tab Inicio"
+          selected: true
+- tapOn: "Tab Salud"
+- assertVisible:
+    text: "Tab Salud"
+    selected: true
+- scrollUntilVisible:
+    element:
+      id: "health-grooming"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "health-grooming"
+- assertVisible:
+    id: "screen-grooming"
+- tapOn:
+    id: "grooming-back"
+- assertVisible:
+    text: "Tab Salud"
+    selected: true
+- assertNotVisible: "Vuelos"
+- tapOn:
+    id: "health-passport"
+- assertVisible:
+    id: "screen-passport"
+- tapOn:
+    id: "passport-back"
+- assertVisible:
+    text: "Tab Salud"
+    selected: true
+- assertNotVisible: "Vuelos"

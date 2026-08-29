@@ -390,7 +390,7 @@ export default function AlimentacionScreen() {
   const totalTreatSpend = treats.filter(t => t.price).reduce((s, t) => s + (t.price ?? 0), 0);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-food" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Alimentación</Text>
         <AddButton label="Alimento" onPress={openAddFood} />

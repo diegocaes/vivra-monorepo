@@ -139,6 +139,8 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           <TextInput
+            testID="login-email"
+            accessibilityLabel="Email"
             style={styles.input}
             placeholder="Email"
             placeholderTextColor={Colors.muted}
@@ -150,6 +152,8 @@ export default function LoginScreen() {
           />
 
           <TextInput
+            testID="login-password"
+            accessibilityLabel="Contraseña"
             style={styles.input}
             placeholder="Contraseña"
             placeholderTextColor={Colors.muted}

@@ -169,7 +169,7 @@ export default function DashboardScreen() {
   // Loading state
   if (petData.loading && !refreshing) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView testID="screen-home" style={styles.safe} edges={['top']}>
         <ScrollView style={styles.scroll}>
           <DashboardSkeleton />
         </ScrollView>
@@ -180,7 +180,7 @@ export default function DashboardScreen() {
   // No pet registered
   if (!petData.pet) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView testID="screen-home" style={styles.safe} edges={['top']}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.emptyContainer}
@@ -233,7 +233,7 @@ export default function DashboardScreen() {
   const showPreventiveBanner = preventiveStatus.overdueTypes.length > 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-home" style={styles.safe} edges={['top']}>
       {/* Header with notification bell */}
       <View style={styles.dashHeader}>
         <Text style={styles.dashTitle}>Vivra</Text>

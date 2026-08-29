@@ -1,0 +1,22 @@
+appId: ${APP_ID}
+name: Inicio estable sin sesión
+tags:
+  - smoke
+  - startup
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "Iniciar sesión"
+    timeout: 15000
+- assertVisible:
+    id: "login-email"
+- assertVisible:
+    id: "login-password"
+- repeat:
+    times: 3
+    commands:
+      - stopApp
+      - launchApp
+      - extendedWaitUntil:
+          visible: "Iniciar sesión"
+          timeout: 10000

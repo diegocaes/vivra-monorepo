@@ -16,11 +16,12 @@ interface NavCardProps {
   subtitle: string;
   onPress: () => void;
   badge?: string;
+  testID?: string;
 }
 
-function NavCard({ icon, iconColor, title, subtitle, onPress, badge }: NavCardProps) {
+function NavCard({ icon, iconColor, title, subtitle, onPress, badge, testID }: NavCardProps) {
   return (
-    <TouchableOpacity activeOpacity={0.7} onPress={onPress}>
+    <TouchableOpacity testID={testID} activeOpacity={0.7} onPress={onPress}>
       <Card>
         <View style={styles.navRow}>
           <View style={[styles.navIconCircle, { backgroundColor: `${iconColor}15` }]}>
@@ -59,7 +60,7 @@ export default function SaludScreen() {
   const visitCount = petData.vetVisits.length;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-health" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Salud</Text>
       </View>
@@ -135,6 +136,7 @@ export default function SaludScreen() {
 
         {/* Navigation cards — ordered by frequency of use */}
         <NavCard
+          testID="health-vaccines"
           icon="medkit"
           iconColor={Colors.good}
           title="Vacunas"
@@ -143,6 +145,7 @@ export default function SaludScreen() {
           badge={vaccineCount > 0 ? `${vaccineCount}` : undefined}
         />
         <NavCard
+          testID="health-preventives"
           icon="shield-checkmark"
           iconColor={Colors.warn}
           title="Preventivos"
@@ -150,6 +153,7 @@ export default function SaludScreen() {
           onPress={() => router.push('/(app)/salud/preventivos')}
         />
         <NavCard
+          testID="health-weight"
           icon="scale"
           iconColor={Colors.accent}
           title="Peso"
@@ -158,6 +162,7 @@ export default function SaludScreen() {
           badge={latestWeight ? `${latestWeight.weight_kg} kg` : undefined}
         />
         <NavCard
+          testID="health-history"
           icon="medical"
           iconColor="#E879F9"
           title="Historial veterinario"
@@ -166,6 +171,7 @@ export default function SaludScreen() {
           badge={visitCount > 0 ? `${visitCount}` : undefined}
         />
         <NavCard
+          testID="health-grooming"
           icon="cut"
           iconColor="#8B5CF6"
           title="Grooming"
@@ -174,6 +180,7 @@ export default function SaludScreen() {
           badge={petData.groomings.length > 0 ? `${petData.groomings.length}` : undefined}
         />
         <NavCard
+          testID="health-passport"
           icon="document-text"
           iconColor="#3B82F6"
           title="Pasaporte"

@@ -7,6 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constant
 import { supabase } from '../../../lib/supabase';
 import { usePetContext } from '../../../contexts/PetContext';
 import { calculateAge, formatDate } from '@vivra/shared';
+import { passportBackRoute } from '../../../lib/careNavigation';
 
 interface FlightRow {
   id: string;
@@ -49,13 +50,13 @@ export default function PasaporteScreen() {
   // Never fall back to the hidden `actividad` tab history: it may still point
   // at the disabled Vuelos screen from an older session.
   const handleBack = () => {
-    router.replace(from === 'perfil' ? '/(app)/perfil' : '/(app)/salud');
+    router.replace(passportBackRoute(from));
   };
 
   if (!pet) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header onBack={handleBack} />
+      <SafeAreaView testID="screen-passport" style={styles.safe} edges={['top']}>
+        <Header onBack={handleBack} backLabel={from === 'perfil' ? 'Volver a Perfil' : 'Volver a Salud'} />
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>No hay una mascota seleccionada.</Text>
         </View>
@@ -69,8 +70,12 @@ export default function PasaporteScreen() {
   const genderLabel = pet.gender === 'macho' ? 'Macho / M' : pet.gender === 'hembra' ? 'Hembra / F' : '—';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Header onBack={handleBack} onExport={exportPdf} />
+    <SafeAreaView testID="screen-passport" style={styles.safe} edges={['top']}>
+      <Header
+        onBack={handleBack}
+        onExport={exportPdf}
+        backLabel={from === 'perfil' ? 'Volver a Perfil' : 'Volver a Salud'}
+      />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.passport}>
@@ -175,10 +180,24 @@ export default function PasaporteScreen() {
   );
 }
 
-function Header({ onBack, onExport }: { onBack: () => void; onExport?: () => void }) {
+function Header({
+  onBack,
+  onExport,
+  backLabel,
+}: {
+  onBack: () => void;
+  onExport?: () => void;
+  backLabel: string;
+}) {
   return (
     <View style={styles.header}>
-      <TouchableOpacity onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Volver">
+      <TouchableOpacity
+        testID="passport-back"
+        onPress={onBack}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        accessibilityRole="button"
+        accessibilityLabel={backLabel}
+      >
         <Ionicons name="chevron-back" size={26} color={Colors.ink} />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>Pasaporte</Text>

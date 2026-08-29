@@ -23,6 +23,7 @@ import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
+import { groomingBackRoute } from '../../../lib/careNavigation';
 
 const GROOMING_OPTIONS = Object.entries(GROOMING_TYPES).map(([key, label]) => ({ key, label }));
 
@@ -136,7 +137,7 @@ export default function GroomingScreen() {
   // Vuelos). A generic router.back() could therefore open that stale screen.
   // Return explicitly to the visible section that opened Grooming.
   const handleBack = () => {
-    router.replace(from === 'inicio' ? '/(app)' : '/(app)/salud');
+    router.replace(groomingBackRoute(from));
   };
 
   const toggleService = (key: string) => {
@@ -146,13 +147,19 @@ export default function GroomingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-grooming" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity
+          testID="grooming-back"
+          accessibilityRole="button"
+          accessibilityLabel={from === 'inicio' ? 'Volver a Inicio' : 'Volver a Salud'}
+          onPress={handleBack}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Grooming</Text>
-        <AddButton label="Grooming" onPress={() => setShowForm(true)} />
+        <AddButton testID="grooming-add" label="Grooming" onPress={() => setShowForm(true)} />
       </View>
 
       <ScrollView

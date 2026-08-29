@@ -13,14 +13,16 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 interface AddButtonProps {
   label: string;
   onPress: () => void;
+  testID?: string;
   /** Para acciones secundarias (ej. "Snack" al lado de "Alimento"). */
   variant?: 'primary' | 'outline';
 }
 
-export function AddButton({ label, onPress, variant = 'primary' }: AddButtonProps) {
+export function AddButton({ label, onPress, testID, variant = 'primary' }: AddButtonProps) {
   const outline = variant === 'outline';
   return (
     <TouchableOpacity
+      testID={testID}
       style={[styles.btn, outline && styles.btnOutline]}
       onPress={onPress}
       activeOpacity={0.85}

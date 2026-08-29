@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
 import Purchases, { type PurchasesPackage, type CustomerInfo } from 'react-native-purchases';
-import { REVENUECAT_API_KEY, ENTITLEMENT_ID } from '../constants/revenueCat';
+import { ENTITLEMENT_ID } from '../constants/revenueCat';
 import { useAuth } from './useAuth';
 import { supabase } from '../lib/supabase';
+import {
+  canUseNativeRevenueCat,
+  getRevenueCatUserId,
+  identifyRevenueCatUser,
+} from '../lib/revenueCatSession';
 
 interface SubscriptionState {
   isPremium: boolean;
@@ -13,24 +18,6 @@ interface SubscriptionState {
   purchase: (pkg: PurchasesPackage) => Promise<boolean>;
   restore: () => Promise<boolean>;
   refresh: () => Promise<void>;
-}
-
-// RevenueCat must be configured exactly once per app process. Afterwards,
-// identities change through logIn/logOut; re-calling configure() does not
-// reliably switch the SDK's customer on a shared device.
-let revenueCatConfigured = false;
-let configuredUserId: string | null = null;
-export async function clearRevenueCatUser() {
-  configuredUserId = null;
-  if (!revenueCatConfigured) return;
-
-  try {
-    await Purchases.logOut();
-  } catch (e: any) {
-    // A failed SDK logout must not block the app's own Supabase logout. The
-    // next successful login still calls logIn() with the correct user ID.
-    console.warn('[useSubscription] RevenueCat logout failed:', e?.message ?? e);
-  }
 }
 
 export type { SubscriptionState };
@@ -63,14 +50,9 @@ export function useSubscriptionState(): SubscriptionState {
       // Configure once, then identify the authenticated Supabase user with
       // RevenueCat's supported logIn flow. This prevents entitlements from a
       // previous account being shown on a shared device.
-      if (configuredUserId !== user.id) {
+      if (canUseNativeRevenueCat() && getRevenueCatUserId() !== user.id) {
         try {
-          if (!revenueCatConfigured) {
-            Purchases.configure({ apiKey: REVENUECAT_API_KEY });
-            revenueCatConfigured = true;
-          }
-          await Purchases.logIn(user.id);
-          configuredUserId = user.id;
+          await identifyRevenueCatUser(user.id);
         } catch (e) {
           console.error('RevenueCat init error:', e);
           // RevenueCat being temporarily unavailable must not hide Premium
@@ -81,7 +63,7 @@ export function useSubscriptionState(): SubscriptionState {
 
       try {
         await checkSubscription();
-        if (!cancelled) await loadOfferings();
+        if (!cancelled && canUseNativeRevenueCat()) await loadOfferings();
       } catch (e) {
         console.error('RevenueCat load error:', e);
       } finally {
@@ -94,11 +76,10 @@ export function useSubscriptionState(): SubscriptionState {
   }, [user]);
 
   // Listen for subscription changes (real-time RevenueCat events).
-  // `user` no se lee en el cuerpo (se usa `configuredUserId`, de módulo), pero
-  // va en las deps a propósito: al cambiar de cuenta hay que re-registrar el
-  // listener contra el nuevo usuario configurado en RevenueCat.
+  // `user` va en las deps a propósito: al cambiar de cuenta hay que
+  // re-registrar el listener contra el nuevo usuario configurado en RevenueCat.
   useEffect(() => {
-    if (!configuredUserId) return;
+    if (!canUseNativeRevenueCat() || !getRevenueCatUserId()) return;
 
     const handler = (info: CustomerInfo) => {
       const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
@@ -123,16 +104,17 @@ export function useSubscriptionState(): SubscriptionState {
 
   const checkSubscription = useCallback(async () => {
     // 1. Check RevenueCat (paid IAP entitlement) — source of truth for IAP
-    let rcInfo: CustomerInfo | null = null;
-    try {
-      rcInfo = await Purchases.getCustomerInfo();
-      const rcPremium = rcInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      if (rcPremium) {
-        setIsPremium(true);
-        return;
+    if (canUseNativeRevenueCat()) {
+      try {
+        const rcInfo = await Purchases.getCustomerInfo();
+        const rcPremium = rcInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+        if (rcPremium) {
+          setIsPremium(true);
+          return;
+        }
+      } catch (e: any) {
+        console.warn('[useSubscription] RevenueCat getCustomerInfo failed:', e?.message ?? e);
       }
-    } catch (e: any) {
-      console.warn('[useSubscription] RevenueCat getCustomerInfo failed:', e?.message ?? e);
     }
 
     if (!user) { setIsPremium(false); return; }
@@ -187,6 +169,12 @@ export function useSubscriptionState(): SubscriptionState {
   }, [user]);
 
   const loadOfferings = useCallback(async () => {
+    if (!canUseNativeRevenueCat()) {
+      setCurrentOffering(null);
+      setPackages([]);
+      return;
+    }
+
     try {
       const offerings = await Purchases.getOfferings();
       if (offerings.current) {
@@ -199,6 +187,8 @@ export function useSubscriptionState(): SubscriptionState {
   }, []);
 
   const purchase = useCallback(async (pkg: PurchasesPackage): Promise<boolean> => {
+    if (!canUseNativeRevenueCat()) return false;
+
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const premium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
@@ -213,6 +203,8 @@ export function useSubscriptionState(): SubscriptionState {
   }, []);
 
   const restore = useCallback(async (): Promise<boolean> => {
+    if (!canUseNativeRevenueCat()) return false;
+
     try {
       const info = await Purchases.restorePurchases();
       const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
