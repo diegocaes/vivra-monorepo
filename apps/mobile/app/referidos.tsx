@@ -24,7 +24,6 @@ export default function ReferidosScreen() {
   const [loading, setLoading] = useState(true);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
-  const [copied, setCopied] = useState(false);
   // Block referrals for users who only access shared pets (no pets of their own).
   // Co-owners already share premium with the owner — they can't double-dip.
   const [blockedAsCoOwner, setBlockedAsCoOwner] = useState(false);
@@ -90,12 +89,10 @@ export default function ReferidosScreen() {
 
   useEffect(() => { fetchReferralData(); }, [fetchReferralData]);
 
-  const handleCopy = async () => {
+  const handleShareCode = async () => {
     if (!referralCode) return;
     try {
       await Share.share({ message: referralCode });
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
       // User cancelled
     }
@@ -201,16 +198,14 @@ export default function ReferidosScreen() {
             <Text style={styles.linkText} numberOfLines={1}>{referralCode || '—'}</Text>
           </View>
           <View style={styles.linkActions}>
-            <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.7}>
-              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? Colors.good : Colors.accent} />
-              <Text style={[styles.copyBtnText, copied && { color: Colors.good }]}>
-                {copied ? 'Copiado' : 'Copiar'}
-              </Text>
+            <TouchableOpacity style={styles.copyBtn} onPress={handleShareCode} activeOpacity={0.7}>
+              <Ionicons name="share-outline" size={18} color={Colors.accent} />
+              <Text style={styles.copyBtnText}>Compartir código</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.8}>
             <Ionicons name="share-outline" size={20} color={Colors.white} />
-            <Text style={styles.shareBtnText}>Compartir tu link</Text>
+            <Text style={styles.shareBtnText}>Compartir invitación</Text>
           </TouchableOpacity>
         </Card>
 
@@ -231,10 +226,10 @@ export default function ReferidosScreen() {
         {/* Milestones — cumulative, no fake tiers */}
         <View>
           <Text style={styles.rewardsSectionTitle}>Tus metas</Text>
-          {MILESTONES.map((m, index) => {
+          {MILESTONES.map((m) => {
             const done = completedCount >= m.target;
             return (
-              <View key={index} style={[styles.milestoneRow, done && styles.milestoneRowDone]}>
+              <View key={m.target} style={[styles.milestoneRow, done && styles.milestoneRowDone]}>
                 <View style={[styles.milestoneDot, done && styles.milestoneDotDone]}>
                   {done ? (
                     <Ionicons name="checkmark" size={14} color={Colors.accent} />
@@ -259,7 +254,7 @@ export default function ReferidosScreen() {
           <View style={styles.howRow}>
             <View style={styles.howNum}><Text style={styles.howNumText}>1</Text></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.howTitle}>Comparte tu link</Text>
+              <Text style={styles.howTitle}>Comparte tu invitación</Text>
               <Text style={styles.howDesc}>Envíaselo a otros dueños de mascotas</Text>
             </View>
           </View>

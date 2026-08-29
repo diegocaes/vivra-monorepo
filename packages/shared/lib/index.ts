@@ -7,3 +7,4 @@ export * from './constants';
 export * from './utils';
 export * from './food-stats';
 export * from './spending';
+export * from './billing';

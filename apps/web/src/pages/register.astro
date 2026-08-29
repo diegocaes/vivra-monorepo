@@ -81,11 +81,15 @@ if (Astro.request.method === 'POST') {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const refCode = ((formData.get('ref_code') as string) || refFromUrl || refFromCookie)?.trim().toUpperCase();
+  let acceptedRefCode = '';
 
   // Persist referral code in cookie so it survives OAuth redirect and email confirmation
   if (refCode) {
     const isValidRef = await validateRefCode(refCode);
-    if (isValidRef) saveRefCookie(refCode);
+    if (isValidRef) {
+      acceptedRefCode = refCode;
+      saveRefCookie(refCode);
+    }
   }
 
   if (action === 'google') {
@@ -117,6 +121,9 @@ if (Astro.request.method === 'POST') {
     const { data: signUpData, error: registerError } = await supabase.auth.signUp({
       email: cleanEmail,
       password: cleanPassword,
+      options: acceptedRefCode
+        ? { data: { pending_referral: acceptedRefCode } }
+        : undefined,
     });
     if (registerError) {
       const msg = registerError.message?.toLowerCase() ?? '';
@@ -132,9 +139,11 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-// If ref came from URL, save to cookie now (for when user fills form later)
-if (refFromUrl) {
-  saveRefCookie(refFromUrl);
+// Persist only a referral code that was already validated above. Otherwise an
+// invalid URL parameter would be rejected and immediately written back into
+// the cookie at the end of the same request.
+if (refFromUrl && initialRefValid) {
+  saveRefCookie(initialRef);
 }
 ---
 

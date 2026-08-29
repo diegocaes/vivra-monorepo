@@ -5,6 +5,7 @@ import Analytics from '@vercel/analytics/astro';
 import Track from '../components/Track.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import { createSupabaseClient } from '../lib/supabase';
+import { annualSavingsPercent, PREMIUM_PRICE_COPY } from '@vivra/shared';
 
 if (Astro.url.searchParams.has('code') || Astro.url.searchParams.has('token_hash')) {
   return Astro.redirect(`/api/auth/callback?${Astro.url.searchParams.toString()}`);
@@ -22,6 +23,9 @@ if (cookieHeader.includes('-auth-token')) {
 }
 
 const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
+const MONTHLY_PRICE_LABEL = `$${PREMIUM_PRICE_COPY.monthly.toFixed(2)}`;
+const YEARLY_PRICE_LABEL = `$${PREMIUM_PRICE_COPY.yearly.toFixed(2)}`;
+const ANNUAL_SAVINGS = annualSavingsPercent();
 ---
 
 <!doctype html>
@@ -135,7 +139,7 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         {
           "@type": "Question",
           "name": "¿Funciona sin internet?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Necesitas conexión para sincronizar entre iPhone y web. La app móvil cachea datos para consultas rápidas cuando estás fuera de cobertura." }
+          "acceptedAnswer": { "@type": "Answer", "text": "No por ahora. Necesitas conexión para cargar, registrar y sincronizar tus datos entre iPhone y web." }
         },
         {
           "@type": "Question",
@@ -1044,16 +1048,16 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
         </div>
 
         <div class="price-card featured">
-          <span class="price-badge">2 MESES GRATIS CON EL PLAN ANUAL</span>
+          <span class="price-badge">AHORRA {ANNUAL_SAVINGS}% CON EL PLAN ANUAL</span>
           <p class="price-name">Premium</p>
-          <p class="price-amount">$2.99 <small>/ mes</small></p>
-          <p class="price-alt">o <strong>$14.99/año</strong> — ahorra 58%</p>
+          <p class="price-amount">{MONTHLY_PRICE_LABEL} <small>/ mes</small></p>
+          <p class="price-alt">o <strong>{YEARLY_PRICE_LABEL}/año</strong> — ahorra {ANNUAL_SAVINGS}%</p>
           <ul class="price-features">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span><strong>Todo lo de Free</strong>, más:</span></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Co-dueño: comparte la mascota con tu pareja</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Detalle de gastos por categoría y por sección</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Todos los colores de tema para tu mascota</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Paga con tarjeta, Apple Pay o Google Pay</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Tu Premium se refleja también en la web</li>
           </ul>
           <a href="/register?next=premium" class="price-cta solid">Probar Premium</a>
         </div>
@@ -1070,11 +1074,11 @@ const APP_STORE_URL = 'https://apps.apple.com/app/vivra/id6761087142';
       <div class="faq-grid">
         <details class="faq-item">
           <summary>¿Vivra es gratis?</summary>
-          <p>Sí. Vacunas, peso, veterinario, alimentación, recordatorios, varias mascotas y el pasaporte son gratis para siempre. Premium solo agrega dos cosas: compartir la mascota con un co-dueño y ver el desglose de tus gastos por categoría.</p>
+          <p>Sí. Vacunas, peso, veterinario, alimentación, recordatorios, varias mascotas y el pasaporte son gratis para siempre. Premium agrega tres beneficios: co-dueño, desglose de gastos y todos los colores de tema.</p>
         </details>
         <details class="faq-item">
           <summary>¿Funciona sin internet?</summary>
-          <p>Necesitas conexión para sincronizar entre iPhone y web. La app móvil cachea datos para consultas rápidas cuando estás fuera de cobertura.</p>
+          <p>No por ahora. Necesitas conexión para cargar, registrar y sincronizar tus datos entre iPhone y web.</p>
         </details>
         <details class="faq-item">
           <summary>¿Funciona para perros y gatos?</summary>

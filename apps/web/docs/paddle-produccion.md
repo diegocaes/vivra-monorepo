@@ -7,9 +7,9 @@ Estado actual (2026-07-15): el checkout web corre en **sandbox** (`PUBLIC_PADDLE
 1. **Cuenta live aprobada**: verifica que la cuenta de Paddle (no sandbox) esté aprobada para vender y que `vivrapet.com` esté aprobado como dominio de checkout (Checkout → Website approval).
 2. **Crear producto y precios live**: producto "Vivra Premium" con dos precios:
    - Mensual: **$2.99 USD/mes**
-   - Anual: **$14.99 USD/año** (igualado al precio de iOS, decisión 2026-07-15)
+   - Anual: **$19.99 USD/año** (igual al precio aprobado que Apple muestra en EE. UU.)
    Copia los dos `pri_...` live.
-   ⚠️ El precio anual del **sandbox** actual está en $19.99 — si sigues probando en sandbox, actualízalo también a $14.99 (o crea un precio nuevo y cambia `PUBLIC_PADDLE_PRICE_YEARLY` en `.env`) para que el cobro coincida con la copy.
+   El precio anual del **sandbox** actual ya está en $19.99. Verifica que el `pri_...` live cobre lo mismo antes de habilitar producción.
 3. **Client token live**: Developer Tools → Authentication → crea un client-side token (`live_...`).
 4. **API key live**: Developer Tools → Authentication → API key server-side (para cancel/resume/switch-yearly).
 5. **Webhook live**: Developer Tools → Notifications → nueva destination:
@@ -25,7 +25,7 @@ En **Vercel** (Project → Settings → Environment Variables, scope Production)
 PUBLIC_PADDLE_ENV=production
 PUBLIC_PADDLE_CLIENT_TOKEN=live_...
 PUBLIC_PADDLE_PRICE_MONTHLY=pri_...   (live, $2.99/mes)
-PUBLIC_PADDLE_PRICE_YEARLY=pri_...    (live, $14.99/año)
+PUBLIC_PADDLE_PRICE_YEARLY=pri_...    (live, $19.99/año)
 PADDLE_API_KEY=...                    (live, server-side)
 ```
 
@@ -37,10 +37,10 @@ npx supabase secrets set PADDLE_WEBHOOK_SECRET=<secret live> --project-ref upjie
 
 Redeploy en Vercel después de cambiar las variables.
 
-## Precio anual unificado (resuelto 2026-07-15)
+## Precio anual unificado (auditado 2026-08-29)
 
-- Decisión: **$14.99/año en ambas plataformas** (la web bajó de $19.99 para igualar a iOS).
-- La copy de la web (landing, /premium, exit-offer) ya dice $14.99 y "ahorra 58%". Falta que los precios de Paddle (sandbox y live) cobren $14.99.
+- Fuente comprobada: Apple cobra **$19.99/año** y **$2.99/mes** en la tienda de EE. UU.; localiza esos importes por país (por ejemplo, en COP en Colombia).
+- La copy web usa esos importes USD y calcula **44% de ahorro** frente a 12 pagos mensuales. Paddle live debe configurarse con los mismos precios base; no se hacen conversiones manuales de moneda en Vivra.
 - El precio que muestra la app iOS sale de App Store Connect vía RevenueCat — no hay que tocar nada en iOS.
 
 ## Prueba de humo post-activación

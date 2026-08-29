@@ -54,8 +54,15 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     // Note: actual reward granting happens atomically in onboarding via the
     // redeem_referral RPC. Here we just create a pending row that survives
     // the email-confirm roundtrip so the user doesn't need to re-enter the code.
-    const pendingRef = cookies.get('pending_referral')?.value;
+    // Email confirmation may be opened on another browser/device, where the
+    // signup cookie does not exist. The validated code is also stored in user
+    // metadata so attribution survives that normal journey.
+    const metadataPendingRef = typeof user.user_metadata?.pending_referral === 'string'
+      ? user.user_metadata.pending_referral.trim().toUpperCase()
+      : '';
+    const pendingRef = cookies.get('pending_referral')?.value || metadataPendingRef;
     if (pendingRef) {
+      let referralHandled = false;
       try {
         const admin = createSupabaseAdminClient();
         const { data: refCode } = await admin
@@ -81,12 +88,24 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
               status: 'pending',
             });
             if (insErr) console.warn('[auth/callback] referral insert failed:', insErr.message);
+            referralHandled = !insErr;
+          } else {
+            referralHandled = true;
           }
+        } else {
+          // Invalid and self-referral are terminal; there is nothing useful to
+          // retry on onboarding.
+          referralHandled = true;
         }
       } catch (e) {
         console.warn('[auth/callback] referral processing error:', e);
       }
-      cookies.delete('pending_referral', { path: '/' });
+      if (referralHandled) {
+        cookies.delete('pending_referral', { path: '/' });
+        if (metadataPendingRef) {
+          await supabase.auth.updateUser({ data: { pending_referral: null } });
+        }
+      }
     }
 
     // Process pending share invite (from /invite/[token] page)

@@ -73,8 +73,9 @@ export function useSubscriptionState(): SubscriptionState {
           configuredUserId = user.id;
         } catch (e) {
           console.error('RevenueCat init error:', e);
-          if (!cancelled) setIsLoading(false);
-          return;
+          // RevenueCat being temporarily unavailable must not hide Premium
+          // bought on the web, earned by referral, or shared by a co-owner.
+          // checkSubscription falls back to the server-side Supabase state.
         }
       }
 
@@ -101,7 +102,14 @@ export function useSubscriptionState(): SubscriptionState {
 
     const handler = (info: CustomerInfo) => {
       const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      setIsPremium(premium);
+      if (premium) {
+        setIsPremium(true);
+      } else {
+        // A RevenueCat "not active" update only answers the Apple-IAP part of
+        // the question. Re-evaluate web/referral/promo/shared access before
+        // marking the whole account free.
+        void checkSubscription();
+      }
       // The server receives RevenueCat's signed webhook. Never let a mobile
       // client write its own entitlement or expiry into Supabase.
     };
@@ -161,41 +169,15 @@ export function useSubscriptionState(): SubscriptionState {
       console.warn('[useSubscription] user_subscriptions check threw:', e?.message ?? e);
     }
 
-    // 3. Co-owner inherited premium: any sharing partner with active premium
-    //    grants this user premium too. Mirrors web's evaluatePremiumWithSharing.
+    // 3. Co-owner inherited premium. A narrow SECURITY DEFINER RPC returns
+    //    only the effective date; clients never read a partner's billing row.
     try {
-      const [sharedWithMe, myShares] = await Promise.all([
-        supabase.from('pet_shares').select('owner_id').eq('shared_with', user.id),
-        supabase.from('pet_shares').select('shared_with').eq('owner_id', user.id),
-      ]);
-
-      if (sharedWithMe.error) console.warn('[useSubscription] pet_shares (shared_with) error:', sharedWithMe.error.message);
-      if (myShares.error) console.warn('[useSubscription] pet_shares (owner_id) error:', myShares.error.message);
-
-      const partnerIds = new Set<string>();
-      sharedWithMe.data?.forEach((s: any) => {
-        if (s.owner_id) partnerIds.add(s.owner_id);
-      });
-      myShares.data?.forEach((s: any) => {
-        if (s.shared_with) partnerIds.add(s.shared_with);
-      });
-
-      if (partnerIds.size > 0) {
-        const { data: partnerSubs, error: partnerErr } = await supabase
-          .from('user_subscriptions')
-          .select('plan, premium_until')
-          .in('user_id', [...partnerIds]);
-
-        if (partnerErr) console.warn('[useSubscription] partner subs error:', partnerErr.message);
-
-        const now = Date.now();
-        const sharedPremium = (partnerSubs || []).some(
-          (sub: any) => sub.plan === 'premium' && sub.premium_until && new Date(sub.premium_until).getTime() > now,
-        );
-        if (sharedPremium) {
-          setIsPremium(true);
-          return;
-        }
+      const { data: sharedUntil, error: sharedError } = await supabase.rpc('get_shared_premium_until');
+      if (sharedError) {
+        console.warn('[useSubscription] shared premium check failed:', sharedError.message);
+      } else if (sharedUntil && new Date(sharedUntil as string).getTime() > Date.now()) {
+        setIsPremium(true);
+        return;
       }
     } catch (e: any) {
       console.warn('[useSubscription] pet_shares check threw:', e?.message ?? e);

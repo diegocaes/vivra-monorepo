@@ -50,7 +50,7 @@ export default function RegisterScreen() {
       }
       const stored = await AsyncStorage.getItem(PENDING_REF_KEY);
       if (stored) {
-        setRefCode(stored);
+        setRefCode(stored.toUpperCase().replace(/[^A-Z0-9]/g, ''));
         setShowRefField(true);
       }
     })();
@@ -65,11 +65,9 @@ export default function RegisterScreen() {
     const cleanRef = refCode.trim().toUpperCase();
     if (!cleanRef) return true;
 
-    const { data: code, error } = await supabase
-      .from('referral_codes')
-      .select('user_id')
-      .eq('code', cleanRef)
-      .maybeSingle();
+    const { data: isValid, error } = await supabase.rpc('validate_referral_code', {
+      p_code: cleanRef,
+    });
 
     if (error) {
       console.warn('[register] referral validation failed:', error.message);
@@ -77,7 +75,7 @@ export default function RegisterScreen() {
       return false;
     }
 
-    if (!code) {
+    if (!isValid) {
       Alert.alert(
         'Código inválido',
         'El código de referido no existe. Puedes continuar sin código o corregirlo.',
@@ -111,6 +109,9 @@ export default function RegisterScreen() {
     const { data: signUpData, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
+      options: refCode.trim()
+        ? { data: { pending_referral: refCode.trim().toUpperCase() } }
+        : undefined,
     });
     setLoading(false);
 

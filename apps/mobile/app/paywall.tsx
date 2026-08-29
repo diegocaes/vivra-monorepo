@@ -17,6 +17,9 @@ export default function PaywallScreen() {
 
   const monthly = packages.find(p => p.packageType === PACKAGE_TYPE.MONTHLY);
   const yearly = packages.find(p => p.packageType === PACKAGE_TYPE.ANNUAL);
+  const yearlySavings = monthly && yearly && monthly.product.price > 0
+    ? Math.max(0, Math.round((1 - yearly.product.price / (monthly.product.price * 12)) * 100))
+    : 0;
 
   async function handlePurchase(pkg: typeof monthly) {
     if (!pkg) return;
@@ -64,8 +67,8 @@ export default function PaywallScreen() {
 
         {/* Features */}
         <View style={styles.featuresContainer}>
-          {PREMIUM_FEATURES.map((feature, i) => (
-            <View key={i} style={styles.featureRow}>
+          {PREMIUM_FEATURES.map((feature) => (
+            <View key={feature.title} style={styles.featureRow}>
               <View style={styles.featureIcon}>
                 <Ionicons name={feature.icon} size={20} color={Colors.accent} />
               </View>
@@ -98,7 +101,7 @@ export default function PaywallScreen() {
                     <Text style={styles.planPeriod}>/año</Text>
                   </Text>
                   <Text style={styles.planSavings}>
-                    {monthly ? `Ahorra vs mensual` : ''}
+                    {yearlySavings > 0 ? `Ahorra ${yearlySavings}% vs mensual` : ''}
                   </Text>
                 </TouchableOpacity>
               )}

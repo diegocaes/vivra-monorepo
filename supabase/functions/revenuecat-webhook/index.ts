@@ -9,6 +9,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const encoder = new TextEncoder();
 const PREMIUM_ENTITLEMENT_ID = 'premium';
 const MAX_SIGNATURE_AGE_MS = 5 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function constantTimeEquals(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
   // state. The database migration adds iap_event_timestamp for this purpose.
   const { data: current, error: currentError } = await supabase
     .from('user_subscriptions')
-    .select('source, iap_event_timestamp')
+    .select('source, premium_until, referral_days_balance, iap_event_timestamp')
     .eq('user_id', userId)
     .maybeSingle();
   if (currentError) return new Response('db error', { status: 500 });
@@ -94,13 +95,32 @@ Deno.serve(async (req) => {
   }
 
   if (type === 'EXPIRATION') {
+    if (current?.source !== 'iap') return new Response('ignored', { status: 200 });
+
+    const queuedDays = Math.max(0, Number(current.referral_days_balance ?? 0));
+    if (queuedDays > 0) {
+      const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+          plan: 'premium',
+          source: 'referral',
+          premium_until: new Date(Date.now() + queuedDays * DAY_MS).toISOString(),
+          referral_days_balance: 0,
+          iap_event_timestamp: Number.isFinite(eventTimestamp) ? eventTimestamp : Date.now(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .eq('source', 'iap');
+      return error ? new Response('db error', { status: 500 }) : new Response('ok', { status: 200 });
+    }
+
     const { error } = await supabase
       .from('user_subscriptions')
       .update({
         plan: 'free',
         source: null,
         premium_until: null,
-        iap_event_timestamp: eventTimestamp,
+        iap_event_timestamp: Number.isFinite(eventTimestamp) ? eventTimestamp : Date.now(),
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
@@ -115,11 +135,18 @@ Deno.serve(async (req) => {
   }
   if (!Number.isFinite(expiration) || expiration <= Date.now()) return new Response('ignored', { status: 200 });
 
+  let queuedReferralDays = Math.max(0, Number(current?.referral_days_balance ?? 0));
+  if (current?.source === 'referral' && current.premium_until) {
+    const remainingMs = new Date(current.premium_until).getTime() - Date.now();
+    if (remainingMs > 0) queuedReferralDays += Math.ceil(remainingMs / DAY_MS);
+  }
+
   const { error } = await supabase.from('user_subscriptions').upsert({
     user_id: userId,
     plan: 'premium',
     source: 'iap',
     premium_until: new Date(expiration).toISOString(),
+    referral_days_balance: queuedReferralDays,
     iap_product_id: typeof event.product_id === 'string' ? event.product_id : null,
     iap_event_timestamp: Number.isFinite(eventTimestamp) ? eventTimestamp : Date.now(),
     updated_at: new Date().toISOString(),

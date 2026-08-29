@@ -511,7 +511,7 @@ CARACTERÍSTICAS:
 • Funciona offline
 
 SUSCRIPCIÓN VIVRA PREMIUM (opcional):
-• $2.99/mes o $14.99/año (USD)
+• $2.99/mes o $19.99/año (USD)
 • 7 días gratis al activar
 • Cancela cuando quieras desde Ajustes > Apple ID > Suscripciones
 
@@ -576,7 +576,7 @@ Authentication:
 - The app conforms to Guideline 4.8 (SIWA offered prominently).
 
 Subscription:
-- 7-day free trial, then $2.99/month or $14.99/year auto-renewable.
+- 7-day free trial, then $2.99/month or $19.99/year auto-renewable.
 - Trial + pricing + auto-renewal + cancellation path are disclosed
   prominently on the paywall (Guideline 3.1.2).
 - Privacy Policy and Terms of Use are linked from the paywall and
@@ -617,7 +617,7 @@ Dentro del grupo, crear:
 - Product ID: `vivra_premium_yearly`
 - Reference Name: "Vivra Premium Yearly"
 - Duration: 1 Year
-- Price: Tier 15 ($14.99 USD)
+- Price: $19.99 USD (confirm the current App Store Connect price point)
 - Misma descripción + intro offer (7 días) + review info
 
 Ambos productos: **Privacy Policy URL** = `https://vivrapet.com/privacy`, **License Agreement** = standard EULA de Apple (o link a `/terms`).

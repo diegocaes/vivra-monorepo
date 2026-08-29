@@ -236,30 +236,39 @@ const animateProgress = (toStep: number) => {
 
     try {
       // 2. Redeem any pending referral code the user entered at signup
-      const pendingRef = await AsyncStorage.getItem(PENDING_REF_KEY);
+      const storedPendingRef = await AsyncStorage.getItem(PENDING_REF_KEY);
+      const metadataPendingRef = typeof user.user_metadata?.pending_referral === 'string'
+        ? user.user_metadata.pending_referral
+        : null;
+      const pendingRef = storedPendingRef || metadataPendingRef;
       if (pendingRef) {
         const { data, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef });
+        let shouldClearPending = false;
         if (redeemErr) {
           console.warn('[onboarding] redeem_referral failed:', redeemErr.message);
-          // Don't show error toast — user just completed onboarding, don't
-          // confuse them. Failure is logged for debugging.
+          // Keep the attribution so a temporary network/server failure can be
+          // retried; never silently lose a valid referral after onboarding.
         } else if (!data?.ok) {
-          // Specific known errors we can ignore silently:
-          //   self_referral, invalid_code → user mistake, no big deal
-          //   already_redeemed → idempotent, fine
-          // Anything else: log loudly so we can debug.
           const err = data?.error;
-          if (err && !['self_referral', 'invalid_code'].includes(err)) {
+          shouldClearPending = ['self_referral', 'invalid_code', 'referral_already_attributed'].includes(err);
+          if (err && !shouldClearPending) {
             console.warn('[onboarding] redeem_referral rejected:', err, data);
           }
-        } else if (data?.referred_trial_days) {
-          // Successful redeem — show a friendly confirmation
-          Alert.alert(
-            '¡Premium activado!',
-            `Tienes ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
-          );
+        } else {
+          shouldClearPending = true;
+          if (data?.referred_trial_days) {
+            Alert.alert(
+              '¡Premium activado!',
+              `Tienes ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
+            );
+          }
         }
-        await AsyncStorage.removeItem(PENDING_REF_KEY);
+        if (shouldClearPending) {
+          await AsyncStorage.removeItem(PENDING_REF_KEY);
+          if (metadataPendingRef) {
+            await supabase.auth.updateUser({ data: { pending_referral: null } });
+          }
+        }
       }
       // We intentionally do NOT pre-insert a user_subscriptions row with
       // plan='free'. With RLS enabled the authenticated client can't write

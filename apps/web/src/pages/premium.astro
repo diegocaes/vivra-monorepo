@@ -3,6 +3,7 @@ import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
 import { getPremiumStatus } from '../lib/premium';
 import type { PremiumStatus } from '../lib/premium';
+import { annualSavingsPercent, monthlyEquivalent, PREMIUM_PRICE_COPY } from '@vivra/shared';
 
 const { supabase, user } = Astro.locals;
 const premium: PremiumStatus = await getPremiumStatus(supabase, user.id);
@@ -14,6 +15,10 @@ const PADDLE_ENV = import.meta.env.PUBLIC_PADDLE_ENV ?? 'sandbox';
 const PADDLE_PRICE_MONTHLY = import.meta.env.PUBLIC_PADDLE_PRICE_MONTHLY ?? '';
 const PADDLE_PRICE_YEARLY = import.meta.env.PUBLIC_PADDLE_PRICE_YEARLY ?? '';
 const paddleReady = !!(PADDLE_TOKEN && (PADDLE_PRICE_MONTHLY || PADDLE_PRICE_YEARLY));
+const MONTHLY_PRICE_LABEL = `$${PREMIUM_PRICE_COPY.monthly.toFixed(2)}`;
+const YEARLY_PRICE_LABEL = `$${PREMIUM_PRICE_COPY.yearly.toFixed(2)}`;
+const YEARLY_MONTHLY_EQUIVALENT = `$${monthlyEquivalent().toFixed(2)}`;
+const ANNUAL_SAVINGS = annualSavingsPercent();
 
 // Cancelación programada de suscripción web (Paddle): premium sigue activo
 // hasta cancelAt pero no se renovará.
@@ -224,7 +229,7 @@ const features = [
           <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"><Icon name="pago" class="h-4 w-4" /></div>
           <div>
             <p class="text-sm font-medium text-ink">Suscripción</p>
-            <p class="text-xs text-muted mt-0.5">$2.99/mes o $14.99/año — se contrata desde la app de iPhone (Perfil → Premium)</p>
+            <p class="text-xs text-muted mt-0.5">{MONTHLY_PRICE_LABEL}/mes o {YEARLY_PRICE_LABEL}/año en EE. UU. — Apple muestra el precio local de cada país</p>
           </div>
         </div>
       </div>
@@ -251,7 +256,7 @@ const features = [
                   data-paddle-price={PADDLE_PRICE_MONTHLY}
                   class="paddle-buy flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-accent bg-card px-4 py-3.5 transition-all hover:bg-accent/5 active:scale-95"
                 >
-                  <span class="text-sm font-bold text-ink">$2.99/mes</span>
+                  <span class="text-sm font-bold text-ink">{MONTHLY_PRICE_LABEL}/mes</span>
                   <span class="text-xs text-muted">Mensual</span>
                 </button>
               )}
@@ -261,8 +266,8 @@ const features = [
                   data-paddle-price={PADDLE_PRICE_YEARLY}
                   class="paddle-buy flex flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-accent bg-accent/10 px-4 py-3.5 transition-all hover:bg-accent/15 active:scale-95"
                 >
-                  <span class="text-sm font-bold text-accent-dark">$14.99/año</span>
-                  <span class="text-xs text-accent-dark/80">Ahorra 58%</span>
+                  <span class="text-sm font-bold text-accent-dark">{YEARLY_PRICE_LABEL}/año</span>
+                  <span class="text-xs text-accent-dark/80">Ahorra {ANNUAL_SAVINGS}%</span>
                 </button>
               )}
             </div>
@@ -317,13 +322,13 @@ const features = [
         {isMonthlyPlan && (
           <div class="rounded-2xl border-2 border-accent bg-accent/5 px-4 py-3.5 mb-4">
             <p class="text-sm font-bold text-ink">¿Y si mejor pagas menos?</p>
-            <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">$14.99/año</strong> — equivale a $1.25/mes, un 58% menos de lo que pagas hoy.</p>
+            <p class="text-xs text-muted mt-1 mb-3">Cámbiate al plan anual: <strong class="text-ink">{YEARLY_PRICE_LABEL}/año</strong> — equivale a {YEARLY_MONTHLY_EQUIVALENT}/mes, un {ANNUAL_SAVINGS}% menos que pagar mes a mes.</p>
             <button
               type="button"
               id="switch-yearly-btn"
               class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95"
             >
-              Cambiarme al anual y ahorrar 58%
+              Cambiarme al anual y ahorrar {ANNUAL_SAVINGS}%
             </button>
           </div>
         )}
@@ -347,7 +352,7 @@ const features = [
   )}
 
   {premium.isPremium && premium.source === 'web' && (
-    <script is:inline data-astro-rerun>
+    <script is:inline data-astro-rerun define:vars={{ YEARLY_PRICE_LABEL, ANNUAL_SAVINGS }}>
       (function () {
         function wire(id, opts) {
           var btn = document.getElementById(id);
@@ -435,17 +440,17 @@ const features = [
               var res = await fetch('/api/subscription/switch-yearly', { method: 'POST' });
               var data = await res.json();
               if (res.ok) {
-                alert('¡Listo! Ahora estás en el plan anual de $14.99/año.');
+                alert('¡Listo! Ahora estás en el plan anual de ' + YEARLY_PRICE_LABEL + '/año.');
                 window.location.reload();
               } else {
                 alert(data.error || 'No se pudo cambiar el plan. Intenta de nuevo.');
                 switchBtn.disabled = false;
-                switchBtn.textContent = 'Cambiarme al anual y ahorrar 58%';
+                switchBtn.textContent = 'Cambiarme al anual y ahorrar ' + ANNUAL_SAVINGS + '%';
               }
             } catch (e) {
               alert('Error de conexión. Intenta de nuevo.');
               switchBtn.disabled = false;
-              switchBtn.textContent = 'Cambiarme al anual y ahorrar 58%';
+              switchBtn.textContent = 'Cambiarme al anual y ahorrar ' + ANNUAL_SAVINGS + '%';
             }
           });
         }

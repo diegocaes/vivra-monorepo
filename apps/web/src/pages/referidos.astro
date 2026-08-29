@@ -254,10 +254,10 @@ const milestones = [
         var link = btnShare.getAttribute('data-link');
         if (navigator.share) {
           navigator.share({ title: 'Vivra', text: text, url: link });
-        } else if (navigator.clipboard && link) {
-          navigator.clipboard.writeText(link).then(function() {
+        } else if (navigator.clipboard && text) {
+          navigator.clipboard.writeText(text).then(function() {
             var orig = btnShare.textContent;
-            btnShare.textContent = 'Link copiado!';
+            btnShare.textContent = 'Invitación copiada';
             setTimeout(function() { btnShare.textContent = orig; }, 2000);
           });
         }
