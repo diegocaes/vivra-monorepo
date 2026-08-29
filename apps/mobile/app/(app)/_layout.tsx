@@ -14,9 +14,16 @@ export default function AppLayout() {
 
   return (
     <PetProvider>
+    {/* The app has four lightweight tabs. Keeping them mounted is safer than
+        letting native-screens detach or freeze a nested stack mid-transition:
+        on some iOS devices that produced an intermittent blank content area
+        when moving between Inicio, Salud, Comida and Perfil. */}
     <Tabs
+      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
+        lazy: false,
+        freezeOnBlur: false,
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.muted,
         tabBarStyle: {
