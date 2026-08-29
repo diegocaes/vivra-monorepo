@@ -8,3 +8,4 @@ export * from './utils';
 export * from './food-stats';
 export * from './spending';
 export * from './billing';
+export * from './grooming';

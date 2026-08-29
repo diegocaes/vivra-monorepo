@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -17,7 +18,7 @@ import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { Card } from '../../components/ui/Card';
-import { formatDate } from '@vivra/shared';
+import { formatDate, formatGroomingServices } from '@vivra/shared';
 
 /**
  * Compact "time ago" formatter used for the care-card badges.
@@ -36,6 +37,54 @@ function shortTimeAgo(isoDate: string): string {
   return `Hace ${years}a`;
 }
 
+type VaccineSummary = {
+  state: 'empty' | 'overdue' | 'scheduled' | 'recorded';
+  title: string;
+  detail: string;
+  dismissId: string | null;
+};
+
+function buildVaccineSummary(vaccines: { id: string; name: string; next_due: string | null }[]): VaccineSummary {
+  const latestByName = new Map<string, (typeof vaccines)[number]>();
+  for (const vaccine of vaccines) {
+    if (!latestByName.has(vaccine.name)) latestByName.set(vaccine.name, vaccine);
+  }
+  const latest = [...latestByName.values()];
+  if (latest.length === 0) {
+    return {
+      state: 'empty',
+      title: 'Registra su primera vacuna',
+      detail: 'Guarda la dosis tal como aparece en el carné',
+      dismissId: null,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dated = latest
+    .filter((vaccine): vaccine is typeof vaccine & { next_due: string } => Boolean(vaccine.next_due))
+    .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
+    .sort((a, b) => a.due.getTime() - b.due.getTime());
+  const next = dated[0];
+  if (next) {
+    const state = next.due < today ? 'overdue' : 'scheduled';
+    return {
+      state,
+      title: state === 'overdue' ? `${next.vaccine.name} pendiente` : `Próxima: ${next.vaccine.name}`,
+      detail: state === 'overdue' ? 'Confirma el refuerzo con tu veterinario' : formatDate(next.vaccine.next_due),
+      // If the vaccine or its due date changes, the new reminder appears again.
+      dismissId: `${next.vaccine.id}:${next.vaccine.next_due}`,
+    };
+  }
+
+  return {
+    state: 'recorded',
+    title: `${latest.length} vacuna${latest.length === 1 ? '' : 's'} registrada${latest.length === 1 ? '' : 's'}`,
+    detail: 'Aún no hay una próxima fecha registrada',
+    dismissId: null,
+  };
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -46,6 +95,40 @@ export default function DashboardScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
   const [isTrial, setIsTrial] = useState(false);
+  const [dismissedVaccineKey, setDismissedVaccineKey] = useState<string | null>(null);
+  const [checkedVaccineKey, setCheckedVaccineKey] = useState<string | null>(null);
+  const vaccineSummary = buildVaccineSummary(petData.vaccines);
+  const vaccineDismissStorageKey = user && petData.pet && vaccineSummary.dismissId
+    ? `@vivra/home-vaccine-dismissed/${user.id}/${petData.pet.id}/${vaccineSummary.dismissId}`
+    : null;
+
+  useEffect(() => {
+    let active = true;
+    setCheckedVaccineKey(null);
+    if (!vaccineDismissStorageKey) {
+      setDismissedVaccineKey(null);
+      return () => { active = false; };
+    }
+    AsyncStorage.getItem(vaccineDismissStorageKey)
+      .then(value => {
+        if (!active) return;
+        setDismissedVaccineKey(value === '1' ? vaccineDismissStorageKey : null);
+        setCheckedVaccineKey(vaccineDismissStorageKey);
+      })
+      .catch(() => {
+        if (!active) return;
+        setDismissedVaccineKey(null);
+        setCheckedVaccineKey(vaccineDismissStorageKey);
+      });
+    return () => { active = false; };
+  }, [vaccineDismissStorageKey]);
+
+  const dismissVaccineReminder = useCallback(async () => {
+    if (!vaccineDismissStorageKey) return;
+    setDismissedVaccineKey(vaccineDismissStorageKey);
+    setCheckedVaccineKey(vaccineDismissStorageKey);
+    await AsyncStorage.setItem(vaccineDismissStorageKey, '1');
+  }, [vaccineDismissStorageKey]);
 
   // Fetch unread notification count + trial status.
   // `refreshing` va en las deps aunque no se lea en el cuerpo: se usa como
@@ -149,35 +232,6 @@ export default function DashboardScreen() {
   // previously registered treatment is actually overdue.
   const showPreventiveBanner = preventiveStatus.overdueTypes.length > 0;
 
-  // The latest entry per vaccine type controls the summary. A date is only
-  // urgent when it was explicitly saved as the next dose; no annual schedule
-  // is inferred from a past application.
-  const vaccineSummary = (() => {
-    const latestByName = new Map<string, typeof petData.vaccines[number]>();
-    for (const vaccine of petData.vaccines) {
-      if (!latestByName.has(vaccine.name)) latestByName.set(vaccine.name, vaccine);
-    }
-    const latest = [...latestByName.values()];
-    if (latest.length === 0) {
-      return { state: 'empty' as const, title: 'Registra su primera vacuna', detail: 'Guarda la dosis tal como aparece en el carné' };
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dated = latest
-      .filter(vaccine => vaccine.next_due)
-      .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
-      .sort((a, b) => a.due.getTime() - b.due.getTime());
-    const next = dated[0];
-    if (next && next.due < today) {
-      return { state: 'overdue' as const, title: `${next.vaccine.name} pendiente`, detail: 'Confirma el refuerzo con tu veterinario' };
-    }
-    if (next) {
-      return { state: 'scheduled' as const, title: `Próxima: ${next.vaccine.name}`, detail: formatDate(next.vaccine.next_due!) };
-    }
-    return { state: 'recorded' as const, title: `${latest.length} vacuna${latest.length === 1 ? '' : 's'} registrada${latest.length === 1 ? '' : 's'}`, detail: 'Aún no hay una próxima fecha registrada' };
-  })();
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header with notification bell */}
@@ -271,7 +325,10 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
+        {(!vaccineDismissStorageKey || (
+          checkedVaccineKey === vaccineDismissStorageKey
+          && dismissedVaccineKey !== vaccineDismissStorageKey
+        )) && <TouchableOpacity
           style={[
             styles.vaccineCta,
             vaccineSummary.state === 'overdue' && styles.vaccineCtaOverdue,
@@ -290,8 +347,21 @@ export default function DashboardScreen() {
             <Text style={[styles.vaccineCtaTitle, vaccineSummary.state === 'overdue' && styles.vaccineCtaTitleOverdue]}>{vaccineSummary.title}</Text>
             <Text style={styles.vaccineCtaText}>{vaccineSummary.detail}</Text>
           </View>
+          {vaccineDismissStorageKey && (
+            <TouchableOpacity
+              onPress={(event) => {
+                event.stopPropagation();
+                void dismissVaccineReminder();
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Ocultar recordatorio de vacuna"
+            >
+              <Ionicons name="close" size={19} color={Colors.muted} />
+            </TouchableOpacity>
+          )}
           <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? Colors.bad : Colors.good} />
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         {/* Food summary — averages and trazabilidad, no countdown */}
         {hasFood ? (
@@ -347,12 +417,15 @@ export default function DashboardScreen() {
               subtitle={
                 petData.groomings[0]?.location
                 || petData.groomings[0]?.groomer_name
-                || petData.groomings[0]?.type
+                || formatGroomingServices(
+                  petData.groomings[0]?.services,
+                  petData.groomings[0]?.type,
+                )
                 || null
               }
               lastDate={petData.groomings[0]?.date ?? null}
               emptyText="Sin baños registrados"
-              onPress={() => router.navigate('/(app)/actividad/grooming' as any)}
+              onPress={() => router.navigate('/(app)/actividad/grooming?from=inicio' as any)}
             />
           </View>
           <View style={styles.careCol}>

@@ -7,7 +7,12 @@ import MetricGrid from '../../components/ui/MetricGrid.astro';
 import SectionHeader from '../../components/ui/SectionHeader.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
-import { formatDate, parseNumericField } from '@vivra/shared';
+import {
+  formatDate,
+  formatGroomingServices,
+  normalizeGroomingServices,
+  parseNumericField,
+} from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { getPremiumStatus } from '../../lib/premium';
 import { GROOMING_TYPES } from '@vivra/shared';
@@ -21,11 +26,15 @@ const premium = await getPremiumStatus(supabase, user.id);
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action') as string;
+  const services = normalizeGroomingServices(formData.getAll('services'))
+    .filter(service => service in GROOMING_TYPES);
   if (action === 'add') {
+    if (services.length === 0) return Astro.redirect('/salud/grooming?error=service_required');
     await supabase.from('groomings').insert({
       pet_id: pet.id,
       date: formData.get('date') as string,
-      type: formData.get('type') as string,
+      type: services[0],
+      services,
       groomer_name: (formData.get('groomer_name') as string) || null,
       location: (formData.get('location') as string) || null,
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
@@ -34,9 +43,11 @@ if (Astro.request.method === 'POST') {
   }
   if (action === 'edit') {
     const groomingId = formData.get('grooming_id') as string;
+    if (services.length === 0) return Astro.redirect('/salud/grooming?error=service_required');
     await supabase.from('groomings').update({
       date: formData.get('date') as string,
-      type: formData.get('type') as string,
+      type: services[0],
+      services,
       groomer_name: (formData.get('groomer_name') as string) || null,
       location: (formData.get('location') as string) || null,
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
@@ -72,6 +83,12 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     Salud
   </a>
   <SectionHeader title="Grooming" subtitle={`Baños, cortes y cuidado de ${pet.name}`} />
+
+  {Astro.url.searchParams.get('error') === 'service_required' && (
+    <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      Selecciona al menos un servicio de grooming.
+    </div>
+  )}
 
   {/* ── ANALYTICS ── */}
   {groomings && groomings.length > 0 ? (
@@ -109,19 +126,19 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
       <Card>
         <form method="POST" class="space-y-4">
           <input type="hidden" name="_action" value="add" />
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-ink mb-1.5">Tipo <span class="text-red-500">*</span></label>
-              <select name="type" required class="field-input">
-                <option value="bano">Baño</option>
-                <option value="corte">Corte de pelo</option>
-                <option value="unas">Corte de uñas</option>
-                <option value="oidos">Limpieza de oídos</option>
-                <option value="dientes">Limpieza dental</option>
-                <option value="completo">Grooming completo</option>
-                <option value="otro">Otro</option>
-              </select>
+          <fieldset>
+            <legend class="block text-sm font-medium text-ink mb-1.5">Servicios incluidos <span class="text-red-500">*</span></legend>
+            <p class="text-xs text-muted mb-2">Puedes seleccionar varios dentro de la misma sesión.</p>
+            <div class="flex flex-wrap gap-2">
+              {Object.entries(GROOMING_TYPES).map(([value, label], index) => (
+                <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-card-border bg-card px-3 py-2 text-xs font-medium text-ink has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:checked]:text-accent-dark">
+                  <input type="checkbox" name="services" value={value} checked={index === 0} class="accent-orange-500" />
+                  {label}
+                </label>
+              ))}
             </div>
+          </fieldset>
+          <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-ink mb-1.5">Fecha <span class="text-red-500">*</span></label>
               <input type="date" name="date" required value={new Date().toISOString().split('T')[0]} class="field-input" />
@@ -182,7 +199,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-0.5">
-                    <p class="font-semibold text-ink">{GROOMING_TYPES[g.type] || g.type}</p>
+                    <p class="font-semibold text-ink">{formatGroomingServices(g.services, g.type)}</p>
                     {g.cost && <span class="shrink-0 rounded-full bg-pink-50 px-2 py-0.5 text-xs font-medium text-pink-600">${g.cost}</span>}
                   </div>
                   <p class="text-xs text-gray-400">{formatDate(g.date)}{g.groomer_name && ` · ${g.groomer_name}`}{g.location && ` · ${g.location}`}</p>
@@ -211,12 +228,24 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
               <p class="text-xs font-semibold text-accent uppercase tracking-wider">Editando</p>
               <button type="button" class="cancel-edit text-xs text-gray-400 hover:text-gray-600" data-id={g.id}>Cancelar</button>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <select name="type" required class="field-input-sm">
-                {Object.entries(GROOMING_TYPES).map(([val, label]) => (
-                  <option value={val} selected={g.type === val}>{label}</option>
+            <fieldset>
+              <legend class="text-xs font-medium text-muted mb-2">Servicios incluidos</legend>
+              <div class="flex flex-wrap gap-2">
+                {Object.entries(GROOMING_TYPES).map(([value, label]) => (
+                  <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-card-border px-2.5 py-1.5 text-xs text-ink has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:checked]:text-accent-dark">
+                    <input
+                      type="checkbox"
+                      name="services"
+                      value={value}
+                      checked={normalizeGroomingServices(g.services, g.type).includes(value)}
+                      class="accent-orange-500"
+                    />
+                    {label}
+                  </label>
                 ))}
-              </select>
+              </div>
+            </fieldset>
+            <div class="grid grid-cols-2 gap-3">
               <input type="date" name="date" value={g.date} required class="field-input-sm" />
             </div>
             <div class="grid grid-cols-2 gap-3">

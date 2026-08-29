@@ -24,7 +24,7 @@ export interface PetData {
   weightRecords: Pick<WeightRecord, 'weight_kg' | 'date'>[];
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
   vetVisits: { date: string; reason: string; location: string | null }[];
-  groomings: { type: string; date: string; location: string | null; groomer_name: string | null }[];
+  groomings: { type: string; services: string[] | null; date: string; location: string | null; groomer_name: string | null }[];
   /** Blood test records sorted by date desc. Used for the vitality score bonus + reminder. */
   bloodTests: { date: string }[];
   /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
@@ -110,7 +110,7 @@ export function usePet(): PetData {
         supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
         supabase.from('vet_visits').select('date, reason, location').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('groomings').select('type, date, location, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
+        supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
         supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
       ]);

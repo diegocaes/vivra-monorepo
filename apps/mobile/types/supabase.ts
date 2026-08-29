@@ -51,6 +51,7 @@ export interface Grooming {
   pet_id: string;
   date: string;
   type: string;
+  services: string[] | null;
   groomer_name: string | null;
   location: string | null;
   cost: number | null;

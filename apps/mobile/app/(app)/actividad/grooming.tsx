@@ -1,19 +1,23 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, friendlyError } from '@vivra/shared';
-import { GROOMING_TYPES } from '@vivra/shared';
+import {
+  formatDate,
+  formatGroomingServices,
+  friendlyError,
+  GROOMING_TYPES,
+  normalizeGroomingServices,
+} from '@vivra/shared';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
-import { SelectField } from '../../../components/ui/SelectField';
 import type { Grooming } from '../../../types/supabase';
 import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
@@ -24,6 +28,7 @@ const GROOMING_OPTIONS = Object.entries(GROOMING_TYPES).map(([key, label]) => ({
 
 export default function GroomingScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { pet } = usePetContext();
   const { isPremium } = useSubscription();
   const [groomings, setGroomings] = useState<Grooming[]>([]);
@@ -34,7 +39,7 @@ export default function GroomingScreen() {
   const [editingGrooming, setEditingGrooming] = useState<Grooming | null>(null);
 
   // Form
-  const [type, setType] = useState('');
+  const [services, setServices] = useState<string[]>([]);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [groomerName, setGroomerName] = useState('');
   const [location, setLocation] = useState('');
@@ -59,14 +64,14 @@ export default function GroomingScreen() {
   }, [fetchData]);
 
   const resetForm = () => {
-    setType(''); setDate(new Date().toISOString().slice(0, 10));
+    setServices([]); setDate(new Date().toISOString().slice(0, 10));
     setGroomerName(''); setLocation(''); setCost(''); setNotes('');
     setEditingGrooming(null);
   };
 
   const openEdit = (g: Grooming) => {
     setEditingGrooming(g);
-    setType(g.type);
+    setServices(normalizeGroomingServices(g.services, g.type));
     setDate(g.date);
     setGroomerName(g.groomer_name ?? '');
     setLocation(g.location ?? '');
@@ -77,12 +82,13 @@ export default function GroomingScreen() {
 
   const handleSave = async () => {
     if (!pet) return;
-    if (!type) { Alert.alert('Error', 'Selecciona el tipo'); return; }
+    if (services.length === 0) { Alert.alert('Error', 'Selecciona al menos un servicio'); return; }
     if (!date) { Alert.alert('Error', 'Ingresa la fecha'); return; }
 
     setSaving(true);
     const payload = {
-      type,
+      type: services[0],
+      services,
       date,
       groomer_name: groomerName || null,
       location: location || null,
@@ -126,10 +132,23 @@ export default function GroomingScreen() {
     ? Math.floor((Date.now() - new Date(lastGrooming.date).getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
+  // `actividad` is a hidden tab that used to remember its last child (often
+  // Vuelos). A generic router.back() could therefore open that stale screen.
+  // Return explicitly to the visible section that opened Grooming.
+  const handleBack = () => {
+    router.replace(from === 'inicio' ? '/(app)' : '/(app)/salud');
+  };
+
+  const toggleService = (key: string) => {
+    setServices(current => current.includes(key)
+      ? current.filter(service => service !== key)
+      : [...current, key]);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Grooming</Text>
@@ -169,7 +188,7 @@ export default function GroomingScreen() {
               <Card>
                 <View style={styles.itemRow}>
                   <View style={styles.itemInfo}>
-                    <Text style={styles.itemType}>{GROOMING_TYPES[g.type] ?? g.type}</Text>
+                    <Text style={styles.itemType}>{formatGroomingServices(g.services, g.type)}</Text>
                     <Text style={styles.itemDate}>{formatDate(g.date)}</Text>
                     {g.groomer_name && <Text style={styles.itemDetail}>{g.groomer_name}</Text>}
                     {g.location && <Text style={styles.itemDetail}>{g.location}</Text>}
@@ -198,7 +217,28 @@ export default function GroomingScreen() {
       </ScrollView>
 
       <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingGrooming ? 'Editar grooming' : 'Agregar grooming'}>
-        <SelectField label="Tipo" value={type} options={GROOMING_OPTIONS} onSelect={setType} />
+        <View style={styles.servicesField}>
+          <Text style={styles.servicesLabel}>Servicios incluidos</Text>
+          <Text style={styles.servicesHint}>Selecciona uno o varios</Text>
+          <View style={styles.servicesWrap}>
+            {GROOMING_OPTIONS.map(option => {
+              const selected = services.includes(option.key);
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.serviceChip, selected && styles.serviceChipSelected]}
+                  onPress={() => toggleService(option.key)}
+                  activeOpacity={0.75}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                >
+                  {selected && <Ionicons name="checkmark" size={15} color={Colors.white} />}
+                  <Text style={[styles.serviceChipText, selected && styles.serviceChipTextSelected]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
         <DatePickerField label="Fecha" value={date} onChange={setDate} maxDate={new Date()} />
         <FormField label="Peluquero (opcional)" value={groomerName} onChangeText={setGroomerName} placeholder="Nombre" />
         <FormField label="Ubicación (opcional)" value={location} onChangeText={setLocation} placeholder="Pet Spa, clínica..." />
@@ -234,6 +274,19 @@ const styles = StyleSheet.create({
   itemDate: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   itemDetail: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
   itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 4 },
+  servicesField: { gap: Spacing.xs },
+  servicesLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  servicesHint: { fontSize: FontSize.xs, color: Colors.muted },
+  servicesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, marginTop: 2 },
+  serviceChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: Spacing.sm, paddingVertical: 8,
+    borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.cardBorder,
+    backgroundColor: Colors.card,
+  },
+  serviceChipSelected: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  serviceChipText: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, color: Colors.ink },
+  serviceChipTextSelected: { color: Colors.white },
   costBadge: {
     backgroundColor: Colors.accentLight, paddingHorizontal: Spacing.sm,
     paddingVertical: 2, borderRadius: Radius.full,

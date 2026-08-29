@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
@@ -27,6 +27,7 @@ interface FlightRow {
  */
 export default function PasaporteScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { pet, vaccines, weightRecords } = usePetContext();
   const [flights, setFlights] = useState<FlightRow[]>([]);
 
@@ -45,10 +46,16 @@ export default function PasaporteScreen() {
     Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`).catch(() => {});
   }, [pet?.id]);
 
+  // Never fall back to the hidden `actividad` tab history: it may still point
+  // at the disabled Vuelos screen from an older session.
+  const handleBack = () => {
+    router.replace(from === 'perfil' ? '/(app)/perfil' : '/(app)/salud');
+  };
+
   if (!pet) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header onBack={() => router.back()} />
+        <Header onBack={handleBack} />
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>No hay una mascota seleccionada.</Text>
         </View>
@@ -63,7 +70,7 @@ export default function PasaporteScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <Header onBack={() => router.back()} onExport={exportPdf} />
+      <Header onBack={handleBack} onExport={exportPdf} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.passport}>
