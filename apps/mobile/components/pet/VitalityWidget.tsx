@@ -65,7 +65,7 @@ function PillarRow({
         onPress={onToggle}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`${pillar.name}: ${pillar.isEstimated ? 'sin datos' : Math.round(pillar.pct) + ' por ciento'}. Toca para ${expanded ? 'cerrar' : 'ver'} detalles`}
+        accessibilityLabel={`${pillar.name}: ${pillar.isEstimated ? 'sin datos' : `${Math.round(pillar.pct)} por ciento`}. Toca para ${expanded ? 'cerrar' : 'ver'} detalles`}
       >
         <Ionicons name={PILLAR_ICONS[pillar.name] ?? 'ellipse-outline'} size={16} color={color} />
         <View style={styles.pillarInfo}>
@@ -91,8 +91,8 @@ function PillarRow({
       {expanded && (
         <View style={[styles.pillarDetail, needsAttention && { borderLeftColor: color }]}>
           <Text style={styles.pillarStatus}>{pillar.status}</Text>
-          {pillar.tips.map((tip, i) => (
-            <View key={i} style={styles.tipRow}>
+          {pillar.tips.map(tip => (
+            <View key={`${pillar.id}-${tip}`} style={styles.tipRow}>
               <Ionicons name="bulb-outline" size={13} color={Colors.warn} style={{ marginTop: 1 }} />
               <Text style={styles.tipText}>{tip}</Text>
             </View>
@@ -129,8 +129,8 @@ export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidget
   );
 
   if (compact) {
-    // Surface the weakest pillar in the dashboard card so a bad sub-score is
-    // visible without opening the detail.
+    // Surface the weakest pillar in the dashboard card without turning
+    // incomplete information into an alarming health message.
     const attention = weakest && weakest.pct < 40 ? weakest : null;
     return (
       <Card>
@@ -146,8 +146,8 @@ export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidget
             <Text style={styles.headline}>{vitality.headline}</Text>
             {attention ? (
               <View style={styles.attentionChip}>
-                <Ionicons name="alert-circle" size={12} color={Colors.bad} />
-                <Text style={styles.attentionText}>{attention.name} necesita atención</Text>
+                <Ionicons name="information-circle-outline" size={13} color={Colors.accent} />
+                <Text style={styles.attentionText}>{attention.name}: información por completar</Text>
               </View>
             ) : vitality.subline ? (
               <Text style={styles.compactSubline}>{vitality.subline}</Text>
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 4,
     alignSelf: 'flex-start',
-    backgroundColor: Colors.bad + '12',
+    backgroundColor: Colors.accentLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: Radius.full,
@@ -322,6 +322,6 @@ const styles = StyleSheet.create({
   attentionText: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.semibold,
-    color: Colors.bad,
+    color: Colors.accentDark,
   },
 });

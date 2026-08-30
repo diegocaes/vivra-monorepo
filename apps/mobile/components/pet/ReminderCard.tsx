@@ -51,9 +51,9 @@ export function ReminderCard({ type, lastDate, nextDue, productName, onPress }: 
   const overdue = daysLeft < 0;
   const urgent = daysLeft <= 7 && daysLeft >= 0;
 
-  const statusColor = overdue ? Colors.bad : urgent ? Colors.warn : Colors.good;
+  const statusColor = overdue ? '#C2410C' : urgent ? Colors.warn : Colors.good;
   const statusText = overdue
-    ? `Vencido ${Math.abs(daysLeft)}d`
+    ? 'Revisar'
     : daysLeft === 0 ? 'Hoy'
     : `En ${daysLeft}d`;
 
@@ -66,7 +66,7 @@ export function ReminderCard({ type, lastDate, nextDue, productName, onPress }: 
       subtitle={productName ?? null}
       lastDate={lastDate}
       onPress={onPress}
-      variant={overdue ? 'overdue' : urgent ? 'urgent' : 'normal'}
+      variant={urgent ? 'urgent' : 'normal'}
     />
   );
 }

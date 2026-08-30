@@ -18,7 +18,7 @@ import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { Card } from '../../components/ui/Card';
-import { buildVaccineOverview, formatDate, formatGroomingServices } from '@vivra/shared';
+import { buildVaccineOverview, daysUntilDate, formatDate, formatGroomingServices } from '@vivra/shared';
 
 /**
  * Compact "time ago" formatter used for the care-card badges.
@@ -42,6 +42,7 @@ type VaccineSummary = {
   title: string;
   detail: string;
   dismissId: string | null;
+  legacyDismissId: string | null;
 };
 
 function buildVaccineSummary(vaccines: { id: string; name: string; date_given: string; next_due: string | null }[]): VaccineSummary {
@@ -53,24 +54,27 @@ function buildVaccineSummary(vaccines: { id: string; name: string; date_given: s
       title: 'Registra su primera vacuna',
       detail: 'Guarda la dosis tal como aparece en el carné',
       dismissId: null,
+      legacyDismissId: null,
     };
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dated = overview.schedule.map(vaccine => ({
-    vaccine,
-    due: new Date(`${vaccine.next_due!}T00:00:00`),
-  }));
-  const next = dated[0];
+  const next = overview.schedule[0];
   if (next) {
-    const state = next.due < today ? 'overdue' : 'scheduled';
+    const days = daysUntilDate(next.next_due!);
+    const state = days < 0 ? 'overdue' : 'scheduled';
     return {
       state,
-      title: state === 'overdue' ? `${next.vaccine.name} pendiente` : `Próxima: ${next.vaccine.name}`,
-      detail: state === 'overdue' ? 'Confirma el refuerzo con tu veterinario' : formatDate(next.vaccine.next_due!),
+      title: state === 'overdue' ? `${next.name}: fecha por confirmar` : `Próxima vacuna: ${next.name}`,
+      detail: state === 'overdue'
+        ? 'Consulta con tu veterinario si corresponde un refuerzo'
+        : days === 0 ? 'La fecha registrada es hoy' : `Fecha registrada: ${formatDate(next.next_due!)}`,
       // If the vaccine or its due date changes, the new reminder appears again.
-      dismissId: `${next.vaccine.id}:${next.vaccine.next_due}`,
+      // A reminder dismissed while merely upcoming must reappear if that
+      // same date later becomes overdue.
+      dismissId: `${next.id}:${next.next_due}:${state}`,
+      // Preserve existing scheduled dismissals created before the state was
+      // added to the key. Never reuse that legacy key for an overdue dose.
+      legacyDismissId: state === 'scheduled' ? `${next.id}:${next.next_due}` : null,
     };
   }
 
@@ -79,6 +83,7 @@ function buildVaccineSummary(vaccines: { id: string; name: string; date_given: s
     title: `${latest.length} vacuna${latest.length === 1 ? '' : 's'} registrada${latest.length === 1 ? '' : 's'}`,
     detail: 'Aún no hay una próxima fecha registrada',
     dismissId: null,
+    legacyDismissId: null,
   };
 }
 
@@ -98,6 +103,9 @@ export default function DashboardScreen() {
   const vaccineDismissStorageKey = user && petData.pet && vaccineSummary.dismissId
     ? `@vivra/home-vaccine-dismissed/${user.id}/${petData.pet.id}/${vaccineSummary.dismissId}`
     : null;
+  const legacyVaccineDismissStorageKey = user && petData.pet && vaccineSummary.legacyDismissId
+    ? `@vivra/home-vaccine-dismissed/${user.id}/${petData.pet.id}/${vaccineSummary.legacyDismissId}`
+    : null;
 
   useEffect(() => {
     let active = true;
@@ -106,10 +114,13 @@ export default function DashboardScreen() {
       setDismissedVaccineKey(null);
       return () => { active = false; };
     }
-    AsyncStorage.getItem(vaccineDismissStorageKey)
-      .then(value => {
+    Promise.all([
+      AsyncStorage.getItem(vaccineDismissStorageKey),
+      legacyVaccineDismissStorageKey ? AsyncStorage.getItem(legacyVaccineDismissStorageKey) : Promise.resolve(null),
+    ])
+      .then(([value, legacyValue]) => {
         if (!active) return;
-        setDismissedVaccineKey(value === '1' ? vaccineDismissStorageKey : null);
+        setDismissedVaccineKey(value === '1' || legacyValue === '1' ? vaccineDismissStorageKey : null);
         setCheckedVaccineKey(vaccineDismissStorageKey);
       })
       .catch(() => {
@@ -118,7 +129,7 @@ export default function DashboardScreen() {
         setCheckedVaccineKey(vaccineDismissStorageKey);
       });
     return () => { active = false; };
-  }, [vaccineDismissStorageKey]);
+  }, [vaccineDismissStorageKey, legacyVaccineDismissStorageKey]);
 
   const dismissVaccineReminder = useCallback(async () => {
     if (!vaccineDismissStorageKey) return;
@@ -131,7 +142,12 @@ export default function DashboardScreen() {
   // `refreshing` va en las deps aunque no se lea en el cuerpo: se usa como
   // disparador para que el pull-to-refresh vuelva a traer estos contadores.
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setUnreadCount(0);
+      setTrialDaysLeft(null);
+      setIsTrial(false);
+      return;
+    }
     supabase
       .from('notifications')
       .select('id', { count: 'exact', head: true })
@@ -152,6 +168,9 @@ export default function DashboardScreen() {
           const days = Math.max(0, Math.ceil((new Date(data.premium_until).getTime() - Date.now()) / 86400000));
           setTrialDaysLeft(days);
           setIsTrial(true);
+        } else {
+          setTrialDaysLeft(null);
+          setIsTrial(false);
         }
       })
       .then(undefined, () => {});
@@ -204,7 +223,9 @@ export default function DashboardScreen() {
   // Whether the user has logged any food at all (drives empty-state CTA below)
   const hasFood = petData.foods.length > 0;
   const hasPreventiveHistory = Boolean(petData.lastAntipulgas?.date_given || petData.lastDesparasitante?.date_given);
-  const isProfileStarting = !hasFood
+  const isProfileStarting = petData.vaccines.length === 0
+    && petData.weightRecords.length === 0
+    && !hasFood
     && !hasPreventiveHistory
     && petData.groomings.length === 0
     && petData.vetVisits.length === 0;
@@ -213,8 +234,7 @@ export default function DashboardScreen() {
   const preventiveStatus = (() => {
     const compute = (nextDue: string | null | undefined) => {
       if (!nextDue) return { status: 'unknown' as const, days: 0 };
-      const next = new Date(`${nextDue}T00:00:00`);
-      const days = Math.ceil((next.getTime() - Date.now()) / 86400000);
+      const days = daysUntilDate(nextDue);
       if (days < 0) return { status: 'overdue' as const, days: Math.abs(days) };
       return { status: 'ok' as const, days };
     };
@@ -225,8 +245,8 @@ export default function DashboardScreen() {
     if (des.status === 'overdue') overdueTypes.push({ label: 'desparasitante', days: des.days });
     return { overdueTypes };
   })();
-  // Missing data is not a medical warning. Only show a red banner when a
-  // previously registered treatment is actually overdue.
+  // Missing data is not a medical warning. Only show a calm reminder when a
+  // previously registered treatment has a date in the past.
   const showPreventiveBanner = preventiveStatus.overdueTypes.length > 0;
 
   return (
@@ -234,7 +254,12 @@ export default function DashboardScreen() {
       {/* Header with notification bell */}
       <View style={styles.dashHeader}>
         <Text style={styles.dashTitle}>Vivra</Text>
-        <TouchableOpacity onPress={() => router.push('/notificaciones' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={() => router.push('/notificaciones' as any)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
+        >
           <Ionicons name="notifications-outline" size={24} color={Colors.ink} />
           {unreadCount > 0 && (
             <View style={styles.bellBadge}>
@@ -270,31 +295,33 @@ export default function DashboardScreen() {
             <View style={styles.setupCopy}>
               <Text style={styles.setupTitle}>¡{petData.pet.name} ya está en Vivra!</Text>
               <Text style={styles.setupText}>
-                Agrega su alimentación, peso y preventivos poco a poco, cuando tengas la información.
+                Agrega su información poco a poco. Puedes empezar por vacunas, peso o alimentación.
               </Text>
             </View>
           </Card>
         )}
 
-        {/* Preventivo critical banner — only after a registered treatment expires */}
+        {/* Preventivo reminder — only after a registered treatment date passes. */}
         {showPreventiveBanner && (
           <TouchableOpacity
             style={styles.preventiveBanner}
             onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             activeOpacity={0.8}
           >
-            <Ionicons name="alert-circle" size={22} color={Colors.bad} />
+            <Ionicons name="information-circle-outline" size={22} color="#C2410C" />
             <View style={{ flex: 1 }}>
               <Text style={styles.preventiveBannerTitle}>
                 {preventiveStatus.overdueTypes.length === 2
-                    ? 'Preventivos vencidos'
-                    : `${preventiveStatus.overdueTypes[0].label} vencido ${preventiveStatus.overdueTypes[0].days}d`}
+                  ? 'Revisa las próximas fechas de preventivos'
+                  : `Revisa la próxima fecha de ${preventiveStatus.overdueTypes[0].label}`}
               </Text>
               <Text style={styles.preventiveBannerDesc}>
-                Aplica y registra la nueva dosis
+                {preventiveStatus.overdueTypes.length === 2
+                  ? 'Las fechas registradas ya pasaron. Confírmalas con tu veterinario.'
+                  : 'La fecha registrada ya pasó. Confírmala con tu veterinario.'}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.bad} />
+            <Ionicons name="chevron-forward" size={18} color="#C2410C" />
           </TouchableOpacity>
         )}
 
@@ -312,9 +339,9 @@ export default function DashboardScreen() {
                 <Ionicons name="heart-outline" size={24} color={Colors.accent} />
               </View>
               <View style={styles.setupCopy}>
-                <Text style={styles.vitalitySetupTitle}>Vitality Score en preparación</Text>
+                <Text style={styles.vitalitySetupTitle}>Tu resumen se irá completando</Text>
                 <Text style={styles.vitalitySetupText}>
-                  Lo activaremos cuando conozcamos un poco más a {petData.pet.name}.
+                  Vivra organizará la información a medida que registres datos de {petData.pet.name}.
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
@@ -337,11 +364,16 @@ export default function DashboardScreen() {
           <View style={[
             styles.vaccineCtaIcon,
             vaccineSummary.state === 'overdue' && styles.vaccineCtaIconOverdue,
+            vaccineSummary.state === 'scheduled' && styles.vaccineCtaIconScheduled,
           ]}>
-            <Ionicons name="medkit-outline" size={21} color={vaccineSummary.state === 'overdue' ? Colors.bad : Colors.good} />
+            <Ionicons
+              name="medkit-outline"
+              size={21}
+              color={vaccineSummary.state === 'overdue' ? '#C2410C' : vaccineSummary.state === 'scheduled' ? '#2563EB' : Colors.good}
+            />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.vaccineCtaTitle, vaccineSummary.state === 'overdue' && styles.vaccineCtaTitleOverdue]}>{vaccineSummary.title}</Text>
+            <Text style={styles.vaccineCtaTitle}>{vaccineSummary.title}</Text>
             <Text style={styles.vaccineCtaText}>{vaccineSummary.detail}</Text>
           </View>
           {vaccineDismissStorageKey && (
@@ -357,7 +389,7 @@ export default function DashboardScreen() {
               <Ionicons name="close" size={19} color={Colors.muted} />
             </TouchableOpacity>
           )}
-          <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? Colors.bad : Colors.good} />
+          <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? '#C2410C' : vaccineSummary.state === 'scheduled' ? '#2563EB' : Colors.good} />
         </TouchableOpacity>}
 
         {/* Food summary — averages and trazabilidad, no countdown */}
@@ -372,16 +404,12 @@ export default function DashboardScreen() {
             activeOpacity={0.8}
           >
             <Ionicons name="restaurant-outline" size={20} color={Colors.accent} />
-            <Text style={styles.foodCtaText}>¿Qué come {petData.pet.name}? Registra su alimento</Text>
+            <Text style={styles.foodCtaText}>Agrega la alimentación de {petData.pet.name}</Text>
             <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
           </TouchableOpacity>
         )}
 
-        {/* Care grid — 2×2 quick access. Each card pulsable, navigates to
-            its own detail screen. Reuses one CareCard component parametrized
-            by icon/badge/subtitle/etc. The preventives still use ReminderCard
-            which owns the 30-day cycle logic but renders via CareCard for
-            visual consistency. */}
+        {/* Care grid — 2×2 quick access. */}
         <View style={styles.careGrid}>
           <View style={styles.careCol}>
             <ReminderCard
@@ -526,8 +554,8 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0',
     padding: Spacing.md,
   },
-  vaccineCtaScheduled: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
-  vaccineCtaOverdue: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+  vaccineCtaScheduled: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
+  vaccineCtaOverdue: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
   vaccineCtaIcon: {
     width: 38,
     height: 38,
@@ -536,9 +564,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#D1FAE5',
   },
-  vaccineCtaIconOverdue: { backgroundColor: '#FEE2E2' },
+  vaccineCtaIconScheduled: { backgroundColor: '#DBEAFE' },
+  vaccineCtaIconOverdue: { backgroundColor: '#FFEDD5' },
   vaccineCtaTitle: { color: Colors.ink, fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
-  vaccineCtaTitleOverdue: { color: Colors.bad },
   vaccineCtaText: { color: Colors.muted, fontSize: FontSize.xs, marginTop: 2 },
   dashHeader: {
     flexDirection: 'row',
@@ -714,14 +742,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FFF7ED',
     borderRadius: Radius.lg,
     padding: Spacing.md,
-    borderWidth: 2,
-    borderColor: Colors.bad,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
   },
-  preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.bad },
-  preventiveBannerDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  preventiveBannerDesc: { fontSize: FontSize.xs, lineHeight: 17, color: Colors.muted, marginTop: 2 },
   errorCard: {
     backgroundColor: `${Colors.bad}12`,
     borderColor: Colors.bad,
