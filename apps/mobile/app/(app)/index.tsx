@@ -18,7 +18,7 @@ import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { Card } from '../../components/ui/Card';
-import { formatDate, formatGroomingServices } from '@vivra/shared';
+import { buildVaccineOverview, formatDate, formatGroomingServices } from '@vivra/shared';
 
 /**
  * Compact "time ago" formatter used for the care-card badges.
@@ -44,12 +44,9 @@ type VaccineSummary = {
   dismissId: string | null;
 };
 
-function buildVaccineSummary(vaccines: { id: string; name: string; next_due: string | null }[]): VaccineSummary {
-  const latestByName = new Map<string, (typeof vaccines)[number]>();
-  for (const vaccine of vaccines) {
-    if (!latestByName.has(vaccine.name)) latestByName.set(vaccine.name, vaccine);
-  }
-  const latest = [...latestByName.values()];
+function buildVaccineSummary(vaccines: { id: string; name: string; date_given: string; next_due: string | null }[]): VaccineSummary {
+  const overview = buildVaccineOverview(vaccines);
+  const latest = overview.latestByName;
   if (latest.length === 0) {
     return {
       state: 'empty',
@@ -61,17 +58,17 @@ function buildVaccineSummary(vaccines: { id: string; name: string; next_due: str
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dated = latest
-    .filter((vaccine): vaccine is typeof vaccine & { next_due: string } => Boolean(vaccine.next_due))
-    .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
-    .sort((a, b) => a.due.getTime() - b.due.getTime());
+  const dated = overview.schedule.map(vaccine => ({
+    vaccine,
+    due: new Date(`${vaccine.next_due!}T00:00:00`),
+  }));
   const next = dated[0];
   if (next) {
     const state = next.due < today ? 'overdue' : 'scheduled';
     return {
       state,
       title: state === 'overdue' ? `${next.vaccine.name} pendiente` : `Próxima: ${next.vaccine.name}`,
-      detail: state === 'overdue' ? 'Confirma el refuerzo con tu veterinario' : formatDate(next.vaccine.next_due),
+      detail: state === 'overdue' ? 'Confirma el refuerzo con tu veterinario' : formatDate(next.vaccine.next_due!),
       // If the vaccine or its due date changes, the new reminder appears again.
       dismissId: `${next.vaccine.id}:${next.vaccine.next_due}`,
     };

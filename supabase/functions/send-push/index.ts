@@ -29,6 +29,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
+function normalizedVaccineName(name: string): string {
+  return name.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 // Cooldown (days) per notification type — how long before we repeat the same
 // nudge for the same pet/user.
 const COOLDOWNS: Record<string, number> = {
@@ -144,10 +148,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const lastVaccineByPetName = new Map<string, { next_due: string | null }>(); // `${pet}|${vaccine}`
+    const lastVaccineByPetName = new Map<string, { name: string; next_due: string | null }>(); // `${pet}|${normalized vaccine}`
     for (const v of vaccinesRes.data ?? []) {
-      const key = `${v.pet_id}|${v.name}`;
-      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, { next_due: v.next_due });
+      const key = `${v.pet_id}|${normalizedVaccineName(v.name)}`;
+      if (!lastVaccineByPetName.has(key)) lastVaccineByPetName.set(key, { name: v.name, next_due: v.next_due });
     }
 
     const lastWeightByPet = new Map<string, string>();
@@ -206,13 +210,13 @@ Deno.serve(async (req) => {
       let worstVaccine: { name: string; body: string; score: number } | null = null;
       for (const [key, v] of lastVaccineByPetName) {
         if (!key.startsWith(`${pet.id}|`)) continue;
-        const name = key.split('|')[1];
+        const name = v.name;
         if (v.next_due) {
           const daysToDue = -daysSince(v.next_due); // positivo = faltan días
           if (daysToDue <= 7) {
             const body = daysToDue > 0
-              ? `La vacuna de ${name} de ${pet.name} vence en ${daysToDue} día${daysToDue !== 1 ? 's' : ''}. Agenda el refuerzo con tu vet.`
-              : `La vacuna de ${name} de ${pet.name} está vencida. Agenda el refuerzo con tu vet.`;
+              ? `${name} de ${pet.name} tiene una próxima fecha en ${daysToDue} día${daysToDue !== 1 ? 's' : ''}. Confírmala con tu vet.`
+              : `La próxima fecha registrada para ${name} de ${pet.name} ya pasó. Confirma el refuerzo con tu vet.`;
             const score = 1000 - daysToDue; // más vencida = más prioridad
             if (!worstVaccine || score > worstVaccine.score) worstVaccine = { name, body, score };
           }

@@ -1,7 +1,7 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
-import { isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, preventiveNextDue } from '@vivra/shared';
+import { buildVaccineOverview, isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, preventiveNextDue } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -66,7 +66,7 @@ const [
   { data: allPreventives },
 ] = await Promise.all([
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-  supabase.from('vaccines').select('name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('vaccines').select('id, name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, price, type, food_type, start_date, end_date, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
@@ -96,15 +96,11 @@ const visitCount = allVetVisits?.length ?? 0;
 
 // The dashboard uses the latest record of each vaccine name. Only a saved
 // next_due date can make a dose pending — never an inferred annual schedule.
-const latestVaccineByName = new Map<string, { name: string; date_given: string; next_due: string | null }>();
-for (const vaccine of allVaccines ?? []) {
-  if (!latestVaccineByName.has(vaccine.name)) latestVaccineByName.set(vaccine.name, vaccine);
-}
-const latestVaccines = [...latestVaccineByName.values()];
+const vaccineOverview = buildVaccineOverview(allVaccines ?? []);
+const latestVaccines = vaccineOverview.latestByName;
 const todayForVaccines = new Date();
 todayForVaccines.setHours(0, 0, 0, 0);
-const datedVaccines = latestVaccines
-  .filter(vaccine => vaccine.next_due)
+const datedVaccines = vaccineOverview.schedule
   .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
   .sort((a, b) => a.due.getTime() - b.due.getTime());
 const nextVaccine = datedVaccines[0] ?? null;
@@ -305,13 +301,11 @@ try {
   if (puedeAvisar('vaccine_due')) {
     const { data: allVaccinesByDate } = await supabase
       .from('vaccines')
-      .select('name, date_given, next_due')
+      .select('id, name, date_given, next_due')
       .eq('pet_id', pet.id)
       .order('date_given', { ascending: false });
-    const vistas = new Set<string>();
-    for (const v of allVaccinesByDate ?? []) {
-      if (!v.date_given || vistas.has(v.name)) continue;
-      vistas.add(v.name); // solo la dosis más reciente de cada vacuna
+    const vacunasVigentes = buildVaccineOverview(allVaccinesByDate ?? []).latestByName;
+    for (const v of vacunasVigentes) {
       if (!v.next_due) continue;
       const dias = Math.ceil((new Date(`${v.next_due}T00:00:00`).getTime() - Date.now()) / 86400000);
       if (dias <= 7) {
@@ -319,7 +313,7 @@ try {
           type: 'vaccine_due',
           title: `${pet.name}: vacuna pendiente`,
           message: dias < 0
-            ? `La vacuna de ${v.name} de ${pet.name} está vencida. Confirma el refuerzo con tu vet.`
+            ? `La próxima fecha registrada para ${v.name} de ${pet.name} ya pasó. Confirma el refuerzo con tu vet.`
             : dias === 0
               ? `Hoy corresponde la vacuna de ${v.name} de ${pet.name}.`
               : `La vacuna de ${v.name} de ${pet.name} tiene próxima fecha en ${dias} días.`,

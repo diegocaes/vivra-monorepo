@@ -3,10 +3,15 @@ import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
 import Icon from '../../components/ui/Icon.astro';
 import SectionHeader from '../../components/ui/SectionHeader.astro';
-import MetricGrid from '../../components/ui/MetricGrid.astro';
-
-import EmptyState from '../../components/ui/EmptyState.astro';
-import { formatDate, vaccineOptionsForSpecies } from '@vivra/shared';
+import {
+  buildVaccineOverview,
+  daysUntilDate,
+  formatDate,
+  vaccineBrandOptions,
+  vaccineOptionsForSpecies,
+  vaccineScheduleStatus,
+  type VaccineScheduleStatus,
+} from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { subirImagen, borrarImagenPorUrl } from '../../lib/storage';
 
@@ -15,515 +20,454 @@ const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
 
 const vaccineOptions = vaccineOptionsForSpecies((pet as any).species);
+const brandOptions = vaccineBrandOptions();
+const today = new Date().toISOString().slice(0, 10);
+
+function redirectError(message: string) {
+  return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent(message));
+}
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
-  const action = formData.get('_action') as string;
-  if (action === 'add') {
-    await supabase.from('vaccines').insert({
-      pet_id: pet.id,
-      name: formData.get('name') as string,
-      date_given: formData.get('date_given') as string,
-      next_due: (formData.get('next_due') as string) || null,
-      vet_name: (formData.get('vet_name') as string) || null,
-      brand: (formData.get('brand') as string)?.trim() || null,
-      lot_number: (formData.get('lot_number') as string)?.trim() || null,
-      notes: (formData.get('notes') as string) || null,
-    });
+  const action = String(formData.get('_action') || '');
+
+  if (action === 'add' || action === 'edit') {
+    const name = String(formData.get('name') || '').trim();
+    const dateGiven = String(formData.get('date_given') || '');
+    const nextDue = String(formData.get('next_due') || '');
+    if (!name || !dateGiven) return redirectError('Selecciona una vacuna e ingresa la fecha de aplicación.');
+    if (nextDue && nextDue < dateGiven) return redirectError('La próxima dosis no puede ser anterior a la fecha de aplicación.');
+
+    const payload = {
+      name,
+      date_given: dateGiven,
+      next_due: nextDue || null,
+      vet_name: String(formData.get('vet_name') || '').trim() || null,
+      brand: String(formData.get('brand') || '').trim() || null,
+      lot_number: String(formData.get('lot_number') || '').trim() || null,
+      notes: String(formData.get('notes') || '').trim() || null,
+    };
+
+    const result = action === 'edit'
+      ? await supabase.from('vaccines').update(payload)
+        .eq('id', String(formData.get('vaccine_id') || '')).eq('pet_id', pet.id)
+      : await supabase.from('vaccines').insert({ ...payload, pet_id: pet.id });
+    if (result.error) return redirectError('No se pudo guardar la vacuna. Inténtalo de nuevo.');
+    return Astro.redirect('/salud/vacunas?saved=1');
   }
-  if (action === 'edit') {
-    const vaccineId = formData.get('vaccine_id') as string;
-    await supabase.from('vaccines').update({
-      name: formData.get('name') as string,
-      date_given: formData.get('date_given') as string,
-      next_due: (formData.get('next_due') as string) || null,
-      vet_name: (formData.get('vet_name') as string) || null,
-      brand: (formData.get('brand') as string)?.trim() || null,
-      lot_number: (formData.get('lot_number') as string)?.trim() || null,
-      notes: (formData.get('notes') as string) || null,
-    }).eq('id', vaccineId).eq('pet_id', pet.id);
-  }
+
   if (action === 'upload_card') {
     const photo = formData.get('vaccine_card') as File;
     const { url, error } = await subirImagen(photo, user.id, supabase, 'vaccine-card');
-    // Antes esto redirigía con ?saved=1 pasara lo que pasara: si la subida
-    // fallaba, el usuario veía "guardado" y no había subido nada.
-    if (error) {
-      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent(error));
-    }
-    if (!url) {
-      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent('No se seleccionó ninguna imagen.'));
-    }
-    // Se borra el archivo anterior: "reemplazar" dejaba el viejo vivo —y
-    // accesible— en el bucket para siempre.
-    await borrarImagenPorUrl(pet.vaccine_card_url, supabase);
-    const { error: dbError } = await supabase
-      .from('pets').update({ vaccine_card_url: url }).eq('id', pet.id);
+    if (error) return redirectError(error);
+    if (!url) return redirectError('No se seleccionó ninguna imagen.');
+
+    const previousUrl = pet.vaccine_card_url;
+    const { error: dbError } = await supabase.from('pets').update({ vaccine_card_url: url }).eq('id', pet.id);
     if (dbError) {
-      return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent('La foto subió pero no se pudo guardar. Inténtalo de nuevo.'));
+      await borrarImagenPorUrl(url, supabase);
+      return redirectError('La foto subió pero no se pudo guardar. Inténtalo de nuevo.');
     }
+    await borrarImagenPorUrl(previousUrl, supabase);
     return Astro.redirect('/salud/vacunas?saved=1');
   }
+
   if (action === 'delete_card') {
-    await borrarImagenPorUrl(pet.vaccine_card_url, supabase);
-    await supabase.from('pets').update({ vaccine_card_url: null }).eq('id', pet.id);
+    const previousUrl = pet.vaccine_card_url;
+    const { error } = await supabase.from('pets').update({ vaccine_card_url: null }).eq('id', pet.id);
+    if (error) return redirectError('No se pudo eliminar la foto del carné.');
+    await borrarImagenPorUrl(previousUrl, supabase);
     return Astro.redirect('/salud/vacunas?deleted=1');
   }
+
   if (action === 'delete') {
-    const vaccineId = formData.get('vaccine_id') as string;
-    await supabase.from('vaccines').delete().eq('id', vaccineId).eq('pet_id', pet.id);
+    const vaccineId = String(formData.get('vaccine_id') || '');
+    const { error } = await supabase.from('vaccines').delete().eq('id', vaccineId).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo eliminar la aplicación.');
     return Astro.redirect('/salud/vacunas?deleted=1');
   }
-  return Astro.redirect('/salud/vacunas?saved=1');
 }
 
-const { data: vaccines } = await supabase
-  .from('vaccines')
-  .select('*')
-  .eq('pet_id', pet.id)
-  .order('date_given', { ascending: false });
+const { data: vaccineRows } = await supabase
+  .from('vaccines').select('*').eq('pet_id', pet.id).order('date_given', { ascending: false });
+const vaccines = vaccineRows ?? [];
+const overview = buildVaccineOverview(vaccines, today);
 
-// Analytics
-const overdueCount = vaccines?.filter(v => v.next_due && new Date(v.next_due + 'T00:00:00') < new Date()).length ?? 0;
-const upcomingCount = vaccines?.filter(v => {
-  if (!v.next_due) return false;
-  const days = Math.ceil((new Date(v.next_due + 'T00:00:00').getTime() - new Date().getTime()) / 86400000);
-  return days >= 0 && days <= 30;
-}).length ?? 0;
+const summary = vaccines.length === 0
+  ? { title: `Empieza el carné de ${pet.name}`, text: 'Registra la primera dosis tal como aparece en el documento físico.' }
+  : overview.overdueCount > 0
+    ? { title: `${overview.overdueCount} fecha${overview.overdueCount === 1 ? '' : 's'} por confirmar`, text: 'Revisa con tu veterinario si corresponde registrar un refuerzo.' }
+    : overview.dueSoonCount > 0
+      ? { title: `${overview.dueSoonCount} próxima${overview.dueSoonCount === 1 ? '' : 's'} en 30 días`, text: 'Tu calendario tiene fechas cercanas para revisar.' }
+      : overview.schedule.length > 0
+        ? { title: 'Calendario organizado', text: 'Las próximas fechas están guardadas y visibles abajo.' }
+        : { title: 'Historial organizado', text: 'Puedes añadir la próxima fecha cuando la confirme tu veterinario.' };
+
+const statusStyle: Record<VaccineScheduleStatus, { label: string; card: string; icon: string; text: string; pill: string }> = {
+  overdue: { label: 'Fecha pendiente', card: 'border-red-200 bg-red-50', icon: 'bg-white text-red-600', text: 'text-red-600', pill: 'bg-white text-red-600' },
+  due_soon: { label: 'Próxima', card: 'border-orange-200 bg-orange-50', icon: 'bg-white text-orange-700', text: 'text-orange-700', pill: 'bg-white text-orange-700' },
+  scheduled: { label: 'Programada', card: 'border-blue-200 bg-blue-50', icon: 'bg-white text-blue-600', text: 'text-blue-600', pill: 'bg-white text-blue-600' },
+  recorded: { label: 'Registrada', card: 'border-green-200 bg-green-50', icon: 'bg-white text-green-700', text: 'text-green-700', pill: 'bg-white text-green-700' },
+};
+
+function scheduleDetail(vaccine: { next_due: string | null }): string {
+  if (!vaccine.next_due) return 'Sin próxima fecha registrada';
+  const days = daysUntilDate(vaccine.next_due, today);
+  if (days < 0) return `${formatDate(vaccine.next_due)} · hace ${Math.abs(days)} día${Math.abs(days) === 1 ? '' : 's'}`;
+  if (days === 0) return `${formatDate(vaccine.next_due)} · corresponde hoy`;
+  if (days === 1) return `${formatDate(vaccine.next_due)} · mañana`;
+  return `${formatDate(vaccine.next_due)} · en ${days} días`;
+}
+
+const openNewForm = Astro.url.searchParams.get('new') === '1';
 ---
 
 <MainLayout title="Vacunas">
-  <a href="/salud" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-4">
+  <a href="/salud" class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink">
     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
     Salud
   </a>
-  <SectionHeader title="Vacunas" subtitle={`Historial de vacunación de ${pet.name}`} />
+  <SectionHeader title="Vacunas" subtitle={`Carné digital e historial de ${pet.name}`} />
 
-  <div class="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 animate-fade-up">
-    <div class="flex gap-3">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-accent">
-        <Icon name="vacuna" class="h-5 w-5" />
+  <section class="mb-5 overflow-hidden rounded-3xl border border-card-border bg-card animate-fade-up">
+    <div class="flex gap-4 p-5 sm:p-6">
+      <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-light text-accent">
+        <Icon name="vacuna" class="h-7 w-7" />
       </div>
-      <div>
-        <p class="text-sm font-semibold text-ink">Historial de vacunación</p>
-        <p class="mt-0.5 text-xs leading-relaxed text-muted">Registra la dosis como aparece en el carné. La próxima fecha la confirma tu veterinario.</p>
+      <div class="min-w-0 flex-1">
+        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">Carné digital</p>
+        <h2 class="mt-1 text-xl font-bold text-ink">{summary.title}</h2>
+        <p class="mt-1 max-w-xl text-sm leading-relaxed text-muted">{summary.text}</p>
       </div>
+    </div>
+    <div class="grid grid-cols-3 border-t border-card-border">
+      <div class="px-3 py-4 text-center">
+        <p class="text-xl font-black text-ink">{vaccines.length}</p>
+        <p class="mt-0.5 text-[10px] text-muted">dosis</p>
+      </div>
+      <div class="border-x border-card-border px-3 py-4 text-center">
+        <p class="text-xl font-black text-ink">{overview.latestByName.length}</p>
+        <p class="mt-0.5 text-[10px] text-muted">vacunas</p>
+      </div>
+      <div class="px-3 py-4 text-center">
+        <p class:list={['text-xl font-black', overview.overdueCount > 0 ? 'text-red-500' : 'text-ink']}>{overview.schedule.length}</p>
+        <p class="mt-0.5 text-[10px] text-muted">con próxima fecha</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
+    <button type="button" id="toggle-vaccine-form" class="w-full action-primary">
+      <span class="flex items-center gap-2.5">
+        <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+        Registrar vacuna
+      </span>
+      <svg id="toggle-vaccine-icon" class:list={['h-4 w-4 text-white/80 transition-transform', openNewForm && 'rotate-180']} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+
+    <div id="vaccine-form-body" class:list={['mt-2', !openNewForm && 'hidden']}>
+      <Card>
+        <div class="mb-5 flex gap-2 rounded-xl bg-accent-light p-3">
+          <Icon name="info" class="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p class="text-xs leading-relaxed text-muted">Copia la información de esta dosis. Solo vacuna y fecha aplicada son obligatorias.</p>
+        </div>
+        <form method="POST" class="space-y-4" data-vaccine-add-form>
+          <input type="hidden" name="_action" value="add" />
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink">Vacuna <span class="text-red-500">*</span></label>
+            <select id="vaccine-select" class="field-input">
+              <option value="">Seleccionar vacuna</option>
+              {vaccineOptions.map(option => <option value={option.key}>{option.label}</option>)}
+            </select>
+            <input type="text" name="name" id="vaccine-name-input" required placeholder="Nombre escrito en el carné" class="mt-2 hidden field-input" />
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-ink">Fecha de aplicación <span class="text-red-500">*</span></label>
+              <input id="new-vaccine-date" type="date" name="date_given" required class="field-input" />
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-ink">Próxima dosis <span class="text-xs text-muted">(opcional)</span></label>
+              <input type="date" name="next_due" class="field-input" />
+            </div>
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink">Marca o laboratorio <span class="text-xs text-muted">(opcional)</span></label>
+            <select id="vaccine-brand-select" class="field-input">
+              {brandOptions.map(option => <option value={option.key}>{option.label}</option>)}
+            </select>
+            <input type="text" name="brand" id="vaccine-brand-input" placeholder="Marca escrita en el carné" class="mt-2 hidden field-input" />
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-ink">Número de lote <span class="text-xs text-muted">(opcional)</span></label>
+              <input type="text" name="lot_number" placeholder="Ej: AB1234" class="field-input" />
+            </div>
+            <div>
+              <label class="mb-1.5 block text-sm font-medium text-ink">Veterinario o clínica <span class="text-xs text-muted">(opcional)</span></label>
+              <input type="text" name="vet_name" placeholder="Nombre que aparece en el carné" class="field-input" />
+            </div>
+          </div>
+          <div>
+            <label class="mb-1.5 block text-sm font-medium text-ink">Notas <span class="text-xs text-muted">(opcional)</span></label>
+            <textarea name="notes" rows="2" placeholder="Observaciones de esta aplicación" class="field-input resize-none"></textarea>
+          </div>
+          <button type="submit" class="w-full rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-[0.99]">Registrar aplicación</button>
+        </form>
+      </Card>
     </div>
   </div>
 
-  {/* ── RESUMEN ── */}
-  {vaccines && vaccines.length > 0 ? (
-    <div class="mb-5 animate-fade-up">
-      <MetricGrid items={[
-        { value: String(vaccines.length), label: 'registradas' },
-        { value: String(overdueCount), label: 'vencidas', tone: overdueCount > 0 ? 'danger' : 'default' },
-        { value: String(upcomingCount), label: 'próximas 30d', tone: upcomingCount > 0 ? 'warning' : 'default' },
-      ]} />
-    </div>
-  ) : (
-    <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
-      <p class="text-sm font-semibold text-ink mb-1">Sin vacunas registradas</p>
-      <p class="text-xs text-muted">Registra la primera vacuna para ver el historial de inmunización</p>
-    </div>
-  )}
-
-  {/* ── CARNÉ FÍSICO ── */}
-  {/* Tenerlo a mano es de lo más útil de la app: en el veterinario, en una
-      guardería o en un viaje siempre lo piden, y nadie carga el papel. */}
-  <div class="mb-5 animate-fade-up">
-    <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
-      <button type="button" id="toggle-vaccine-card" class="w-full flex items-center justify-between px-4 py-3.5 hover:bg-canvas transition-colors">
-        <div class="flex items-center gap-2.5">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
-            <Icon name="camara" class="h-4 w-4" />
-          </div>
-          <div class="text-left">
-            <p class="text-sm font-semibold text-ink">Carné de vacunas</p>
-            <p class="text-xs text-muted">
-              {pet.vaccine_card_url
-                ? 'Guardado — disponible sin conexión desde tu celular'
-                : 'Tenlo a mano en el vet, la guardería o un viaje'}
-            </p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          {pet.vaccine_card_url && (
-            <span class="rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-accent">Listo</span>
+  <section class="mb-7 animate-fade-up animate-fade-up-delay-1">
+    <div class="overflow-hidden rounded-2xl border border-card-border bg-card">
+      <button type="button" id="toggle-vaccine-card" class="flex w-full items-center justify-between gap-4 p-4 transition-colors hover:bg-canvas">
+        <span class="flex min-w-0 items-center gap-3 text-left">
+          {pet.vaccine_card_url ? (
+            <img src={pet.vaccine_card_url} alt="Vista previa del carné" class="h-12 w-12 shrink-0 rounded-xl border border-card-border object-cover" />
+          ) : (
+            <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Icon name="camara" class="h-5 w-5" /></span>
           )}
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold text-ink">Foto del carné físico</span>
+            <span class="mt-0.5 block text-xs text-muted">{pet.vaccine_card_url ? 'Guardada y sincronizada con la app' : 'Ten el documento completo a mano cuando lo necesites'}</span>
+          </span>
+        </span>
+        <span class="flex shrink-0 items-center gap-2">
+          {pet.vaccine_card_url && <span class="rounded-full bg-green-50 px-2 py-1 text-[10px] font-semibold text-green-700">Guardada</span>}
           <svg id="toggle-card-icon" class="h-4 w-4 text-muted transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </div>
+        </span>
       </button>
 
-      <div id="vaccine-card-body" class="hidden border-t border-card-border px-4 py-4">
+      <div id="vaccine-card-body" class="hidden border-t border-card-border p-4">
         {pet.vaccine_card_url ? (
           <div class="space-y-3">
-            {/* Toca para abrir el visor con zoom. Un <a target="_blank"> dejaba
-                la foto a tamaño de pantalla y un carné no se lee así. */}
-            <button type="button" id="abrir-carne" class="block w-full group relative">
-              <img
-                src={pet.vaccine_card_url}
-                alt="Carné de vacunas"
-                class="w-full rounded-xl border border-card-border shadow-sm transition-transform group-hover:scale-[1.01]"
-              />
-              <span class="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-ink/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
-                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
-                Ampliar
-              </span>
+            <button type="button" id="open-card-preview" class="group relative block w-full">
+              <img src={pet.vaccine_card_url} alt={`Carné de vacunas de ${pet.name}`} class="max-h-[28rem] w-full rounded-xl border border-card-border object-contain shadow-sm transition-transform group-hover:scale-[1.005]" />
+              <span class="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-ink/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">Ampliar</span>
             </button>
-
-            <div class="flex gap-2">
-              <form method="POST" enctype="multipart/form-data" class="flex-1">
+            <div class="grid grid-cols-2 gap-2">
+              <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="_action" value="upload_card" />
-                <label class="flex items-center justify-center gap-1.5 rounded-xl border border-card-border px-3 py-2 text-xs font-semibold text-ink hover:bg-canvas transition-colors cursor-pointer">
-                  <Icon name="subir" class="h-3.5 w-3.5" />
-                  Cambiar
+                <label class="flex cursor-pointer items-center justify-center rounded-xl border border-card-border px-3 py-2.5 text-xs font-semibold text-ink transition-colors hover:bg-canvas">
+                  Cambiar foto
                   <input type="file" name="vaccine_card" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()" />
                 </label>
               </form>
-              <form method="POST" class="flex-1" onsubmit="return confirm('¿Eliminar la foto del carné?')">
+              <form method="POST" onsubmit="return confirm('¿Eliminar la foto del carné?')">
                 <input type="hidden" name="_action" value="delete_card" />
-                <button type="submit" class="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-100 transition-colors">
-                  Eliminar
-                </button>
+                <button type="submit" class="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100">Eliminar foto</button>
               </form>
             </div>
           </div>
         ) : (
           <form method="POST" enctype="multipart/form-data">
             <input type="hidden" name="_action" value="upload_card" />
-            <label class="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-card-border px-6 py-8 cursor-pointer hover:border-accent/40 hover:bg-accent/5 transition-all">
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
-                <Icon name="camara" class="h-6 w-6" />
-              </div>
-              <div class="text-center">
-                <p class="text-sm font-semibold text-ink">Subir foto del carné</p>
-                <p class="text-xs text-muted mt-0.5">JPG, PNG o WEBP · máximo 10 MB</p>
-              </div>
+            <label class="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-card-border px-6 py-8 transition-all hover:border-accent/40 hover:bg-accent/5">
+              <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Icon name="camara" class="h-6 w-6" /></span>
+              <span class="text-center"><span class="block text-sm font-semibold text-ink">Subir foto del carné</span><span class="mt-0.5 block text-xs text-muted">JPG, PNG o WEBP · máximo 10 MB</span></span>
               <input type="file" name="vaccine_card" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()" />
             </label>
           </form>
         )}
       </div>
     </div>
-  </div>
+  </section>
 
-  {/* Visor a pantalla completa: toca para acercar, arrastra para moverte. */}
-  {pet.vaccine_card_url && (
-    <div id="visor-carne" class="fixed inset-0 z-50 hidden bg-ink/95 backdrop-blur-sm">
-      <div class="absolute top-0 inset-x-0 flex items-center justify-between p-4">
-        <p class="text-sm font-semibold text-white/90">Carné de {pet.name}</p>
-        <div class="flex items-center gap-2">
-          <a
-            href={pet.vaccine_card_url}
-            target="_blank"
-            rel="noopener"
-            class="rounded-xl bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
-            title="Abrir original"
-            aria-label="Abrir original en una pestaña nueva"
-          >
-            <Icon name="descarga" class="h-4 w-4" />
-          </a>
-          <button type="button" id="cerrar-carne" class="rounded-xl bg-white/10 p-2 text-white hover:bg-white/20 transition-colors" aria-label="Cerrar">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-          </button>
-        </div>
+  {overview.schedule.length > 0 && (
+    <section class="mb-8 animate-fade-up animate-fade-up-delay-2">
+      <div class="mb-3 flex items-end justify-between">
+        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Calendario</p><h2 class="mt-0.5 text-xl font-bold text-ink">Próximas dosis</h2></div>
+        <span class="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-muted">{overview.schedule.length}</span>
       </div>
-      <div id="visor-scroll" class="h-full w-full overflow-auto p-4 pt-16 flex items-start justify-center">
-        <img
-          id="visor-img"
-          src={pet.vaccine_card_url}
-          alt="Carné de vacunas"
-          class="max-w-full h-auto rounded-lg origin-top transition-transform duration-200 cursor-zoom-in select-none"
-        />
+      <div class="grid gap-3 lg:grid-cols-2">
+        {overview.schedule.map(vaccine => {
+          const status = vaccineScheduleStatus(vaccine, today);
+          const style = statusStyle[status];
+          return (
+            <button type="button" class:list={['schedule-edit-btn flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-transform hover:-translate-y-0.5', style.card]} data-id={vaccine.id}>
+              <span class:list={['flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', style.icon]}><Icon name="calendario" class="h-5 w-5" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-start justify-between gap-2">
+                  <span class="font-bold leading-tight text-ink">{vaccine.name}</span>
+                  <span class:list={['shrink-0 rounded-full px-2 py-1 text-[9px] font-bold', style.pill]}>{style.label}</span>
+                </span>
+                <span class:list={['mt-1.5 block text-sm font-semibold', style.text]}>{scheduleDetail(vaccine)}</span>
+                <span class="mt-1 block text-xs text-muted">Última aplicación: {formatDate(vaccine.date_given)}</span>
+              </span>
+              <svg class:list={['h-4 w-4 shrink-0', style.text]} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          );
+        })}
       </div>
-      <p class="absolute bottom-4 inset-x-0 text-center text-[11px] text-white/50">Toca la imagen para acercar</p>
-    </div>
+    </section>
   )}
 
-  {/* ── FORM (colapsable) ── */}
-  <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
-    <button
-      type="button"
-      id="toggle-vaccine-form"
-      class="w-full action-primary"
-    >
-      <div class="flex items-center gap-2.5">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10">
-          <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-        </div>
-        <p class="text-sm font-semibold text-white">Registrar vacuna</p>
-      </div>
-      <svg id="toggle-vaccine-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-    </button>
-
-    <div id="vaccine-form-body" class="hidden mt-2">
-      <Card>
-        <form method="POST" class="space-y-4">
-          <input type="hidden" name="_action" value="add" />
-          <div>
-            <label class="block text-sm font-medium text-ink mb-1.5">Vacuna <span class="text-red-500">*</span></label>
-            <select id="vaccine-select" class="field-input">
-              <option value="">Seleccionar vacuna</option>
-              {vaccineOptions.map(option => <option value={option.key}>{option.label}</option>)}
-            </select>
-            <input type="text" name="name" id="vaccine-name-input" required placeholder="Nombre de la vacuna" class="mt-2 hidden field-input" />
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-ink mb-1.5">Fecha aplicada <span class="text-red-500">*</span></label>
-              <input type="date" name="date_given" required class="field-input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-ink mb-1.5">Próx. dosis <span class="text-xs text-gray-400">(si aplica)</span></label>
-              <input type="date" name="next_due" class="field-input" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-ink mb-1.5">Veterinario</label>
-            <input type="text" name="vet_name" placeholder="Dr. García" class="field-input" />
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-ink mb-1.5">Marca o laboratorio</label>
-              <input type="text" name="brand" placeholder="Como aparece en el carné" class="field-input" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-ink mb-1.5">Lote</label>
-              <input type="text" name="lot_number" placeholder="Número de lote" class="field-input" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-ink mb-1.5">Notas</label>
-            <textarea name="notes" rows="2" placeholder="Observaciones..." class="field-input resize-none"></textarea>
-          </div>
-          <button type="submit" class="w-full rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">
-            Registrar vacuna
-          </button>
-        </form>
-      </Card>
+  <section class="animate-fade-up animate-fade-up-delay-2">
+    <div class="mb-3 flex items-end justify-between">
+      <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Aplicaciones</p><h2 class="mt-0.5 text-xl font-bold text-ink">Historial</h2></div>
+      {vaccines.length > 0 && <span class="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-muted">{overview.history.length}</span>}
     </div>
-  </div>
 
-  {/* ── HISTORIAL ── */}
-  {vaccines && vaccines.length > 0 && (
-    <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Historial</p>
-  )}
-
-  {(!vaccines || vaccines.length === 0) ? (
-    <EmptyState icon="vaccine" title="Sin vacunas registradas" description="Registra la primera vacuna de tu mascota" />
-  ) : (
-    <div class="space-y-3 animate-fade-up animate-fade-up-delay-2">
-      {vaccines.map((vaccine, i) => {
-        const overdue = vaccine.next_due && new Date(vaccine.next_due + 'T00:00:00') < new Date();
-        const daysLeft = vaccine.next_due
-          ? Math.ceil((new Date(vaccine.next_due + 'T00:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-          : null;
-        return (
-          <Card variant="elevated" class:list={[overdue && 'border-red-200 bg-red-50/30!', i >= 5 && 'collapse-item hidden']}>
-            <div class="vaccine-view" data-id={vaccine.id}>
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 flex-1 min-w-0">
-                  <div class:list={['shrink-0 rounded-xl p-2.5', overdue ? 'bg-red-100 text-red-500' : 'bg-green-50 text-accent']}>
-                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/></svg>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-ink">{vaccine.name}</p>
-                    <p class="text-xs text-gray-400 mt-0.5">Aplicada: {formatDate(vaccine.date_given)}{vaccine.vet_name && ` · ${vaccine.vet_name}`}</p>
-                    {vaccine.brand && <p class="text-xs text-muted mt-1">{vaccine.brand}{vaccine.lot_number && ` · Lote ${vaccine.lot_number}`}</p>}
-                    {vaccine.next_due ? (
-                      <div class:list={['mt-2 flex items-center gap-1.5 text-xs font-medium',
-                        overdue ? 'text-red-500' : daysLeft !== null && daysLeft <= 30 ? 'text-amber-600' : 'text-accent'
-                      ]}>
-                        <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          {overdue
-                            ? <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>
-                            : <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>
-                          }
-                        </svg>
-                        <span>
-                          {overdue
-                            ? `Vencida hace ${Math.abs(daysLeft!)} días`
-                            : `Próxima: ${formatDate(vaccine.next_due)} (${daysLeft} días)`
-                          }
-                        </span>
-                      </div>
-                    ) : (
-                      <p class="mt-1.5 text-xs text-gray-400 italic">Dosis única</p>
-                    )}
-                    {vaccine.notes && <p class="text-xs text-gray-400 mt-1">{vaccine.notes}</p>}
-                  </div>
-                </div>
-                <div class="flex gap-1 shrink-0">
-                  <button type="button" class="edit-btn rounded-xl p-2 text-gray-300 transition-colors hover:bg-accent/10 hover:text-accent" data-id={vaccine.id} title="Editar">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                  </button>
-                  <form method="POST" onsubmit="return confirm('¿Eliminar esta vacuna?')">
-                    <input type="hidden" name="_action" value="delete" />
-                    <input type="hidden" name="vaccine_id" value={vaccine.id} />
-                    <button type="submit" class="rounded-xl p-2 text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500" title="Eliminar">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                    </button>
-                  </form>
-                </div>
+    {vaccines.length === 0 ? (
+      <div class="rounded-3xl border border-dashed border-card-border bg-card px-6 py-10 text-center">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-light text-accent"><Icon name="vacuna" class="h-7 w-7" /></div>
+        <h3 class="mt-4 font-bold text-ink">Todavía no hay dosis registradas</h3>
+        <p class="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-muted">Empieza con cualquier vacuna que aparezca en el carné. Podrás completar el resto después.</p>
+        <button type="button" class="empty-add-btn mt-4 px-4 py-2 text-sm font-semibold text-accent">Registrar primera vacuna</button>
+      </div>
+    ) : (
+      <div class="overflow-hidden rounded-2xl border border-card-border bg-card">
+        {overview.history.map((vaccine, index) => (
+          <div class:list={['history-item p-4 sm:p-5', index < overview.history.length - 1 && 'border-b border-card-border']}>
+            <div class="vaccine-view flex items-center gap-3" data-id={vaccine.id}>
+              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700"><Icon name="vacuna" class="h-5 w-5" /></div>
+              <div class="min-w-0 flex-1">
+                <p class="font-semibold text-ink">{vaccine.name}</p>
+                <p class="mt-0.5 text-xs text-muted">Aplicada el {formatDate(vaccine.date_given)}</p>
+                {(vaccine.brand || vaccine.lot_number || vaccine.vet_name) && (
+                  <p class="mt-1 text-xs text-muted">{[vaccine.brand, vaccine.lot_number ? `Lote ${vaccine.lot_number}` : null, vaccine.vet_name].filter(Boolean).join(' · ')}</p>
+                )}
+                {vaccine.next_due
+                  ? <p class="mt-1 text-xs text-muted">Próxima fecha registrada: {formatDate(vaccine.next_due)}</p>
+                  : <p class="mt-1 text-xs text-muted">Sin próxima fecha registrada</p>}
               </div>
+              <button type="button" class="edit-btn rounded-xl p-2 text-muted transition-colors hover:bg-accent-light hover:text-accent" data-id={vaccine.id} aria-label={`Editar ${vaccine.name}`}>
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
             </div>
 
             <form method="POST" class="vaccine-edit hidden space-y-3" data-id={vaccine.id}>
               <input type="hidden" name="_action" value="edit" />
               <input type="hidden" name="vaccine_id" value={vaccine.id} />
-              <div class="flex items-center justify-between mb-2">
-                <p class="text-xs font-semibold text-accent uppercase tracking-wider">Editando</p>
-                <button type="button" class="cancel-edit text-xs text-gray-400 hover:text-gray-600" data-id={vaccine.id}>Cancelar</button>
+              <div class="flex items-center justify-between pb-1"><p class="text-xs font-bold uppercase tracking-wider text-accent">Editar aplicación</p><button type="button" class="cancel-edit text-xs font-medium text-muted hover:text-ink" data-id={vaccine.id}>Cancelar</button></div>
+              <div><label class="mb-1 block text-xs font-medium text-muted">Vacuna</label><input type="text" name="name" value={vaccine.name} list="vaccine-type-options" required class="field-input-sm" /></div>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div><label class="mb-1 block text-xs font-medium text-muted">Fecha aplicada</label><input type="date" name="date_given" value={vaccine.date_given} max={today} required class="field-input-sm" /></div>
+                <div><label class="mb-1 block text-xs font-medium text-muted">Próxima dosis</label><input type="date" name="next_due" value={vaccine.next_due || ''} class="field-input-sm" /></div>
               </div>
-              <input type="text" name="name" value={vaccine.name} required class="field-input-sm" />
-              <div class="grid grid-cols-2 gap-3">
-                <input type="date" name="date_given" value={vaccine.date_given} required class="field-input-sm" />
-                <input type="date" name="next_due" value={vaccine.next_due || ''} placeholder="Próx. dosis" class="field-input-sm" />
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div><label class="mb-1 block text-xs font-medium text-muted">Marca o laboratorio</label><input type="text" name="brand" value={vaccine.brand || ''} list="vaccine-brand-options" class="field-input-sm" /></div>
+                <div><label class="mb-1 block text-xs font-medium text-muted">Lote</label><input type="text" name="lot_number" value={vaccine.lot_number || ''} class="field-input-sm" /></div>
               </div>
-              <input type="text" name="vet_name" value={vaccine.vet_name || ''} placeholder="Veterinario" class="field-input-sm" />
-              <div class="grid grid-cols-2 gap-3">
-                <input type="text" name="brand" value={vaccine.brand || ''} placeholder="Marca o laboratorio" class="field-input-sm" />
-                <input type="text" name="lot_number" value={vaccine.lot_number || ''} placeholder="Lote" class="field-input-sm" />
+              <div><label class="mb-1 block text-xs font-medium text-muted">Veterinario o clínica</label><input type="text" name="vet_name" value={vaccine.vet_name || ''} class="field-input-sm" /></div>
+              <div><label class="mb-1 block text-xs font-medium text-muted">Notas</label><textarea name="notes" rows="2" class="field-input-sm resize-none">{vaccine.notes || ''}</textarea></div>
+              <div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-between">
+                <button type="submit" form={`delete-vaccine-${vaccine.id}`} class="rounded-xl px-4 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50">Eliminar aplicación</button>
+                <button type="submit" class="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-dark">Guardar cambios</button>
               </div>
-              <textarea name="notes" rows="2" placeholder="Notas" class="field-input-sm resize-none">{vaccine.notes || ''}</textarea>
-              <button type="submit" class="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-accent-dark active:scale-95">Guardar cambios</button>
             </form>
-          </Card>
-        );
-      })}
-    </div>
-  )}
+            <form id={`delete-vaccine-${vaccine.id}`} method="POST" class="hidden" onsubmit="return confirm('¿Eliminar esta aplicación del historial?')">
+              <input type="hidden" name="_action" value="delete" /><input type="hidden" name="vaccine_id" value={vaccine.id} />
+            </form>
+          </div>
+        ))}
+      </div>
+    )}
+  </section>
 
-  {vaccines && vaccines.length > 5 && (
-    <button id="show-more-btn" type="button" class="mt-3 w-full rounded-xl border border-card-border py-3 text-sm font-medium text-muted transition-all hover:bg-canvas hover:text-ink active:scale-95">
-      Ver {vaccines.length - 5} vacuna{vaccines.length - 5 !== 1 ? 's' : ''} más
-    </button>
+  <datalist id="vaccine-type-options">{vaccineOptions.filter(option => option.key !== 'Otra').map(option => <option value={option.key}>{option.label}</option>)}</datalist>
+  <datalist id="vaccine-brand-options">{brandOptions.filter(option => option.key && option.key !== 'Otra').map(option => <option value={option.key}>{option.label}</option>)}</datalist>
+
+  <p class="mx-auto mb-4 mt-10 max-w-md text-center text-xs leading-relaxed text-muted">Las fechas y productos deben copiarse del carné o confirmarse con el veterinario. Vivra organiza el historial, no define el esquema de vacunación.</p>
+
+  {pet.vaccine_card_url && (
+    <div id="card-preview" class="fixed inset-0 z-50 hidden bg-ink/95 backdrop-blur-sm">
+      <div class="absolute inset-x-0 top-0 z-10 flex items-center justify-between p-4">
+        <p class="text-sm font-semibold text-white">Carné de {pet.name}</p>
+        <button type="button" id="close-card-preview" class="rounded-xl bg-white/10 p-2 text-white transition-colors hover:bg-white/20" aria-label="Cerrar"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="flex h-full w-full items-center justify-center overflow-auto p-4 pt-16"><img src={pet.vaccine_card_url} alt={`Carné de ${pet.name}`} class="max-h-full max-w-full rounded-lg object-contain" /></div>
+    </div>
   )}
 
   <script is:inline>
     function setupVacunas() {
-      var vaccineSelect = document.getElementById('vaccine-select');
-      var vaccineNameInput = document.getElementById('vaccine-name-input');
-      if (vaccineSelect) {
-        vaccineSelect.addEventListener('change', function() {
-          var val = vaccineSelect.value;
-          if (val === 'Otra') {
-            vaccineNameInput.classList.remove('hidden');
-            vaccineNameInput.value = '';
-            vaccineNameInput.focus();
+      function bindSelect(selectId, inputId) {
+        var select = document.getElementById(selectId);
+        var input = document.getElementById(inputId);
+        if (!select || !input || select.dataset.bound === '1') return;
+        select.dataset.bound = '1';
+        function sync() {
+          var value = select.value;
+          if (value === 'Otra') {
+            input.classList.remove('hidden'); input.value = ''; input.focus();
           } else {
-            vaccineNameInput.classList.add('hidden');
-            vaccineNameInput.value = val;
+            input.value = value; input.classList.add('hidden');
           }
-        });
-        var form = vaccineSelect.closest('form');
-        if (form) {
-          form.addEventListener('submit', function() {
-            if (vaccineSelect.value && vaccineSelect.value !== 'Otra') {
-              vaccineNameInput.value = vaccineSelect.value;
-              vaccineNameInput.classList.remove('hidden');
-            }
-          });
         }
+        select.addEventListener('change', sync);
+        var form = select.closest('form');
+        if (form) form.addEventListener('submit', function () { if (select.value !== 'Otra') input.value = select.value; });
       }
+      bindSelect('vaccine-select', 'vaccine-name-input');
+      bindSelect('vaccine-brand-select', 'vaccine-brand-input');
+
+      var newVaccineDate = document.getElementById('new-vaccine-date');
+      if (newVaccineDate && !newVaccineDate.value) {
+        var localNow = new Date();
+        var localDate = localNow.getFullYear() + '-' + String(localNow.getMonth() + 1).padStart(2, '0') + '-' + String(localNow.getDate()).padStart(2, '0');
+        newVaccineDate.value = localDate;
+        newVaccineDate.max = localDate;
+      }
+
+      var formToggle = document.getElementById('toggle-vaccine-form');
+      var formBody = document.getElementById('vaccine-form-body');
+      var formIcon = document.getElementById('toggle-vaccine-icon');
+      function openForm() {
+        if (!formBody) return;
+        formBody.classList.remove('hidden');
+        if (formIcon) formIcon.classList.add('rotate-180');
+        setTimeout(function () { formBody.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
+      }
+      if (formToggle && formToggle.dataset.bound !== '1') {
+        formToggle.dataset.bound = '1';
+        formToggle.addEventListener('click', function () {
+          var opening = formBody && formBody.classList.contains('hidden');
+          if (formBody) formBody.classList.toggle('hidden');
+          if (formIcon) formIcon.classList.toggle('rotate-180', opening);
+        });
+      }
+      document.querySelectorAll('.empty-add-btn').forEach(function (button) { button.addEventListener('click', openForm); });
 
       var cardToggle = document.getElementById('toggle-vaccine-card');
       var cardBody = document.getElementById('vaccine-card-body');
       var cardIcon = document.getElementById('toggle-card-icon');
-      if (cardToggle) {
-        cardToggle.addEventListener('click', function() {
-          var isOpen = cardBody && !cardBody.classList.contains('hidden');
+      if (cardToggle && cardToggle.dataset.bound !== '1') {
+        cardToggle.dataset.bound = '1';
+        cardToggle.addEventListener('click', function () {
+          var opening = cardBody && cardBody.classList.contains('hidden');
           if (cardBody) cardBody.classList.toggle('hidden');
-          if (cardIcon) cardIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
+          if (cardIcon) cardIcon.classList.toggle('rotate-180', opening);
         });
       }
 
-      // ── Visor del carné ──
-      var visor = document.getElementById('visor-carne');
-      var visorImg = document.getElementById('visor-img');
-      var visorScroll = document.getElementById('visor-scroll');
-      var abrirCarne = document.getElementById('abrir-carne');
-      var cerrarCarne = document.getElementById('cerrar-carne');
-      var zoom = 1;
-
-      function aplicarZoom() {
-        if (!visorImg) return;
-        visorImg.style.transform = 'scale(' + zoom + ')';
-        visorImg.style.cursor = zoom > 1 ? 'zoom-out' : 'zoom-in';
+      function openEdit(id) {
+        var view = document.querySelector('.vaccine-view[data-id="' + id + '"]');
+        var edit = document.querySelector('.vaccine-edit[data-id="' + id + '"]');
+        if (view) view.classList.add('hidden');
+        if (edit) { edit.classList.remove('hidden'); edit.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
       }
-      function abrirVisor() {
-        if (!visor) return;
-        zoom = 1; aplicarZoom();
-        visor.classList.remove('hidden');
-        // Bloquear el scroll del fondo mientras el visor está abierto.
-        document.body.style.overflow = 'hidden';
-      }
-      function cerrarVisor() {
-        if (!visor) return;
-        visor.classList.add('hidden');
-        document.body.style.overflow = '';
-      }
-
-      if (abrirCarne) abrirCarne.addEventListener('click', abrirVisor);
-      if (cerrarCarne) cerrarCarne.addEventListener('click', cerrarVisor);
-      if (visorImg) {
-        visorImg.addEventListener('click', function () {
-          // Tres pasos: 1× → 2× → 3× → vuelve a 1×.
-          zoom = zoom >= 3 ? 1 : zoom + 1;
-          aplicarZoom();
-          if (zoom === 1 && visorScroll) { visorScroll.scrollTop = 0; visorScroll.scrollLeft = 0; }
-        });
-      }
-      // Tocar el fondo cierra; tocar la imagen no.
-      if (visor) {
-        visor.addEventListener('click', function (e) {
-          if (e.target === visor || e.target === visorScroll) cerrarVisor();
-        });
-      }
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && visor && !visor.classList.contains('hidden')) cerrarVisor();
+      document.querySelectorAll('.edit-btn, .schedule-edit-btn').forEach(function (button) {
+        button.addEventListener('click', function () { openEdit(button.dataset.id); });
       });
-
-      var toggleBtn = document.getElementById('toggle-vaccine-form');
-      var formBody = document.getElementById('vaccine-form-body');
-      var toggleIcon = document.getElementById('toggle-vaccine-icon');
-      if (toggleBtn) {
-        toggleBtn.addEventListener('click', function() {
-          var isOpen = formBody && !formBody.classList.contains('hidden');
-          if (formBody) formBody.classList.toggle('hidden');
-          if (toggleIcon) toggleIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
-        });
-      }
-
-      document.querySelectorAll('.edit-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var id = btn.dataset.id;
-          var view = document.querySelector('.vaccine-view[data-id="' + id + '"]');
-          var edit = document.querySelector('.vaccine-edit[data-id="' + id + '"]');
-          if (view) view.classList.add('hidden');
-          if (edit) edit.classList.remove('hidden');
-        });
-      });
-      document.querySelectorAll('.cancel-edit').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var id = btn.dataset.id;
+      document.querySelectorAll('.cancel-edit').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var id = button.dataset.id;
           var view = document.querySelector('.vaccine-view[data-id="' + id + '"]');
           var edit = document.querySelector('.vaccine-edit[data-id="' + id + '"]');
           if (view) view.classList.remove('hidden');
           if (edit) edit.classList.add('hidden');
         });
       });
-      var showMoreBtn = document.getElementById('show-more-btn');
-      if (showMoreBtn) {
-        showMoreBtn.addEventListener('click', function() {
-          document.querySelectorAll('.collapse-item').forEach(function(el) { el.classList.remove('hidden'); });
-          showMoreBtn.remove();
-        });
-      }
+
+      var preview = document.getElementById('card-preview');
+      var openPreview = document.getElementById('open-card-preview');
+      var closePreview = document.getElementById('close-card-preview');
+      if (openPreview) openPreview.addEventListener('click', function () { if (preview) { preview.classList.remove('hidden'); document.body.style.overflow = 'hidden'; } });
+      if (closePreview) closePreview.addEventListener('click', function () { if (preview) { preview.classList.add('hidden'); document.body.style.overflow = ''; } });
     }
     document.addEventListener('astro:page-load', setupVacunas);
   </script>
-
-  <p class="mt-10 mb-4 text-center text-xs text-muted/40 leading-relaxed max-w-xs mx-auto">Mantener las vacunas al día protege a tu mascota de enfermedades graves. Registra cada dosis y lleva el historial completo a cada cita con el vet.</p>
-
 </MainLayout>

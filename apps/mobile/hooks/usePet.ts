@@ -4,7 +4,7 @@ import { useAuth } from './useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
-import { preventiveNextDue } from '@vivra/shared';
+import { buildVaccineOverview, preventiveNextDue } from '@vivra/shared';
 
 export interface CoOwner {
   id: string;
@@ -153,16 +153,11 @@ export function usePet(): PetData {
         // por date_given DESC, así que la primera de cada nombre es la más
         // reciente. Sin esto, 3 dosis de "Rabia" programaban 3 avisos
         // idénticos para el mismo día.
-        const vacunaMasReciente = new Map<string, { next_due: string | null }>();
-        for (const v of vaccinesRes.data ?? []) {
-          if (v.date_given && !vacunaMasReciente.has(v.name)) {
-            vacunaMasReciente.set(v.name, { next_due: v.next_due });
-          }
-        }
-        for (const [nombre, vacuna] of vacunaMasReciente) {
+        const vacunasMasRecientes = buildVaccineOverview(vaccinesRes.data ?? []).latestByName;
+        for (const vacuna of vacunasMasRecientes) {
           scheduleVaccineReminder({
             petName: pet.name,
-            vaccineName: nombre,
+            vaccineName: vacuna.name,
             nextDueDate: vacuna.next_due ? new Date(`${vacuna.next_due}T09:00:00`) : null,
           }).catch(() => {});
         }
