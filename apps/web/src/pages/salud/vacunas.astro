@@ -19,7 +19,7 @@ const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
 
-const vaccineOptions = vaccineOptionsForSpecies((pet as any).species);
+const vaccineOptions = vaccineOptionsForSpecies(pet.species);
 const brandOptions = vaccineBrandOptions();
 const today = new Date().toISOString().slice(0, 10);
 

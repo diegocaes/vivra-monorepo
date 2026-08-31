@@ -21,6 +21,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
 import { calculateAge, DOG_BREEDS, friendlyError } from '@vivra/shared';
+import { asJsonObject } from '@vivra/shared/lib/database';
 import { DatePickerField } from '../components/ui/DatePickerField';
 import { requestPushPermissionAndRegister } from '../hooks/useNotifications';
 
@@ -243,23 +244,27 @@ const animateProgress = (toStep: number) => {
       const pendingRef = storedPendingRef || metadataPendingRef;
       if (pendingRef) {
         const { data, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingRef });
+        const result = asJsonObject(data);
         let shouldClearPending = false;
         if (redeemErr) {
           console.warn('[onboarding] redeem_referral failed:', redeemErr.message);
           // Keep the attribution so a temporary network/server failure can be
           // retried; never silently lose a valid referral after onboarding.
-        } else if (!data?.ok) {
-          const err = data?.error;
-          shouldClearPending = ['self_referral', 'invalid_code', 'referral_already_attributed'].includes(err);
+        } else if (result?.ok !== true) {
+          const err = typeof result?.error === 'string' ? result.error : null;
+          shouldClearPending = err !== null && ['self_referral', 'invalid_code', 'referral_already_attributed'].includes(err);
           if (err && !shouldClearPending) {
-            console.warn('[onboarding] redeem_referral rejected:', err, data);
+            console.warn('[onboarding] redeem_referral rejected:', err, result);
           }
         } else {
           shouldClearPending = true;
-          if (data?.referred_trial_days) {
+          const trialDays = typeof result.referred_trial_days === 'number'
+            ? result.referred_trial_days
+            : 0;
+          if (trialDays > 0) {
             Alert.alert(
               '¡Premium activado!',
-              `Tienes ${data.referred_trial_days} días de Vivra Premium gratis para probar todas las funciones.`,
+              `Tienes ${trialDays} días de Vivra Premium gratis para probar todas las funciones.`,
             );
           }
         }

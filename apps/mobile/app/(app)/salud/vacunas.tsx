@@ -21,7 +21,7 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
-import type { Vaccine } from '../../../types/supabase';
+import type { Vaccine } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 
 let ImagePicker: typeof import('expo-image-picker') | null = null;
@@ -101,7 +101,7 @@ export default function VacunasScreen() {
     const { data, error } = await supabase
       .from('vaccines').select('*').eq('pet_id', pet.id).order('date_given', { ascending: false });
     if (error) console.warn('[vacunas] fetch error:', error.message);
-    setVaccines((data as Vaccine[]) ?? []);
+    setVaccines(data ?? []);
     setLoading(false);
   }, [pet?.id]);
 

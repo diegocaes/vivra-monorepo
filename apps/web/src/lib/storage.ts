@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@vivra/shared/lib/database';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
@@ -29,7 +30,7 @@ export interface ResultadoSubida {
 export async function subirImagen(
   file: File | null,
   userId: string,
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   folder = 'pet-profile',
 ): Promise<ResultadoSubida> {
   if (!file || file.size === 0) return { url: null, error: null }; // no eligió nada
@@ -76,7 +77,7 @@ export async function subirImagen(
  */
 export async function borrarImagenPorUrl(
   url: string | null | undefined,
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
 ): Promise<void> {
   if (!url) return;
   try {
@@ -98,7 +99,7 @@ export async function borrarImagenPorUrl(
 export async function uploadPetPhoto(
   file: File | null,
   userId: string,
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   folder = 'pet-profile',
 ): Promise<string | null> {
   const { url } = await subirImagen(file, userId, supabase, folder);

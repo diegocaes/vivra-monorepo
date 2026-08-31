@@ -13,7 +13,7 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { schedulePreventiveReminder, requestPushPermissionAndRegister } from '../../../hooks/useNotifications';
-import type { PreventiveTreatment } from '../../../types/supabase';
+import type { PreventiveTreatment } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
@@ -119,7 +119,7 @@ export default function PreventivosScreen() {
 
     if (error) console.warn('[Preventivos] fetch error:', error.message);
 
-    const all = ((data as PreventiveTreatment[]) ?? []).map(treatment => ({
+    const all = (data ?? []).map(treatment => ({
       ...treatment,
       next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
     }));

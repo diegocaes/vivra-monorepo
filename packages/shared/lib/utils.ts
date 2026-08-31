@@ -134,7 +134,8 @@ export function friendlyError(error: { message?: string; code?: string } | strin
 }
 
 /** Retorna cuánto tiempo pasó desde un timestamp ISO (ej: "hace 2 horas") */
-export function timeAgo(isoStr: string): string {
+export function timeAgo(isoStr: string | null): string {
+  if (!isoStr) return '';
   const diff = Date.now() - new Date(isoStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Justo ahora';

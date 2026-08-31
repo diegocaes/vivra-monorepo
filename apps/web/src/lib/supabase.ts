@@ -1,6 +1,7 @@
 import { createServerClient, parseCookieHeader } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { AstroCookies } from 'astro';
+import type { Database } from '@vivra/shared/lib/database';
 
 export function createSupabaseAdminClient() {
   const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
@@ -11,7 +12,7 @@ export function createSupabaseAdminClient() {
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error('Missing Supabase admin environment variables');
   }
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -24,7 +25,7 @@ export function createSupabaseClient(request: Request, cookies: AstroCookies) {
     throw new Error('Missing Supabase environment variables');
   }
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return parseCookieHeader(request.headers.get('Cookie') ?? '').map(

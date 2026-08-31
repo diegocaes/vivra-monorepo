@@ -16,7 +16,7 @@ import { BottomSheet } from '../../components/ui/BottomSheet';
 import { FormField } from '../../components/ui/FormField';
 import { DatePickerField } from '../../components/ui/DatePickerField';
 import { SelectField } from '../../components/ui/SelectField';
-import type { Food, Treat } from '../../types/supabase';
+import type { Food, Treat } from '@vivra/shared/lib/database';
 import { track } from '../../lib/analytics';
 import { AddButton } from '../../components/ui/AddButton';
 import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
@@ -198,8 +198,8 @@ export default function AlimentacionScreen() {
 
     if (foodsRes.error) console.warn('[Alimentacion] foods error:', foodsRes.error.message);
     if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
-    setFoods((foodsRes.data as Food[]) ?? []);
-    setTreats((treatsRes.data as Treat[]) ?? []);
+    setFoods(foodsRes.data ?? []);
+    setTreats(treatsRes.data ?? []);
     setLoading(false);
   }, [pet?.id]);
 
@@ -262,13 +262,14 @@ export default function AlimentacionScreen() {
   const handleSaveFood = async () => {
     if (!pet) return;
     if (!brand.trim()) { Alert.alert('Error', 'Ingresa la marca'); return; }
+    if (!foodType) { Alert.alert('Error', 'Selecciona el tipo de alimento'); return; }
 
     setSavingFood(true);
     const payload = {
       pet_id: pet.id,
       brand: brand.trim(),
-      food_type: foodType || null,
-      type: foodType || null,
+      food_type: foodType,
+      type: foodType,
       daily_grams: dailyGrams ? parseFloat(dailyGrams) : null,
       frequency: frequency || null,
       bag_size: bagSize ? parseFloat(bagSize) : null,

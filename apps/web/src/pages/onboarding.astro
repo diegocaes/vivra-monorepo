@@ -4,6 +4,7 @@ import { DOG_BREEDS, BREED_FACTS, parseNumericField } from '@vivra/shared';
 import { uploadPetPhoto } from '../lib/storage';
 import { createSupabaseAdminClient } from '../lib/supabase';
 import { MAX_PETS } from '../lib/premium';
+import { asJsonObject } from '@vivra/shared/lib/database';
 
 const { supabase, user } = Astro.locals;
 
@@ -134,14 +135,16 @@ if (Astro.request.method === 'POST') {
 
       if (pendingCode) {
         const { data: redeemData, error: redeemErr } = await supabase.rpc('redeem_referral', { p_code: pendingCode });
+        const redeemResult = asJsonObject(redeemData);
         if (redeemErr) {
           console.warn('[onboarding] redeem failed:', redeemErr.message);
-        } else if (redeemData && !redeemData.ok) {
-          const err = redeemData.error;
-          const terminalReferralError = ['self_referral', 'invalid_code', 'referral_already_attributed'].includes(err);
+        } else if (redeemResult && redeemResult.ok !== true) {
+          const err = typeof redeemResult.error === 'string' ? redeemResult.error : null;
+          const terminalReferralError = err !== null
+            && ['self_referral', 'invalid_code', 'referral_already_attributed'].includes(err);
           // Silently ignore expected user-side errors; log unexpected ones
           if (err && !['self_referral', 'invalid_code', 'referral_already_attributed', 'owned_pet_required'].includes(err)) {
-            console.warn('[onboarding] redeem rejected:', err, redeemData);
+            console.warn('[onboarding] redeem rejected:', err, redeemResult);
           }
           if (metadataPendingRef && terminalReferralError) {
             await supabase.auth.updateUser({ data: { pending_referral: null } });

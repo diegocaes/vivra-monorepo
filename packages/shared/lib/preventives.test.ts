@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addMonthsToDate, preventiveNextDue } from './preventives';
+import { addMonthsToDate, isPreventiveType, preventiveNextDue } from './preventives';
 
 describe('preventive next due', () => {
   it('uses a calendar-month default for dogs without a saved date', () => {
@@ -13,5 +13,12 @@ describe('preventive next due', () => {
 
   it('keeps a valid month-end day', () => {
     expect(addMonthsToDate('2026-01-31', 1)).toBe('2026-02-28');
+  });
+
+  it('accepts only preventive types supported by the app', () => {
+    expect(isPreventiveType('antipulgas')).toBe(true);
+    expect(isPreventiveType('desparasitante')).toBe(true);
+    expect(isPreventiveType('combinado')).toBe(true);
+    expect(isPreventiveType('unknown')).toBe(false);
   });
 });

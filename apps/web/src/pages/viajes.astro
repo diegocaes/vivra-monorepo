@@ -2,6 +2,7 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import { formatDate, parseNumericField } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
+import type { FlightInsert, FlightUpdate } from '@vivra/shared/lib/database';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
@@ -13,7 +14,7 @@ if (Astro.request.method === 'POST') {
   const action = formData.get('_action') as string;
 
   if (action === 'add_flight') {
-    const flightData: Record<string, unknown> = {
+    const flightData: FlightInsert = {
       pet_id: pet.id,
       airline: formData.get('airline') as string,
       flight_number: (formData.get('flight_number') as string) || null,
@@ -53,7 +54,7 @@ if (Astro.request.method === 'POST') {
 
   if (action === 'edit_flight') {
     const flightId = formData.get('flight_id') as string;
-    const updateData: Record<string, unknown> = {
+    const updateData: FlightUpdate = {
       airline: formData.get('airline') as string,
       flight_number: (formData.get('flight_number') as string) || null,
       origin: formData.get('origin') as string,

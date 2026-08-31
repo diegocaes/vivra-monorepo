@@ -1,4 +1,9 @@
 export type PreventiveSpecies = string | null | undefined;
+export type PreventiveType = 'antipulgas' | 'desparasitante' | 'combinado';
+
+export function isPreventiveType(value: string): value is PreventiveType {
+  return value === 'antipulgas' || value === 'desparasitante' || value === 'combinado';
+}
 
 /** Adds calendar months to an ISO date without a timezone shift. */
 export function addMonthsToDate(date: string, months: number): string {

@@ -62,7 +62,7 @@ const VACCINE_BRAND_OPTIONS: VaccineOption[] = [
   { key: 'Otra', label: 'Otra / escrita en el carné' },
 ];
 
-export function vaccineOptionsForSpecies(species: VaccineSpecies | null | undefined): VaccineOption[] {
+export function vaccineOptionsForSpecies(species: string | null | undefined): VaccineOption[] {
   return species === 'cat' ? CAT_VACCINE_OPTIONS : DOG_VACCINE_OPTIONS;
 }
 

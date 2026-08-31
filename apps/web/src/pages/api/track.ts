@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseClient, createSupabaseAdminClient } from '../../lib/supabase';
+import type { Json } from '@vivra/shared/lib/database';
 
 /**
  * POST /api/track — recibe eventos de producto (page views, clicks, CRUDs)
@@ -48,10 +49,10 @@ function rateLimited(ip: string): boolean {
 }
 
 /** Deja props en algo seguro de guardar: objeto plano, acotado en claves y tamaño. */
-function sanitizeProps(raw: unknown): Record<string, unknown> | null {
+function sanitizeProps(raw: unknown): Record<string, Json | undefined> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
 
-  const out: Record<string, unknown> = {};
+  const out: Record<string, Json | undefined> = {};
   let keys = 0;
   for (const [k, v] of Object.entries(raw)) {
     if (keys >= MAX_PROPS_KEYS) break;

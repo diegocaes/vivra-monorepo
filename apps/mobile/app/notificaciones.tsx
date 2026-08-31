@@ -7,7 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/Card';
-import type { Notification } from '../types/supabase';
+import type { Notification } from '@vivra/shared/lib/database';
 
 /**
  * Tipo de notificación → icono. Las claves son los tipos REALES que escriben
@@ -31,7 +31,8 @@ const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: st
   vaccine_reminder: { name: 'medkit', color: Colors.good },
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Ahora';

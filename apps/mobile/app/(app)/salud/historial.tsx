@@ -13,7 +13,7 @@ import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
-import type { VetVisit } from '../../../types/supabase';
+import type { VetVisit } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
@@ -44,7 +44,7 @@ export default function HistorialScreen() {
 
     const { data } = await supabase
       .from('vet_visits').select('*').eq('pet_id', pet.id).order('date', { ascending: false });
-    setVisits((data as VetVisit[]) ?? []);
+    setVisits(data ?? []);
     setLoading(false);
   }, [pet?.id]);
 

@@ -25,7 +25,7 @@ if (Astro.request.method === 'POST') {
       pet_id: pet.id,
       type: formData.get('type') as string,
       date_given: dateGiven,
-      next_due: preventiveNextDue((pet as any).species, dateGiven, (formData.get('next_due') as string) || null),
+      next_due: preventiveNextDue(pet.species, dateGiven, (formData.get('next_due') as string) || null),
       product_name: (formData.get('product_name') as string) || null,
       lot_number: (formData.get('lot_number') as string) || null,
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
@@ -52,14 +52,14 @@ const { data: rawTreatments } = await supabase
 // status. Cats continue to require an explicit date.
 const treatments = (rawTreatments ?? []).map(treatment => ({
   ...treatment,
-  next_due: preventiveNextDue((pet as any).species, treatment.date_given, treatment.next_due),
+  next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
 }));
 
 // A 'combinado' row acts as both antipulgas and desparasitante. Include it in
 // both lists so "last dose" + history reflect reality for each specific type.
 const antipulgasList = treatments.filter(t => t.type === 'antipulgas' || t.type === 'combinado');
 const desparasitanteList = treatments.filter(t => t.type === 'desparasitante' || t.type === 'combinado');
-const isDog = (pet as any).species === 'dog';
+const isDog = pet.species === 'dog';
 const defaultNextDue = isDog ? preventiveNextDue('dog', new Date().toISOString().slice(0, 10), null) ?? '' : '';
 
 function daysUntilNext(nextDue: string | null | undefined) {

@@ -18,7 +18,7 @@ import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
-import type { Grooming } from '../../../types/supabase';
+import type { Grooming } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
@@ -52,7 +52,7 @@ export default function GroomingScreen() {
 
     const { data } = await supabase
       .from('groomings').select('*').eq('pet_id', pet.id).order('date', { ascending: false });
-    setGroomings((data as Grooming[]) ?? []);
+    setGroomings(data ?? []);
     setLoading(false);
   }, [pet?.id]);
 

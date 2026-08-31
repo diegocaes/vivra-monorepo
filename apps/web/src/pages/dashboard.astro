@@ -1,7 +1,7 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
-import { buildVaccineOverview, isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, preventiveNextDue } from '@vivra/shared';
+import { buildVaccineOverview, isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, isPreventiveType, preventiveNextDue } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -76,10 +76,14 @@ const [
 ]);
 
 // Split preventives — 'combinado' counts for both
-const preventives = (allPreventives ?? []).map(treatment => ({
-  ...treatment,
-  next_due: preventiveNextDue((pet as any).species, treatment.date_given, treatment.next_due),
-}));
+const preventives = (allPreventives ?? []).flatMap(treatment => {
+  if (!isPreventiveType(treatment.type)) return [];
+  return [{
+    ...treatment,
+    type: treatment.type,
+    next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
+  }];
+});
 const lastAntipulgas = preventives.filter(p => p.type === 'antipulgas' || p.type === 'combinado');
 const lastDesparasitante = preventives.filter(p => p.type === 'desparasitante' || p.type === 'combinado');
 
@@ -116,13 +120,13 @@ const vaccineSummary = !latestVaccines.length
 // when food runs out; we surface trazabilidad (cost, duration) instead.
 const foodStats = computeFoodStats((foods ?? []).map(f => ({
   brand: f.brand,
-  food_type: (f as any).food_type ?? f.type,
+  food_type: f.food_type ?? f.type,
   type: f.type,
   daily_grams: f.daily_grams,
   bag_size: f.bag_size,
   bag_unit: f.bag_unit,
   start_date: f.start_date,
-  end_date: (f as any).end_date,
+  end_date: f.end_date,
   price: f.price,
   created_at: f.created_at,
 })));
@@ -131,7 +135,7 @@ const foodStats = computeFoodStats((foods ?? []).map(f => ({
 // Vitality Score — same full data as /salud for consistent results
 const vitalityInput: ScoreInput = {
   pet: {
-    species: (pet as any).species ?? 'dog',
+    species: pet.species ?? 'dog',
     breed: pet.breed ?? null,
     birth_date: pet.birth_date ?? null,
     weight_kg: pet.weight_kg ?? null,
@@ -186,7 +190,7 @@ const todoActions: DashAction[] = [];
 
 // Fact del día — rota por día del año. Gatos usan CAT_FACTS (no manejan raza);
 // perros usan los de su raza con fallback a los genéricos.
-const isCat = ((pet as any).species ?? 'dog') === 'cat';
+const isCat = (pet.species ?? 'dog') === 'cat';
 const breedFacts = isCat
   ? CAT_FACTS
   : (pet.breed ? BREED_FACTS[pet.breed as DogBreed] : BREED_FACTS['Other']);
@@ -241,6 +245,7 @@ try {
   // Fecha del aviso más reciente de cada tipo para esta mascota.
   const ultimoPorTipo = new Map<string, number>();
   for (const n of recentNotifs ?? []) {
+    if (!n.created_at) continue;
     const t = new Date(n.created_at).getTime();
     if (!ultimoPorTipo.has(n.type) || t > ultimoPorTipo.get(n.type)!) {
       ultimoPorTipo.set(n.type, t);

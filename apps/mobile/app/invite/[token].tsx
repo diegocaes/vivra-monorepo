@@ -8,6 +8,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
+import { asJsonObject } from '@vivra/shared/lib/database';
 
 interface InviteData {
   petName: string;
@@ -111,11 +112,12 @@ export default function InviteScreen() {
     // Use RPC so the co-owner can insert into pet_shares
     // (RLS only allows the pet owner to INSERT directly, so we bypass via SECURITY DEFINER function)
     const { data, error } = await supabase.rpc('accept_pet_share_invite', { p_token: token });
+    const result = asJsonObject(data);
 
     setAccepting(false);
 
-    if (error || !data?.ok) {
-      const errCode = (data?.error as string | undefined) || 'unknown';
+    if (error || result?.ok !== true) {
+      const errCode = typeof result?.error === 'string' ? result.error : 'unknown';
       const messages: Record<string, string> = {
         not_found: 'Esta invitación ya no existe',
         already_used: 'Esta invitación ya fue usada',

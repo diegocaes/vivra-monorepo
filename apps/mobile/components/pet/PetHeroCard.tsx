@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight, PetThemeColors } from '../../constants/theme';
 import { calculateAge } from '@vivra/shared';
-import type { Pet } from '../../types/supabase';
+import type { Pet } from '@vivra/shared/lib/database';
 
 interface PetHeroCardProps {
   pet: Pet;

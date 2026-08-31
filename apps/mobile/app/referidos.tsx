@@ -7,6 +7,7 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/them
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/Card';
+import { asJsonObject } from '@vivra/shared/lib/database';
 
 // Honest milestones — matches backend: 30 days per completed referral, cumulative.
 const MILESTONES = [
@@ -67,12 +68,13 @@ export default function ReferidosScreen() {
       const { data: rpcData, error: rpcError } = await supabase.rpc('generate_my_referral_code', {
         p_base: petData?.name || 'PET',
       });
+      const result = asJsonObject(rpcData);
       if (rpcError) {
         console.warn('[referidos] generate_my_referral_code error:', rpcError.message);
-      } else if (rpcData?.ok && rpcData.code) {
-        setReferralCode(rpcData.code);
-      } else if (rpcData && !rpcData.ok) {
-        console.warn('[referidos] generate_my_referral_code returned not-ok:', rpcData.error);
+      } else if (result?.ok === true && typeof result.code === 'string') {
+        setReferralCode(result.code);
+      } else if (result && result.ok !== true) {
+        console.warn('[referidos] generate_my_referral_code returned not-ok:', result.error);
       }
     }
 

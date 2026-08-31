@@ -8,11 +8,14 @@
  * To test premium locally: set FORCE_PREMIUM=true in .env
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@vivra/shared/lib/database';
+
 // ── Types ──
 
 export interface UserSubscription {
-  plan: 'free' | 'premium';
-  source: 'referral' | 'iap' | 'promo' | 'trial' | 'web' | 'shared' | null;
+  plan: string;
+  source: string | null;
   premium_until: string | null;
   trial_ends_at: string | null;
 }
@@ -107,7 +110,10 @@ export function canAccess(feature: Feature, premium: PremiumStatus): boolean {
  * Fetch premium status from Supabase. Use in Astro pages/layouts.
  * Includes co-owner sharing: if a sharing partner has premium, this user gets it too.
  */
-export async function getPremiumStatus(supabase: any, userId: string): Promise<PremiumStatus> {
+export async function getPremiumStatus(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<PremiumStatus> {
   try {
     const { data } = await supabase
       .from('user_subscriptions')
@@ -115,7 +121,7 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
       .eq('user_id', userId)
       .maybeSingle();
 
-    const ownStatus = evaluatePremium(data as UserSubscription | null);
+    const ownStatus = evaluatePremium(data);
     if (ownStatus.isPremium) return ownStatus;
 
     // On-load expiry defense: if a non-IAP premium has expired, demote the
@@ -133,8 +139,11 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
       try {
         const { error: rpcError } = await supabase.rpc('expire_my_premium_if_due');
         if (rpcError) console.warn('[premium] expire_my_premium_if_due failed:', rpcError.message);
-      } catch (e: any) {
-        console.warn('[premium] expire RPC threw:', e?.message ?? e);
+      } catch (error: unknown) {
+        console.warn(
+          '[premium] expire RPC threw:',
+          error instanceof Error ? error.message : error,
+        );
       }
     }
 
@@ -148,8 +157,12 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
       ]);
 
       const partnerIds = new Set<string>();
-      sharedWithMe.data?.forEach((s: any) => partnerIds.add(s.owner_id));
-      myShares.data?.forEach((s: any) => partnerIds.add(s.shared_with));
+      sharedWithMe.data?.forEach(share => {
+        partnerIds.add(share.owner_id);
+      });
+      myShares.data?.forEach(share => {
+        partnerIds.add(share.shared_with);
+      });
 
       if (partnerIds.size > 0) {
         const { data: partnerSubs } = await admin
@@ -158,7 +171,7 @@ export async function getPremiumStatus(supabase: any, userId: string): Promise<P
           .in('user_id', [...partnerIds]);
 
         for (const sub of partnerSubs || []) {
-          const partnerStatus = evaluatePremium(sub as UserSubscription);
+          const partnerStatus = evaluatePremium(sub);
           if (partnerStatus.isPremium) {
             return {
               isPremium: true,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Pet } from '../types/supabase';
+import type { Database, Pet } from '@vivra/shared/lib/database';
+import { isPetRow } from '@vivra/shared/lib/database';
 
 export interface PetContext {
   pet: Pet | null;
@@ -12,7 +13,7 @@ export interface PetContext {
  * The active pet is determined by activePetId (from cookie), falling back to the first pet.
  */
 export async function getActivePet(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   activePetId: string | null,
 ): Promise<PetContext> {
@@ -28,10 +29,10 @@ export async function getActivePet(
       .eq('shared_with', userId),
   ]);
 
-  const ownedPets = (ownedRes.data ?? []) as Pet[];
+  const ownedPets = ownedRes.data ?? [];
   const sharedPets = (sharedRes.data ?? [])
-    .map((s: any) => s.pets)
-    .filter(Boolean) as Pet[];
+    .flatMap(share => Array.isArray(share.pets) ? share.pets : [share.pets])
+    .filter(isPetRow);
 
   const pets = [...ownedPets, ...sharedPets];
 

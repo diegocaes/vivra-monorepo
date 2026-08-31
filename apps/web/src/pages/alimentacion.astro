@@ -23,10 +23,14 @@ if (Astro.request.method === 'POST') {
 
   // ── Food actions ──
   if (action === 'add' || action === 'edit' || action === 'delete') {
+    const foodType = String(formData.get('type') ?? '').trim();
+    if ((action === 'add' || action === 'edit') && !foodType) {
+      return Astro.redirect('/alimentacion?toast_error=' + encodeURIComponent('Selecciona el tipo de alimento.'));
+    }
     const fields = {
       brand:       formData.get('brand') as string,
-      type:        (formData.get('type') as string) || null,
-      food_type:   (formData.get('type') as string) || null,
+      type:        foodType,
+      food_type:   foodType || null,
       daily_grams: parseNumericField(formData.get('daily_grams'), { max: 10_000 }),
       frequency:   (formData.get('frequency') as string) || null,
       bag_size:    parseNumericField(formData.get('bag_size'), { max: 1_000 }),

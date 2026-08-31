@@ -13,7 +13,7 @@ import { Button } from '../../../components/ui/Button';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
-import type { WeightRecord } from '../../../types/supabase';
+import type { WeightRecord } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 import { AddButton } from '../../../components/ui/AddButton';
 
@@ -133,7 +133,7 @@ export default function PesoScreen() {
 
     const { data } = await supabase
       .from('weight_records').select('*').eq('pet_id', pet.id).order('date', { ascending: false });
-    setRecords((data as WeightRecord[]) ?? []);
+    setRecords(data ?? []);
     setLoading(false);
   }, [pet?.id]);
 

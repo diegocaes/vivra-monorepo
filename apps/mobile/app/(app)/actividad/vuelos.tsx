@@ -14,7 +14,7 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
-import type { Flight } from '../../../types/supabase';
+import type { Flight } from '@vivra/shared/lib/database';
 
 const CABIN_OPTIONS = [
   { key: 'cabina', label: 'Cabina' },
@@ -66,7 +66,7 @@ export default function VuelosScreen() {
     if (!pet) return;
     const { data } = await supabase
       .from('flights').select('*').eq('pet_id', pet.id).order('flight_date', { ascending: false });
-    setFlights((data as Flight[]) ?? []);
+    setFlights(data ?? []);
   }, [pet?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -101,9 +101,9 @@ export default function VuelosScreen() {
     setFlightDate(f.flight_date); setCabinOrCargo(f.cabin_or_cargo ?? 'cabina');
     setTicketPrice(f.ticket_price?.toString() ?? ''); setNotes(f.notes ?? '');
     setChecklist({
-      vet_certificate: f.vet_certificate, health_certificate: f.health_certificate,
-      chip_verified: f.chip_verified, vaccines_updated: f.vaccines_updated,
-      import_permit: f.import_permit, crate_approved: f.crate_approved,
+      vet_certificate: f.vet_certificate ?? false, health_certificate: f.health_certificate ?? false,
+      chip_verified: f.chip_verified ?? false, vaccines_updated: f.vaccines_updated ?? false,
+      import_permit: f.import_permit ?? false, crate_approved: f.crate_approved ?? false,
     });
     setShowForm(true);
   };

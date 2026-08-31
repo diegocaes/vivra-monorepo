@@ -232,7 +232,7 @@ if (Astro.request.method === 'POST') {
     user_id: user.id,
     name: rawName,
     // Los gatos no manejan raza — nunca guardar breed para species 'cat'
-    breed: ((pet as any)?.species === 'cat') ? null : (breed?.slice(0, 100) || null),
+    breed: pet?.species === 'cat' ? null : (breed?.slice(0, 100) || null),
     birth_date: (formData.get('birth_date') as string) || null,
     gender: (formData.get('gender') as string) || null,
     weight_kg: newWeight,
@@ -277,7 +277,7 @@ if (Astro.request.method === 'POST') {
 // Check if current breed is in the list (for "Other" logic)
 const breedInList = pet?.breed ? DOG_BREEDS.includes(pet.breed as typeof DOG_BREEDS[number]) : false;
 const isOtherBreed = pet?.breed && !breedInList;
-const isCatPet = ((pet as any)?.species ?? 'dog') === 'cat';
+const isCatPet = (pet?.species ?? 'dog') === 'cat';
 
 // Premium + suscripción propia (para avisos al eliminar cuenta). Ninguna
 // depende de la otra, así que se piden a la vez.

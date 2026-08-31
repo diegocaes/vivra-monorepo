@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
-import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
-import { buildVaccineOverview, friendlyError, preventiveNextDue } from '@vivra/shared';
+import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '@vivra/shared/lib/database';
+import { isPetRow } from '@vivra/shared/lib/database';
+import { buildVaccineOverview, friendlyError, isPreventiveType, preventiveNextDue, type PreventiveType } from '@vivra/shared';
 import { captureError } from '../lib/sentry';
 import { firstSupabaseFailure } from '../lib/supabaseResults';
 
@@ -15,7 +16,10 @@ export interface CoOwner {
   shared_with_name: string | null;
 }
 
-export type PreventiveRow = Pick<PreventiveTreatment, 'type' | 'date_given' | 'next_due' | 'product_name'>;
+export type PreventiveRow = Omit<
+  Pick<PreventiveTreatment, 'type' | 'date_given' | 'next_due' | 'product_name'>,
+  'type'
+> & { type: PreventiveType };
 
 export interface PetData {
   pet: Pet | null;
@@ -98,10 +102,10 @@ export function usePet(): PetData {
       );
     }
 
-    const ownedPets = (ownedRes.data as Pet[]) ?? [];
+    const ownedPets = ownedRes.data ?? [];
     const sharedPets = (sharedRes.data ?? [])
-      .map((s: any) => s.pets)
-      .filter(Boolean) as Pet[];
+      .flatMap(share => Array.isArray(share.pets) ? share.pets : [share.pets])
+      .filter(isPetRow);
 
     const allPets = [...ownedPets, ...sharedPets];
     const selectedPet = allPets.find(candidate => candidate.id === activePetId) ?? allPets[0] ?? null;
@@ -166,10 +170,13 @@ export function usePet(): PetData {
       // Dog records created before next_due existed still represent real
       // applications. Apply the monthly dog default here so the Home and its
       // reminder cards cannot incorrectly say “Sin registro”.
-      const allPreventives = ((preventivesRes.data as PreventiveRow[]) ?? []).map(treatment => ({
-        ...treatment,
-        next_due: preventiveNextDue(targetPet.species, treatment.date_given, treatment.next_due),
-      }));
+      const allPreventives = (preventivesRes.data ?? [])
+        .filter(treatment => isPreventiveType(treatment.type))
+        .map(treatment => ({
+          ...treatment,
+          type: treatment.type as PreventiveType,
+          next_due: preventiveNextDue(targetPet.species, treatment.date_given, treatment.next_due),
+        }));
       // 'combinado' counts as both antipulgas AND desparasitante for "last dose".
       const lastAnti = allPreventives.find(p => p.type === 'antipulgas' || p.type === 'combinado') ?? null;
       const lastDes = allPreventives.find(p => p.type === 'desparasitante' || p.type === 'combinado') ?? null;

@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Colors, Spacing, FontSize, FontWeight, Radius, PetThemeColors } from '../../constants/theme';
-import type { Pet } from '../../types/supabase';
+import type { Pet } from '@vivra/shared/lib/database';
 
 interface PetSelectorProps {
   pets: Pet[];

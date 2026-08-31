@@ -1,4 +1,4 @@
-import type { WeightRecord } from '../types/supabase';
+import type { WeightRecord } from '@vivra/shared/lib/database';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface Props {

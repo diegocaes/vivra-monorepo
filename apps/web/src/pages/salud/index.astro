@@ -43,7 +43,7 @@ try {
 
 const scoreInput: ScoreInput = {
   pet: {
-    species: (pet as any).species ?? 'dog',
+    species: pet.species ?? 'dog',
     breed: pet.breed ?? null,
     birth_date: pet.birth_date ?? null,
     weight_kg: pet.weight_kg ?? null,

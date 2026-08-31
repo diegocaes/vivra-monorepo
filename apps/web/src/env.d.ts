@@ -3,7 +3,9 @@
 declare namespace App {
   interface Locals {
     user: import('@supabase/supabase-js').User;
-    supabase: import('@supabase/supabase-js').SupabaseClient;
+    supabase: import('@supabase/supabase-js').SupabaseClient<
+      import('@vivra/shared/lib/database').Database
+    >;
     activePetId: string | null;
   }
 }
