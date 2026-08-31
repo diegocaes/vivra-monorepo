@@ -595,8 +595,16 @@ export default function PerfilScreen() {
                       { text: 'Cancelar', style: 'cancel' },
                       {
                         text: 'Dejar de seguir', style: 'destructive', onPress: async () => {
-                          await supabase.from('pet_shares').delete().eq('pet_id', pet.id).eq('shared_with', user!.id);
-                          petData.refresh();
+                          const { error: leaveError } = await supabase
+                            .from('pet_shares')
+                            .delete()
+                            .eq('pet_id', pet.id)
+                            .eq('shared_with', user!.id);
+                          if (leaveError) {
+                            Alert.alert('No se pudo quitar el acceso', 'Intenta de nuevo más tarde.');
+                            return;
+                          }
+                          await petData.refresh();
                         },
                       },
                     ],

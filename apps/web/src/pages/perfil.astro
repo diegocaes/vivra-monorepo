@@ -74,36 +74,58 @@ if (Astro.request.method === 'POST') {
   }
 
   if (action === 'generate_invite' && pet && isOwner) {
-    const admin = createSupabaseAdminClient();
     // Revoke any existing pending invite
-    await admin.from('pet_share_invites')
+    const { error: revokeInviteError } = await supabase.from('pet_share_invites')
       .update({ status: 'revoked' })
       .eq('pet_id', pet.id)
       .eq('inviter_id', user.id)
       .eq('status', 'pending');
+    if (revokeInviteError) {
+      console.warn('[perfil] pending invite revoke failed:', revokeInviteError.message);
+      return Astro.redirect('/perfil?error=share_failed');
+    }
     // Create new invite — UUID format unifies with mobile + matches the
     // regex validation in /invite/[token].astro
     const token = randomUUID();
-    await admin.from('pet_share_invites').insert({
+    const { error: inviteError } = await supabase.from('pet_share_invites').insert({
       pet_id: pet.id,
       inviter_id: user.id,
       token,
     });
+    if (inviteError) {
+      console.warn('[perfil] invite creation failed:', inviteError.message);
+      return Astro.redirect('/perfil?error=share_failed');
+    }
     return Astro.redirect(`/perfil?invite_token=${token}`);
   }
 
   if (action === 'revoke_share' && pet && isOwner) {
     const shareId = formData.get('share_id') as string;
     if (shareId) {
-      const admin = createSupabaseAdminClient();
-      await admin.from('pet_shares').delete().eq('id', shareId).eq('pet_id', pet.id);
+      const { error: revokeError } = await supabase
+        .from('pet_shares')
+        .delete()
+        .eq('id', shareId)
+        .eq('pet_id', pet.id)
+        .eq('owner_id', user.id);
+      if (revokeError) {
+        console.warn('[perfil] co-owner revoke failed:', revokeError.message);
+        return Astro.redirect('/perfil?error=share_failed');
+      }
     }
     return Astro.redirect('/perfil?saved=revoked');
   }
 
   if (action === 'leave_pet' && pet && !isOwner) {
-    const admin = createSupabaseAdminClient();
-    await admin.from('pet_shares').delete().eq('pet_id', pet.id).eq('shared_with', user.id);
+    const { error: leaveError } = await supabase
+      .from('pet_shares')
+      .delete()
+      .eq('pet_id', pet.id)
+      .eq('shared_with', user.id);
+    if (leaveError) {
+      console.warn('[perfil] leave shared pet failed:', leaveError.message);
+      return Astro.redirect('/perfil?error=share_failed');
+    }
     // Switch to another pet
     const remaining = pets.filter(p => p.id !== pet.id);
     if (remaining.length > 0) {
@@ -397,6 +419,11 @@ const origin = new URL(Astro.request.url).origin;
   {errorParam === 'delete_failed' && (
     <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
       No se pudo completar la eliminación. Tu cuenta sigue activa y puedes intentarlo nuevamente.
+    </div>
+  )}
+  {errorParam === 'share_failed' && (
+    <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+      No pudimos completar ese cambio. El acceso actual a la mascota no fue modificado; inténtalo nuevamente.
     </div>
   )}
   {isNew ? (

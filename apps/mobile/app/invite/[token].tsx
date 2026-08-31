@@ -8,7 +8,8 @@ import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/t
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/ui/Button';
-import { asJsonObject } from '@vivra/shared/lib/database';
+import { parsePetShareInviteResult } from '@vivra/shared';
+import { saveActivePetId } from '../../lib/activePetStorage';
 
 interface InviteData {
   petName: string;
@@ -112,12 +113,12 @@ export default function InviteScreen() {
     // Use RPC so the co-owner can insert into pet_shares
     // (RLS only allows the pet owner to INSERT directly, so we bypass via SECURITY DEFINER function)
     const { data, error } = await supabase.rpc('accept_pet_share_invite', { p_token: token });
-    const result = asJsonObject(data);
+    const result = parsePetShareInviteResult(data);
 
     setAccepting(false);
 
-    if (error || result?.ok !== true) {
-      const errCode = typeof result?.error === 'string' ? result.error : 'unknown';
+    if (error || !result.ok) {
+      const errCode = result.ok ? 'unknown' : result.error;
       const messages: Record<string, string> = {
         not_found: 'Esta invitación ya no existe',
         already_used: 'Esta invitación ya fue usada',
@@ -129,6 +130,9 @@ export default function InviteScreen() {
       return;
     }
 
+    // When the app area mounts it opens the pet that was just accepted,
+    // instead of falling back to another existing pet.
+    await saveActivePetId(user.id, result.petId);
     setStatus('accepted');
 
     // Navigate to app after a brief delay

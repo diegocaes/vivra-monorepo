@@ -10,15 +10,17 @@ export const POST: APIRoute = async ({ request, cookies, redirect, locals }) => 
 
   if (!petId) return redirect('/dashboard');
 
-  // Verify the pet belongs to this user (RLS also enforces this, but explicit check is cleaner)
-  const { data: pet } = await supabase
-    .from('pets')
-    .select('id')
-    .eq('id', petId)
-    .eq('user_id', user.id)
-    .single();
+  // One authorization rule for owned and shared pets. The database function
+  // is also used by RLS, so a co-owner can select a shared pet while an id
+  // outside their accessible list is still rejected.
+  const { data: canAccess, error } = await supabase.rpc('user_can_access_pet', {
+    p_pet_id: petId,
+  });
 
-  if (!pet) return redirect('/dashboard');
+  if (error || !canAccess) {
+    if (error) console.warn('[pets/switch] access check failed:', error.message);
+    return redirect('/dashboard');
+  }
 
   // Set active pet cookie — 1 year, HttpOnly, SameSite=Lax
   cookies.set('active_pet_id', petId, {

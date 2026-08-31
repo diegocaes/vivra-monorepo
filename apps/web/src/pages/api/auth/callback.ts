@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createSupabaseClient, createSupabaseAdminClient } from '../../../lib/supabase';
+import { parsePetShareInviteResult, resolveActivePet } from '@vivra/shared';
 
 export const GET: APIRoute = async ({ request, cookies, redirect }) => {
   const url = new URL(request.url);
@@ -111,96 +112,87 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     // Process pending share invite (from /invite/[token] page)
     const pendingShareInvite = cookies.get('pending_share_invite')?.value;
     if (pendingShareInvite) {
+      let clearPendingInvite = false;
       try {
-        const admin = createSupabaseAdminClient();
-        const { data: invite } = await admin
-          .from('pet_share_invites')
-          .select('id, pet_id, inviter_id, status, expires_at')
-          .eq('token', pendingShareInvite)
-          .eq('status', 'pending')
-          .maybeSingle();
+        // Use the same authenticated, atomic database operation as mobile.
+        // This prevents a partial state where the share exists but the invite
+        // was not marked accepted (or the inverse).
+        const { data, error } = await supabase.rpc('accept_pet_share_invite', {
+          p_token: pendingShareInvite,
+        });
+        const result = parsePetShareInviteResult(data);
 
-        if (invite && invite.inviter_id !== user.id && new Date(invite.expires_at) > new Date()) {
-          // Check not already shared
-          const { data: existingShare } = await admin
-            .from('pet_shares')
-            .select('id')
-            .eq('pet_id', invite.pet_id)
-            .eq('shared_with', user.id)
-            .maybeSingle();
-
-          if (!existingShare) {
-            // Get the pet's owner
-            const { data: pet } = await admin
-              .from('pets')
-              .select('user_id')
-              .eq('id', invite.pet_id)
-              .single();
-
-            if (pet) {
-              const userName = user.user_metadata?.full_name || user.user_metadata?.name || null;
-              await admin.from('pet_shares').insert({
-                pet_id: invite.pet_id,
-                owner_id: pet.user_id,
-                shared_with: user.id,
-                shared_with_email: user.email || null,
-                shared_with_name: userName,
-              });
-              await admin
-                .from('pet_share_invites')
-                .update({ status: 'accepted', accepted_by: user.id })
-                .eq('id', invite.id);
-
-              // Set the shared pet as active
-              cookies.set('active_pet_id', invite.pet_id, {
-                path: '/',
-                httpOnly: true,
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 365,
-                secure: import.meta.env.PROD,
-              });
-
-              // Mark that this user joined via invite. Stores the pet_id so
-              // the dashboard can render a personalized welcome banner with
-              // the pet name + owner name + App Store CTA.
-              cookies.set('incoming_share', invite.pet_id, {
-                path: '/',
-                httpOnly: true, // consumed server-side only (dashboard.astro)
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7, // 7 days
-                secure: import.meta.env.PROD,
-              });
-            }
-          }
+        if (error) {
+          console.warn('[auth/callback] share invite RPC failed:', error.message);
+        } else if (result.ok) {
+          clearPendingInvite = true;
+          cookies.set('active_pet_id', result.petId, {
+            path: '/',
+            httpOnly: true,
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 365,
+            secure: import.meta.env.PROD,
+          });
+          cookies.set('incoming_share', result.petId, {
+            path: '/',
+            httpOnly: true,
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 7,
+            secure: import.meta.env.PROD,
+          });
+        } else {
+          // These outcomes cannot improve on retry. Transient/unknown failures
+          // keep the cookie so a later login can safely try again.
+          clearPendingInvite = [
+            'not_found',
+            'already_used',
+            'expired',
+            'self_invite',
+            'pet_not_found',
+          ].includes(result.error);
         }
-      } catch {
-        // Silently ignore share invite errors
+      } catch (inviteError) {
+        console.warn('[auth/callback] share invite processing error:', inviteError);
       }
-      cookies.delete('pending_share_invite', { path: '/' });
+      if (clearPendingInvite) {
+        cookies.delete('pending_share_invite', { path: '/' });
+      }
     }
 
     // Check owned + shared pets
     const [petsRes, sharesRes] = await Promise.all([
       supabase.from('pets').select('id').eq('user_id', user.id).order('created_at', { ascending: true }),
-      supabase.from('pet_shares').select('pet_id').eq('shared_with', user.id).limit(1),
+      supabase.from('pet_shares').select('pet_id').eq('shared_with', user.id),
     ]);
 
-    const pets = petsRes.data;
-    const hasShared = (sharesRes.data?.length ?? 0) > 0;
+    if (petsRes.error || sharesRes.error) {
+      // A temporary lookup error must never send an existing user through
+      // onboarding or overwrite their current selection.
+      console.warn(
+        '[auth/callback] accessible pets lookup failed:',
+        petsRes.error?.message || sharesRes.error?.message,
+      );
+    } else {
+      const accessiblePets = [
+        ...(petsRes.data ?? []),
+        ...(sharesRes.data ?? []).map((share) => ({ id: share.pet_id })),
+      ];
 
-    if (!pets?.length && !hasShared) {
-      return redirect('/onboarding');
-    }
+      if (accessiblePets.length === 0) {
+        return redirect('/onboarding');
+      }
 
-    // Set the first pet as active if no cookie exists yet
-    if (!cookies.get('active_pet_id')?.value && pets?.[0]) {
-      cookies.set('active_pet_id', pets[0].id, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 365,
-        secure: import.meta.env.PROD,
-      });
+      const currentPetId = cookies.get('active_pet_id')?.value;
+      const resolvedPet = resolveActivePet(accessiblePets, currentPetId);
+      if (resolvedPet && resolvedPet.id !== currentPetId) {
+        cookies.set('active_pet_id', resolvedPet.id, {
+          path: '/',
+          httpOnly: true,
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 365,
+          secure: import.meta.env.PROD,
+        });
+      }
     }
   }
 

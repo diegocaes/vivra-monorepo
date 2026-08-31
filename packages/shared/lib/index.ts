@@ -9,3 +9,4 @@ export * from './food-stats';
 export * from './spending';
 export * from './billing';
 export * from './grooming';
+export * from './pets';

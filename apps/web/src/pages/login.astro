@@ -3,6 +3,7 @@ import '../styles/global.css';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
 import { createSupabaseClient } from '../lib/supabase';
+import { resolveActivePet } from '@vivra/shared';
 
 const supabase = createSupabaseClient(Astro.request, Astro.cookies);
 const { data: { user } } = await supabase.auth.getUser();
@@ -44,16 +45,47 @@ if (Astro.request.method === 'POST') {
         : 'invalid_credentials';
       return Astro.redirect(`/login?error=${errorCode}`);
     }
-    // Route to onboarding if user has no pet yet
+    // An existing account coming from an invitation returns to that invitation
+    // as an authenticated user, where it can explicitly accept access.
+    const pendingShareInvite = Astro.cookies.get('pending_share_invite')?.value;
+    if (pendingShareInvite) {
+      return Astro.redirect(`/invite/${encodeURIComponent(pendingShareInvite)}`);
+    }
+
+    // Route to onboarding only when the user has neither owned nor shared pets.
     if (loginData.user) {
-      const { data: pets } = await supabase
-        .from('pets')
-        .select('id')
-        .eq('user_id', loginData.user.id)
-        .limit(1);
-      const pet = pets?.[0] ?? null;
-      if (!pet) {
-        return Astro.redirect('/onboarding');
+      const [petsRes, sharesRes] = await Promise.all([
+        supabase.from('pets').select('id').eq('user_id', loginData.user.id).order('created_at', { ascending: true }),
+        supabase.from('pet_shares').select('pet_id').eq('shared_with', loginData.user.id),
+      ]);
+
+      if (!petsRes.error && !sharesRes.error) {
+        const accessiblePets = [
+          ...(petsRes.data ?? []),
+          ...(sharesRes.data ?? []).map((share) => ({ id: share.pet_id })),
+        ];
+        if (accessiblePets.length === 0) {
+          return Astro.redirect('/onboarding');
+        }
+
+        const currentPetId = Astro.cookies.get('active_pet_id')?.value;
+        const activePet = resolveActivePet(accessiblePets, currentPetId);
+        if (activePet && activePet.id !== currentPetId) {
+          Astro.cookies.set('active_pet_id', activePet.id, {
+            path: '/',
+            httpOnly: true,
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 365,
+            secure: import.meta.env.PROD,
+          });
+        }
+      } else {
+        // A temporary database error must not misclassify an existing user as
+        // new and send them through onboarding.
+        console.warn(
+          '[login] accessible pets lookup failed:',
+          petsRes.error?.message || sharesRes.error?.message,
+        );
       }
     }
     return Astro.redirect('/dashboard');

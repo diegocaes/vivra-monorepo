@@ -1,9 +1,12 @@
 ---
-import { createSupabaseAdminClient } from '../../lib/supabase';
+import { createSupabaseAdminClient, createSupabaseClient } from '../../lib/supabase';
 import Icon from '../../components/ui/Icon.astro';
+import { parsePetShareInviteResult } from '@vivra/shared';
 
 const { token } = Astro.params;
 const appDeepLink = `com.vivrapet.app://invite/${token}`;
+const supabase = createSupabaseClient(Astro.request, Astro.cookies);
+const { data: { user } } = await supabase.auth.getUser();
 
 // Persist the invite cookie if the token exists in DB as pending + unexpired.
 // We accept both UUID (new format, post-R6c) and hex (legacy) tokens — the
@@ -34,6 +37,49 @@ if (inviteValid) {
     maxAge: 60 * 60 * 24 * 7,
     secure: import.meta.env.PROD,
   });
+} else if (user && Astro.cookies.get('pending_share_invite')?.value === token) {
+  // Prevent an expired/already-used invite from sending this account back to
+  // the same invalid page on every password login.
+  Astro.cookies.delete('pending_share_invite', { path: '/' });
+}
+
+let acceptError = '';
+if (Astro.request.method === 'POST' && inviteValid && token && user) {
+  const { data, error } = await supabase.rpc('accept_pet_share_invite', { p_token: token });
+  const result = parsePetShareInviteResult(data);
+
+  if (!error && result.ok) {
+    Astro.cookies.delete('pending_share_invite', { path: '/' });
+    Astro.cookies.set('active_pet_id', result.petId, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 365,
+      secure: import.meta.env.PROD,
+    });
+    Astro.cookies.set('incoming_share', result.petId, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      secure: import.meta.env.PROD,
+    });
+    return Astro.redirect('/dashboard');
+  }
+
+  const errorCode = result.ok ? 'unknown' : result.error;
+  const messages: Record<string, string> = {
+    not_found: 'Esta invitación ya no existe.',
+    already_used: 'Esta invitación ya fue utilizada.',
+    expired: 'Esta invitación expiró.',
+    self_invite: 'No puedes aceptar tu propia invitación.',
+    pet_not_found: 'La mascota ya no está disponible.',
+  };
+  acceptError = messages[errorCode] ?? 'No pudimos aceptar la invitación. Inténtalo nuevamente.';
+  if (['not_found', 'already_used', 'expired', 'self_invite', 'pet_not_found'].includes(errorCode)) {
+    inviteValid = false;
+    Astro.cookies.delete('pending_share_invite', { path: '/' });
+  }
 }
 ---
 
@@ -181,15 +227,32 @@ if (inviteValid) {
       <h1>Te invitaron a compartir una mascota en Vivra</h1>
       <p class="desc">Vivra es el diario digital de tu mascota. Acepta la invitacion para cuidar juntos desde la web o la app.</p>
 
-      <a href="/register" class="btn btn-primary">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
-        Crear cuenta y aceptar
-      </a>
+      {acceptError && <p class="desc" style="color:#B91C1C;">{acceptError}</p>}
 
-      <a href="/login" class="btn btn-outline">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        Ya tengo cuenta — Entrar
-      </a>
+      {user ? (
+        inviteValid ? (
+          <form method="POST">
+            <button type="submit" class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+              Aceptar invitación
+            </button>
+          </form>
+        ) : (
+          <a href="/dashboard" class="btn btn-primary">Volver a Vivra</a>
+        )
+      ) : (
+        <>
+          <a href="/register" class="btn btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+            Crear cuenta y aceptar
+          </a>
+
+          <a href="/login" class="btn btn-outline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Ya tengo cuenta — Entrar
+          </a>
+        </>
+      )}
 
       <div class="divider">o si ya tienes la app</div>
 

@@ -5,9 +5,10 @@ import { useSubscription } from '../contexts/SubscriptionContext';
 import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '@vivra/shared/lib/database';
 import { isPetRow } from '@vivra/shared/lib/database';
-import { buildVaccineOverview, friendlyError, isPreventiveType, preventiveNextDue, type PreventiveType } from '@vivra/shared';
+import { buildVaccineOverview, friendlyError, isPreventiveType, preventiveNextDue, resolveActivePet, type PreventiveType } from '@vivra/shared';
 import { captureError } from '../lib/sentry';
 import { firstSupabaseFailure } from '../lib/supabaseResults';
+import { loadActivePetId, saveActivePetId } from '../lib/activePetStorage';
 
 export interface CoOwner {
   id: string;
@@ -61,8 +62,10 @@ export function usePet(): PetData {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const petDataRequestId = useRef(0);
+  const petListRequestId = useRef(0);
+  const activePetIdRef = useRef<string | null>(null);
 
-  const pet = pets.find(p => p.id === activePetId) ?? pets[0] ?? null;
+  const pet = resolveActivePet(pets, activePetId);
   const isOwner = !!(pet && user && pet.user_id === user.id);
 
   const reportLoadError = useCallback((loadError: unknown, phase: string) => {
@@ -75,8 +78,11 @@ export function usePet(): PetData {
     setError(friendlyError(errorLike));
   }, []);
 
-  const fetchPets = useCallback(async (): Promise<Pet | null> => {
+  const fetchPets = useCallback(async (
+    preferredPetId: string | null = activePetIdRef.current,
+  ): Promise<Pet | null> => {
     if (!user) return null;
+    const requestId = ++petListRequestId.current;
 
     // Fetch owned pets + shared pets in parallel
     const [ownedRes, sharedRes] = await Promise.all([
@@ -102,19 +108,33 @@ export function usePet(): PetData {
       );
     }
 
+    // A previous user's or refresh request's response must never replace the
+    // current accessible-pet list.
+    if (requestId !== petListRequestId.current) return null;
+
     const ownedPets = ownedRes.data ?? [];
     const sharedPets = (sharedRes.data ?? [])
       .flatMap(share => Array.isArray(share.pets) ? share.pets : [share.pets])
       .filter(isPetRow);
 
     const allPets = [...ownedPets, ...sharedPets];
-    const selectedPet = allPets.find(candidate => candidate.id === activePetId) ?? allPets[0] ?? null;
+    const selectedPet = resolveActivePet(allPets, preferredPetId);
     setPets(allPets);
 
-    setActivePetId(selectedPet?.id ?? null);
+    const nextPetId = selectedPet?.id ?? null;
+    activePetIdRef.current = nextPetId;
+    setActivePetId(nextPetId);
+    void saveActivePetId(user.id, nextPetId);
     if (!selectedPet) setError(null);
     return selectedPet;
-  }, [user, activePetId]);
+  }, [user]);
+
+  const selectActivePet = useCallback((petId: string) => {
+    if (!user || !pets.some(candidate => candidate.id === petId)) return;
+    activePetIdRef.current = petId;
+    setActivePetId(petId);
+    void saveActivePetId(user.id, petId);
+  }, [user, pets]);
 
   const fetchPetData = useCallback(async (targetPet: Pet) => {
     const requestId = ++petDataRequestId.current;
@@ -244,16 +264,37 @@ export function usePet(): PetData {
     }
   }, [fetchPets, fetchPetData, reportLoadError]);
 
-  // Initial load: fetch pets
+  // Initial load: restore the last selection for this account before choosing
+  // a fallback. This keeps owner/co-owner switching stable across app restarts.
   useEffect(() => {
     if (!user) {
+      petListRequestId.current += 1;
+      activePetIdRef.current = null;
+      setActivePetId(null);
+      setPets([]);
       setLoading(false);
       return;
     }
-    fetchPets()
+
+    let cancelled = false;
+    setLoading(true);
+    loadActivePetId(user.id)
+      .then((storedPetId) => {
+        if (cancelled) return null;
+        activePetIdRef.current = storedPetId;
+        setActivePetId(storedPetId);
+        return fetchPets(storedPetId);
+      })
       .catch(loadError => reportLoadError(loadError, 'pets_load'))
-      .finally(() => setLoading(false));
-  }, [user]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      petListRequestId.current += 1;
+    };
+  }, [user?.id, fetchPets, reportLoadError]);
 
   // When active pet changes, fetch its data
   useEffect(() => {
@@ -285,7 +326,7 @@ export function usePet(): PetData {
     loading,
     error,
     refresh,
-    setActivePetId,
+    setActivePetId: selectActivePet,
   }), [
     pet,
     pets,
@@ -303,5 +344,6 @@ export function usePet(): PetData {
     loading,
     error,
     refresh,
+    selectActivePet,
   ]);
 }

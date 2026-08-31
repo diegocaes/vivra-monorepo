@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Pet } from '@vivra/shared/lib/database';
 import { isPetRow } from '@vivra/shared/lib/database';
+import { resolveActivePet } from '@vivra/shared';
 
 export interface PetContext {
   pet: Pet | null;
@@ -38,8 +39,8 @@ export async function getActivePet(
 
   if (!pets.length) return { pet: null, pets: [], isOwner: true };
 
-  const pet = (activePetId ? pets.find((p) => p.id === activePetId) : null) ?? pets[0];
+  const pet = resolveActivePet(pets, activePetId);
   const isOwner = pet ? pet.user_id === userId : true;
 
-  return { pet: pet ?? null, pets, isOwner };
+  return { pet, pets, isOwner };
 }
