@@ -54,7 +54,16 @@
           "sounds": []
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "vivra-b9",
+          "project": "react-native"
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

@@ -41,6 +41,17 @@ export function initSentry() {
       },
     });
 
+    // Permite distinguir el binario incluido en App Store de cada OTA. Así un
+    // error de producción apunta también a la actualización exacta que lo
+    // introdujo, sin recopilar información adicional del usuario.
+    try {
+      const updates = require('expo-updates') as typeof import('expo-updates');
+      mod.setTag('expo-update-id', updates.updateId ?? 'embedded');
+      mod.setTag('expo-is-embedded-update', String(updates.isEmbeddedLaunch));
+    } catch {
+      // El diagnóstico sigue funcionando aunque Expo Updates no esté listo.
+    }
+
     sentry = mod;
   } catch (e) {
     console.warn('[sentry] no disponible, la app sigue normal:', e);
