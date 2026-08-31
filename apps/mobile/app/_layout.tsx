@@ -10,6 +10,7 @@ import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { StartupRecoveryScreen } from '../components/shared/StartupRecoveryScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
+import { AuthProvider } from '../contexts/AuthContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { captureError, initSentry, setSentryUser } from '../lib/sentry';
 
@@ -21,6 +22,16 @@ SplashScreen.preventAutoHideAsync();
 initSentry();
 
 export default function RootLayout() {
+  return (
+    <AppErrorBoundary>
+      <AuthProvider>
+        <RootLayoutContent />
+      </AuthProvider>
+    </AppErrorBoundary>
+  );
+}
+
+function RootLayoutContent() {
   const { session, user, loading, startupError, retryStartup } = useAuth();
   const segments = useSegments();
   const router = useRouter();
@@ -149,22 +160,20 @@ export default function RootLayout() {
   }
 
   return (
-    <AppErrorBoundary>
-      {/* Va en el layout raíz (no en (app)) porque /paywall vive fuera del
-          grupo (app) y usePet también consume el estado de suscripción. */}
-      <SubscriptionProvider>
-        <StatusBar style="dark" />
-        <OfflineBanner />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="(app)" />
-          <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        </Stack>
-      </SubscriptionProvider>
-    </AppErrorBoundary>
+    /* Va en el layout raíz (no en (app)) porque /paywall vive fuera del
+       grupo (app) y usePet también consume el estado de suscripción. */
+    <SubscriptionProvider>
+      <StatusBar style="dark" />
+      <OfflineBanner />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      </Stack>
+    </SubscriptionProvider>
   );
 }
