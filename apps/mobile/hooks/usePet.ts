@@ -1,10 +1,12 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { scheduleVaccineReminder, schedulePreventiveReminder, scheduleWeightReminder } from './useNotifications';
 import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '../types/supabase';
-import { buildVaccineOverview, preventiveNextDue } from '@vivra/shared';
+import { buildVaccineOverview, friendlyError, preventiveNextDue } from '@vivra/shared';
+import { captureError } from '../lib/sentry';
+import { firstSupabaseFailure } from '../lib/supabaseResults';
 
 export interface CoOwner {
   id: string;
@@ -54,12 +56,23 @@ export function usePet(): PetData {
   const [lastDesparasitante, setLastDesparasitante] = useState<PetData['lastDesparasitante']>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const petDataRequestId = useRef(0);
 
   const pet = pets.find(p => p.id === activePetId) ?? pets[0] ?? null;
   const isOwner = !!(pet && user && pet.user_id === user.id);
 
-  const fetchPets = useCallback(async () => {
-    if (!user) return;
+  const reportLoadError = useCallback((loadError: unknown, phase: string) => {
+    const errorLike = typeof loadError === 'object' && loadError !== null
+      ? loadError as { message?: string; code?: string }
+      : { message: String(loadError) };
+
+    console.warn(`[usePet] ${phase} failed:`, errorLike.message ?? loadError);
+    captureError(loadError, { phase });
+    setError(friendlyError(errorLike));
+  }, []);
+
+  const fetchPets = useCallback(async (): Promise<Pet | null> => {
+    if (!user) return null;
 
     // Fetch owned pets + shared pets in parallel
     const [ownedRes, sharedRes] = await Promise.all([
@@ -74,9 +87,15 @@ export function usePet(): PetData {
         .eq('shared_with', user.id),
     ]);
 
-    if (ownedRes.error) {
-      setError(ownedRes.error.message);
-      return;
+    const failure = firstSupabaseFailure([
+      { name: 'mascotas propias', error: ownedRes.error },
+      { name: 'mascotas compartidas', error: sharedRes.error },
+    ]);
+    if (failure?.error) {
+      throw Object.assign(
+        new Error(`${failure.name}: ${failure.error.message}`, { cause: failure.error }),
+        { code: failure.error.code },
+      );
     }
 
     const ownedPets = (ownedRes.data as Pet[]) ?? [];
@@ -85,16 +104,16 @@ export function usePet(): PetData {
       .filter(Boolean) as Pet[];
 
     const allPets = [...ownedPets, ...sharedPets];
+    const selectedPet = allPets.find(candidate => candidate.id === activePetId) ?? allPets[0] ?? null;
     setPets(allPets);
 
-    if (allPets.length > 0) {
-      setActivePetId(prev => prev ?? allPets[0].id);
-    }
-  }, [user]);
+    setActivePetId(selectedPet?.id ?? null);
+    if (!selectedPet) setError(null);
+    return selectedPet;
+  }, [user, activePetId]);
 
-  const fetchPetData = useCallback(async () => {
-    if (!pet) return;
-    setError(null);
+  const fetchPetData = useCallback(async (targetPet: Pet) => {
+    const requestId = ++petDataRequestId.current;
 
     try {
       const [
@@ -105,22 +124,51 @@ export function usePet(): PetData {
         groomingsRes,
         bloodTestsRes,
         preventivesRes,
+        coOwnersRes,
       ] = await Promise.all([
-        supabase.from('vaccines').select('id, name, date_given, next_due, brand, lot_number').eq('pet_id', pet.id).order('date_given', { ascending: false }),
-        supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-        supabase.from('vet_visits').select('date, reason, location').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
-        supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+        supabase.from('vaccines').select('id, name, date_given, next_due, brand, lot_number').eq('pet_id', targetPet.id).order('date_given', { ascending: false }),
+        supabase.from('weight_records').select('weight_kg, date').eq('pet_id', targetPet.id).order('date', { ascending: false }),
+        supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', targetPet.id).order('created_at', { ascending: false }),
+        supabase.from('vet_visits').select('date, reason, location').eq('pet_id', targetPet.id).order('date', { ascending: false }),
+        supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', targetPet.id).order('date', { ascending: false }),
+        supabase.from('blood_tests').select('date').eq('pet_id', targetPet.id).order('date', { ascending: false }),
+        supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', targetPet.id).order('date_given', { ascending: false }),
+        user && targetPet.user_id === user.id
+          ? supabase
+              .from('pet_shares')
+              .select('id, shared_with, shared_with_email, shared_with_name')
+              .eq('pet_id', targetPet.id)
+          : Promise.resolve({ data: [] as CoOwner[], error: null }),
       ]);
+
+      const failure = firstSupabaseFailure([
+        { name: 'vacunas', error: vaccinesRes.error },
+        { name: 'peso', error: weightsRes.error },
+        { name: 'alimentación', error: foodsRes.error },
+        { name: 'visitas veterinarias', error: visitsRes.error },
+        { name: 'grooming', error: groomingsRes.error },
+        { name: 'exámenes', error: bloodTestsRes.error },
+        { name: 'preventivos', error: preventivesRes.error },
+        { name: 'personas compartidas', error: coOwnersRes.error },
+      ]);
+      if (failure?.error) {
+        if (requestId !== petDataRequestId.current) return;
+        throw Object.assign(
+          new Error(`${failure.name}: ${failure.error.message}`, { cause: failure.error }),
+          { code: failure.error.code },
+        );
+      }
+
+      // A response for a previously selected pet must never overwrite the
+      // current pet while the user is switching tabs or profiles quickly.
+      if (requestId !== petDataRequestId.current) return;
 
       // Dog records created before next_due existed still represent real
       // applications. Apply the monthly dog default here so the Home and its
       // reminder cards cannot incorrectly say “Sin registro”.
       const allPreventives = ((preventivesRes.data as PreventiveRow[]) ?? []).map(treatment => ({
         ...treatment,
-        next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
+        next_due: preventiveNextDue(targetPet.species, treatment.date_given, treatment.next_due),
       }));
       // 'combinado' counts as both antipulgas AND desparasitante for "last dose".
       const lastAnti = allPreventives.find(p => p.type === 'antipulgas' || p.type === 'combinado') ?? null;
@@ -135,20 +183,11 @@ export function usePet(): PetData {
       setPreventives(allPreventives);
       setLastAntipulgas(lastAnti);
       setLastDesparasitante(lastDes);
-
-      // Fetch co-owners if user is the owner
-      if (user && pet.user_id === user.id) {
-        const { data: shares } = await supabase
-          .from('pet_shares')
-          .select('id, shared_with, shared_with_email, shared_with_name')
-          .eq('pet_id', pet.id);
-        setCoOwners((shares as CoOwner[]) ?? []);
-      } else {
-        setCoOwners([]);
-      }
+      setCoOwners((coOwnersRes.data as CoOwner[]) ?? []);
+      setError(null);
 
       // Schedule one reminder per vaccine, only from a confirmed next date.
-      if (isPremium && pet) {
+      if (isPremium) {
         // Un recordatorio por VACUNA, no por dosis. Las filas vienen ordenadas
         // por date_given DESC, así que la primera de cada nombre es la más
         // reciente. Sin esto, 3 dosis de "Rabia" programaban 3 avisos
@@ -156,7 +195,7 @@ export function usePet(): PetData {
         const vacunasMasRecientes = buildVaccineOverview(vaccinesRes.data ?? []).latestByName;
         for (const vacuna of vacunasMasRecientes) {
           scheduleVaccineReminder({
-            petName: pet.name,
+            petName: targetPet.name,
             vaccineName: vacuna.name,
             nextDueDate: vacuna.next_due ? new Date(`${vacuna.next_due}T09:00:00`) : null,
           }).catch(() => {});
@@ -166,7 +205,7 @@ export function usePet(): PetData {
         const lastWeight = weightsRes.data?.[0];
         if (lastWeight?.date) {
           scheduleWeightReminder({
-            petName: pet.name,
+            petName: targetPet.name,
             lastWeightDate: new Date(`${lastWeight.date}T09:00:00`),
           }).catch(() => {});
         }
@@ -174,25 +213,29 @@ export function usePet(): PetData {
 
       // Preventive reminders use the due date confirmed by the owner or vet.
       // Never invent a medical interval from the last application date.
-      if (pet) {
-        if (lastAnti?.next_due) {
-          schedulePreventiveReminder({ petName: pet.name, type: 'antipulgas', nextDueDate: new Date(`${lastAnti.next_due}T09:00:00`) }).catch(() => {});
-        }
-        if (lastDes?.next_due) {
-          schedulePreventiveReminder({ petName: pet.name, type: 'desparasitante', nextDueDate: new Date(`${lastDes.next_due}T09:00:00`) }).catch(() => {});
-        }
+      if (lastAnti?.next_due) {
+        schedulePreventiveReminder({ petName: targetPet.name, type: 'antipulgas', nextDueDate: new Date(`${lastAnti.next_due}T09:00:00`) }).catch(() => {});
       }
-    } catch (e: any) {
-      setError(e.message ?? 'Error cargando datos');
+      if (lastDes?.next_due) {
+        schedulePreventiveReminder({ petName: targetPet.name, type: 'desparasitante', nextDueDate: new Date(`${lastDes.next_due}T09:00:00`) }).catch(() => {});
+      }
+    } catch (loadError) {
+      if (requestId !== petDataRequestId.current) return;
+      throw loadError;
     }
-  }, [pet?.id, isPremium]);
+  }, [user, isPremium]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    await fetchPets();
-    await fetchPetData();
-    setLoading(false);
-  }, [fetchPets, fetchPetData]);
+    try {
+      const selectedPet = await fetchPets();
+      if (selectedPet) await fetchPetData(selectedPet);
+    } catch (loadError) {
+      reportLoadError(loadError, 'refresh');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchPets, fetchPetData, reportLoadError]);
 
   // Initial load: fetch pets
   useEffect(() => {
@@ -200,14 +243,18 @@ export function usePet(): PetData {
       setLoading(false);
       return;
     }
-    fetchPets().then(() => setLoading(false), () => setLoading(false));
+    fetchPets()
+      .catch(loadError => reportLoadError(loadError, 'pets_load'))
+      .finally(() => setLoading(false));
   }, [user]);
 
   // When active pet changes, fetch its data
   useEffect(() => {
     if (!pet) return;
     setLoading(true);
-    fetchPetData().then(() => setLoading(false), () => setLoading(false));
+    fetchPetData(pet)
+      .catch(loadError => reportLoadError(loadError, 'pet_data_load'))
+      .finally(() => setLoading(false));
   }, [pet?.id]);
 
   // Memoize the context value: PetProvider passes this object straight into

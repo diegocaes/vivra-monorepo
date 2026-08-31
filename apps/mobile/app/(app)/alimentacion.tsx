@@ -19,6 +19,7 @@ import { SelectField } from '../../components/ui/SelectField';
 import type { Food, Treat } from '../../types/supabase';
 import { track } from '../../lib/analytics';
 import { AddButton } from '../../components/ui/AddButton';
+import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
 
 const FOOD_OPTIONS = Object.entries(FOOD_TYPES).map(([key, label]) => ({ key, label }));
 const UNIT_OPTIONS = [
@@ -151,7 +152,8 @@ function describeFoodDuration(food: Food): { line: string; isActive: boolean } {
 
 export default function AlimentacionScreen() {
   const router = useRouter();
-  const { pet } = usePetContext();
+  const petData = usePetContext();
+  const { pet } = petData;
   const { isPremium } = useSubscription();
   const [foods, setFoods] = useState<Food[]>([]);
   const [treats, setTreats] = useState<Treat[]>([]);
@@ -401,6 +403,8 @@ export default function AlimentacionScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
+        <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
+
         {/* Stats card — averages and trazabilidad. No countdown, no alarm. */}
         {stats.totalBags > 0 ? (
           <Card>

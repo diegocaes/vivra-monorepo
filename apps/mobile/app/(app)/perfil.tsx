@@ -22,6 +22,8 @@ import { useSubscription } from '../../contexts/SubscriptionContext';
 import { FREE_LIMITS } from '../../constants/revenueCat';
 import { SpendingSummary } from '../../components/pet/SpendingSummary';
 import { SharePetSheet } from '../../components/pet/SharePetSheet';
+import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
+import { captureError } from '../../lib/sentry';
 import * as Linking from 'expo-linking';
 
 const THEME_COLORS = Object.entries(PetThemeColors).map(([key, hex]) => ({ key, hex }));
@@ -215,7 +217,8 @@ export default function PerfilScreen() {
                       const { error } = await supabase.functions.invoke('delete-account');
                       if (error) throw error;
                       await signOut();
-                    } catch (e: any) {
+                    } catch (deleteError) {
+                      captureError(deleteError, { phase: 'delete_account' });
                       Alert.alert('Error', 'No se pudo eliminar la cuenta. Contacta soporte.');
                     }
                   },
@@ -325,6 +328,8 @@ export default function PerfilScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
+        <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
+
         {pet ? (
           <>
             {/* Pet switcher */}

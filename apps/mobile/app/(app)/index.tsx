@@ -17,6 +17,7 @@ import { ReminderCard } from '../../components/pet/ReminderCard';
 import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
+import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
 import { Card } from '../../components/ui/Card';
 import { buildVaccineOverview, daysUntilDate, formatDate, formatGroomingServices } from '@vivra/shared';
 
@@ -527,12 +528,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Error banner */}
-        {petData.error && (
-          <Card style={styles.errorCard}>
-            <Text style={styles.errorText}>{petData.error}</Text>
-          </Card>
-        )}
+        <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
       </ScrollView>
 
     </SafeAreaView>
@@ -750,12 +746,4 @@ const styles = StyleSheet.create({
   },
   preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   preventiveBannerDesc: { fontSize: FontSize.xs, lineHeight: 17, color: Colors.muted, marginTop: 2 },
-  errorCard: {
-    backgroundColor: `${Colors.bad}12`,
-    borderColor: Colors.bad,
-  },
-  errorText: {
-    fontSize: FontSize.sm,
-    color: Colors.bad,
-  },
 });

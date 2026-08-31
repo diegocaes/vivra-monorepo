@@ -147,7 +147,15 @@ if (Astro.request.method === 'POST') {
     // 'leave_pet' to remove themselves from the share, not delete the pet.
     if (hasMultiplePets && pet && isOwner) {
       // Only delete this pet — keep the account and switch to another pet
-      await supabase.from('pets').delete().eq('id', pet.id).eq('user_id', user.id);
+      const { error: deletePetError } = await supabase
+        .from('pets')
+        .delete()
+        .eq('id', pet.id)
+        .eq('user_id', user.id);
+      if (deletePetError) {
+        console.error('[delete_account] pet deletion failed:', deletePetError);
+        return Astro.redirect('/perfil?error=delete_failed');
+      }
       const remaining = pets.filter(p => p.id !== pet.id);
       const nextPet = remaining[0];
       Astro.cookies.set('active_pet_id', nextPet.id, {
@@ -169,18 +177,20 @@ if (Astro.request.method === 'POST') {
       // suscripción de Paddle si existe. Un solo camino de borrado para todo.
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.access_token) {
-          const res = await fetch(`${import.meta.env.PUBLIC_SUPABASE_URL}/functions/v1/delete-account`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'apikey': import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
-            },
-          });
-          if (!res.ok) {
-            console.error('[delete_account] edge function failed:', res.status, await res.text());
-            return Astro.redirect('/perfil?error=delete_failed');
-          }
+        if (!session?.access_token) {
+          console.error('[delete_account] missing authenticated session');
+          return Astro.redirect('/login');
+        }
+        const res = await fetch(`${import.meta.env.PUBLIC_SUPABASE_URL}/functions/v1/delete-account`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
+          },
+        });
+        if (!res.ok) {
+          console.error('[delete_account] edge function failed:', res.status, await res.text());
+          return Astro.redirect('/perfil?error=delete_failed');
         }
       } catch (e) {
         console.error('[delete_account] edge function threw:', e);
@@ -384,6 +394,11 @@ const origin = new URL(Astro.request.url).origin;
 ---
 
 <MainLayout title={isNew ? 'Registra a tu mascota' : 'Perfil'}>
+  {errorParam === 'delete_failed' && (
+    <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+      No se pudo completar la eliminación. Tu cuenta sigue activa y puedes intentarlo nuevamente.
+    </div>
+  )}
   {isNew ? (
     <div class="mb-6 animate-fade-up">
       <!-- Hero welcome card -->

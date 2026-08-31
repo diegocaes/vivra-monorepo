@@ -8,6 +8,7 @@ import { usePetContext } from '../../../contexts/PetContext';
 import { useVitality } from '../../../hooks/useVitality';
 import { VitalityWidget } from '../../../components/pet/VitalityWidget';
 import { Card } from '../../../components/ui/Card';
+import { DataLoadNotice } from '../../../components/shared/DataLoadNotice';
 
 interface NavCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -71,6 +72,8 @@ export default function SaludScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
         }
       >
+
+        <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
 
         {vitality && (
           <VitalityWidget
