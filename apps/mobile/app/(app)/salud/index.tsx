@@ -179,7 +179,7 @@ export default function SaludScreen() {
           iconColor="#8B5CF6"
           title="Grooming"
           subtitle="Baños y cortes"
-          onPress={() => router.push('/(app)/actividad/grooming?from=salud' as any)}
+          onPress={() => router.push('/grooming?from=salud' as any)}
           badge={petData.groomings.length > 0 ? `${petData.groomings.length}` : undefined}
         />
 

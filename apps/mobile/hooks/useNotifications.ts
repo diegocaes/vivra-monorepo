@@ -18,7 +18,7 @@ function hrefToMobileRoute(href: string | undefined): string {
   if (href.includes('vacunas')) return '/(app)/salud/vacunas';
   if (href.includes('peso')) return '/(app)/salud/peso';
   if (href.includes('alimentacion')) return '/(app)/alimentacion';
-  if (href.includes('grooming')) return '/(app)/actividad/grooming';
+  if (href.includes('grooming')) return '/grooming?from=salud';
   if (href.includes('perfil')) return '/(app)/perfil';
   if (href.includes('salud')) return '/(app)/salud';
   return '/(app)';
@@ -115,7 +115,7 @@ export async function requestPushPermissionAndRegister(): Promise<boolean> {
  *   daily_activity      — 7pm "did you walk your dog?" (removed in R1)
  *   walk_reminder       — older variant of the same
  *   activity_reminder   — older variant of the same
- *   grooming_reminder   — removed in R1 (now in /actividad/grooming)
+ *   grooming_reminder   — removed in R1 (now in /grooming)
  *   adventure_reminder  — adventures feature was dropped entirely
  *   food_reminder       — decided in R5 not to nag about food
  */

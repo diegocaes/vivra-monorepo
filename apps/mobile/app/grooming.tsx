@@ -3,8 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
-import { supabase } from '../../../lib/supabase';
+import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/theme';
+import { supabase } from '../lib/supabase';
 import {
   formatDate,
   formatGroomingServices,
@@ -12,18 +12,18 @@ import {
   GROOMING_TYPES,
   normalizeGroomingServices,
 } from '@vivra/shared';
-import { DatePickerField } from '../../../components/ui/DatePickerField';
-import { usePetContext } from '../../../contexts/PetContext';
-import { Card } from '../../../components/ui/Card';
-import { Button } from '../../../components/ui/Button';
-import { BottomSheet } from '../../../components/ui/BottomSheet';
-import { FormField } from '../../../components/ui/FormField';
+import { DatePickerField } from '../components/ui/DatePickerField';
+import { usePetContext } from '../contexts/PetContext';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { BottomSheet } from '../components/ui/BottomSheet';
+import { FormField } from '../components/ui/FormField';
 import type { Grooming } from '@vivra/shared/lib/database';
-import { track } from '../../../lib/analytics';
-import { AddButton } from '../../../components/ui/AddButton';
-import { HistoryChart } from '../../../components/pet/HistoryChart';
-import { useSubscription } from '../../../contexts/SubscriptionContext';
-import { groomingBackRoute } from '../../../lib/careNavigation';
+import { track } from '../lib/analytics';
+import { AddButton } from '../components/ui/AddButton';
+import { HistoryChart } from '../components/pet/HistoryChart';
+import { useSubscription } from '../contexts/SubscriptionContext';
+import { groomingBackRoute } from '../lib/careNavigation';
 
 const GROOMING_OPTIONS = Object.entries(GROOMING_TYPES).map(([key, label]) => ({ key, label }));
 
@@ -133,12 +133,12 @@ export default function GroomingScreen() {
     ? Math.floor((Date.now() - new Date(lastGrooming.date).getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
-  // `actividad` is a hidden tab that used to remember its last child (often
-  // Vuelos). A generic router.back() could therefore open that stale screen.
-  // Navigate to the visible tab that opened Grooming instead of replacing a
-  // route inside the hidden stack.
+  // Grooming lives above the tabs, so both the native iOS swipe and this
+  // button return to the exact tab that opened it. The explicit route is only
+  // a fallback for direct links without navigation history.
   const handleBack = () => {
-    router.navigate(groomingBackRoute(from) as any);
+    if (router.canGoBack()) router.back();
+    else router.replace(groomingBackRoute(from) as any);
   };
 
   const toggleService = (key: string) => {

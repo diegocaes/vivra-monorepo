@@ -12,6 +12,7 @@ import { OfflineBanner } from '../components/shared/OfflineBanner';
 import { AppErrorBoundary } from '../components/shared/AppErrorBoundary';
 import { AuthProvider } from '../contexts/AuthContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
+import { PetProvider } from '../contexts/PetContext';
 import { captureError, initSentry, setSentryUser } from '../lib/sentry';
 
 const PET_LOOKUP_TIMEOUT_MS = 8_000;
@@ -163,17 +164,21 @@ function RootLayoutContent() {
     /* Va en el layout raíz (no en (app)) porque /paywall vive fuera del
        grupo (app) y usePet también consume el estado de suscripción. */
     <SubscriptionProvider>
-      <StatusBar style="dark" />
-      <OfflineBanner />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(app)" />
-        <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-      </Stack>
+      <PetProvider>
+        <StatusBar style="dark" />
+        <OfflineBanner />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(app)" />
+          <Stack.Screen name="grooming" />
+          <Stack.Screen name="pasaporte" />
+          <Stack.Screen name="notificaciones" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="referidos" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="paywall" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="invite/[token]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        </Stack>
+      </PetProvider>
     </SubscriptionProvider>
   );
 }

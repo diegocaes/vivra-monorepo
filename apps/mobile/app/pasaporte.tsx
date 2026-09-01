@@ -3,11 +3,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
-import { supabase } from '../../../lib/supabase';
-import { usePetContext } from '../../../contexts/PetContext';
+import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import { usePetContext } from '../contexts/PetContext';
 import { calculateAge, formatDate } from '@vivra/shared';
-import { passportBackRoute } from '../../../lib/careNavigation';
+import { passportBackRoute } from '../lib/careNavigation';
 
 interface FlightRow {
   id: string;
@@ -46,10 +46,11 @@ export default function PasaporteScreen() {
     Linking.openURL(`https://vivrapet.com/print?petId=${pet.id}`).catch(() => {});
   }, [pet?.id]);
 
-  // Never fall back to the hidden `actividad` tab history: it may still point
-  // at the disabled Vuelos screen from an older session.
+  // Pasaporte lives above the tabs, so the native iOS swipe and this button
+  // both return to Perfil. The explicit route covers direct links.
   const handleBack = () => {
-    router.navigate(passportBackRoute() as any);
+    if (router.canGoBack()) router.back();
+    else router.replace(passportBackRoute() as any);
   };
 
   if (!pet) {

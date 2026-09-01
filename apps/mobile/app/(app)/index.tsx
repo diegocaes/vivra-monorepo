@@ -451,7 +451,7 @@ export default function DashboardScreen() {
               }
               lastDate={petData.groomings[0]?.date ?? null}
               emptyText="Sin baños registrados"
-              onPress={() => router.navigate('/(app)/actividad/grooming?from=inicio' as any)}
+              onPress={() => router.push('/grooming?from=inicio' as any)}
             />
           </View>
           <View style={styles.careCol}>

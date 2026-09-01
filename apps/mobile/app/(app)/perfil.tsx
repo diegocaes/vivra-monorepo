@@ -411,7 +411,7 @@ export default function PerfilScreen() {
             <Card>
               <TouchableOpacity
                 style={styles.coOwnerRow}
-                onPress={() => router.push('/(app)/actividad/pasaporte' as any)}
+                onPress={() => router.push('/pasaporte' as any)}
                 activeOpacity={0.7}
               >
                 <Ionicons name="document-text-outline" size={20} color={Colors.accent} />

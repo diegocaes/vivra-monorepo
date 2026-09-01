@@ -3,7 +3,6 @@ import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StackActions } from '@react-navigation/native';
 import { Colors, FontSize, FontWeight } from '../../constants/theme';
-import { PetProvider } from '../../contexts/PetContext';
 import { track } from '../../lib/analytics';
 
 export default function AppLayout() {
@@ -13,12 +12,10 @@ export default function AppLayout() {
     track('screen_view', pathname || '/');
   }, [pathname]);
 
+  // The app has four lightweight tabs. Keeping them mounted is safer than
+  // letting native-screens detach or freeze a nested stack mid-transition:
+  // on some iOS devices that produced an intermittent blank content area.
   return (
-    <PetProvider>
-    {/* The app has four lightweight tabs. Keeping them mounted is safer than
-        letting native-screens detach or freeze a nested stack mid-transition:
-        on some iOS devices that produced an intermittent blank content area
-        when moving between Inicio, Salud, Comida and Perfil. */}
     <Tabs
       detachInactiveScreens={false}
       screenOptions={{
@@ -85,7 +82,7 @@ export default function AppLayout() {
           ),
         }}
       />
-      {/* Not a tab: holds Grooming from Inicio/Salud and Pasaporte from Perfil. */}
+      {/* Legacy hidden route: Vuelos remains unavailable in the tab bar. */}
       <Tabs.Screen name="actividad" options={{ href: null }} />
       <Tabs.Screen
         name="perfil"
@@ -98,6 +95,5 @@ export default function AppLayout() {
         }}
       />
     </Tabs>
-    </PetProvider>
   );
 }
