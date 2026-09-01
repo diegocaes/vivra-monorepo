@@ -135,9 +135,10 @@ export default function GroomingScreen() {
 
   // `actividad` is a hidden tab that used to remember its last child (often
   // Vuelos). A generic router.back() could therefore open that stale screen.
-  // Return explicitly to the visible section that opened Grooming.
+  // Navigate to the visible tab that opened Grooming instead of replacing a
+  // route inside the hidden stack.
   const handleBack = () => {
-    router.replace(groomingBackRoute(from));
+    router.navigate(groomingBackRoute(from) as any);
   };
 
   const toggleService = (key: string) => {

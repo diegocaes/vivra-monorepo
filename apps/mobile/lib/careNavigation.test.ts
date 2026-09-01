@@ -12,9 +12,7 @@ describe('care detail navigation', () => {
     expect(groomingBackRoute('vuelos')).toBe('/(app)/salud');
   });
 
-  it('returns Pasaporte to Perfil or Salud, never to actividad', () => {
-    expect(passportBackRoute('perfil')).toBe('/(app)/perfil');
-    expect(passportBackRoute('salud')).toBe('/(app)/salud');
-    expect(passportBackRoute(undefined)).toBe('/(app)/salud');
+  it('returns Pasaporte to Perfil, its only entry point', () => {
+    expect(passportBackRoute()).toBe('/(app)/perfil');
   });
 });

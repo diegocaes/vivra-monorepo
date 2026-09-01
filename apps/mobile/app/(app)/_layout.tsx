@@ -85,7 +85,7 @@ export default function AppLayout() {
           ),
         }}
       />
-      {/* Not a tab: holds grooming/pasaporte/vuelos routes reached from Salud y Perfil */}
+      {/* Not a tab: holds Grooming from Inicio/Salud and Pasaporte from Perfil. */}
       <Tabs.Screen name="actividad" options={{ href: null }} />
       <Tabs.Screen
         name="perfil"

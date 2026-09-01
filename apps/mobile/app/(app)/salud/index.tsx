@@ -182,14 +182,6 @@ export default function SaludScreen() {
           onPress={() => router.push('/(app)/actividad/grooming?from=salud' as any)}
           badge={petData.groomings.length > 0 ? `${petData.groomings.length}` : undefined}
         />
-        <NavCard
-          testID="health-passport"
-          icon="document-text"
-          iconColor="#3B82F6"
-          title="Pasaporte"
-          subtitle="Identidad, vacunas y viajes"
-          onPress={() => router.push('/(app)/actividad/pasaporte?from=salud' as any)}
-        />
 
         {/* Disclaimer: the score is informational, not diagnostic */}
         <Text style={styles.disclaimer}>
