@@ -93,12 +93,23 @@ export function DatePickerField({
 
       {/* iOS: bottom sheet modal */}
       {Platform.OS === 'ios' && (
-        <Modal visible={show} transparent animationType="slide">
+        <Modal
+          visible={show}
+          transparent
+          animationType="slide"
+          presentationStyle="overFullScreen"
+          onRequestClose={() => setShow(false)}
+        >
           <Pressable style={styles.backdrop} onPress={() => setShow(false)} />
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{label}</Text>
-              <TouchableOpacity onPress={() => setShow(false)}>
+              <TouchableOpacity
+                style={styles.doneTouch}
+                onPress={() => setShow(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar selector de fecha"
+              >
                 <Text style={styles.doneBtn}>Listo</Text>
               </TouchableOpacity>
             </View>
@@ -199,6 +210,8 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl + 8,
   },
   sheetHeader: {
+    width: '100%',
+    minHeight: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -208,9 +221,17 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.cardBorder,
   },
   sheetTitle: {
+    flex: 1,
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.ink,
+    paddingRight: Spacing.md,
+  },
+  doneTouch: {
+    minWidth: 52,
+    minHeight: 44,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   doneBtn: {
     fontSize: FontSize.md,

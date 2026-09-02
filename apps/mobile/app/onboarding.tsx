@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -36,7 +37,7 @@ const PENDING_REF_KEY = 'pending_referral';
 
 const STEPS = [
   { title: 'Bienvenida', subtitle: '¡Conozcamos a tu mascota!' },
-  { title: 'Raza', subtitle: 'Qué raza es?' },
+  { title: 'Raza', subtitle: '¿Qué raza es?' },
   { title: 'Datos básicos', subtitle: 'Unos detalles más' },
 ];
 
@@ -66,7 +67,7 @@ export default function OnboardingScreen() {
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
-  const progress = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
 
   // Form state
   const [petName, setPetName] = useState('');
@@ -424,11 +425,24 @@ const animateProgress = (toStep: number) => {
         {/* Content */}
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, step === 1 && styles.contentFill]}
+          scrollEnabled={step !== 1}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.titleSection}>
+          {step === 0 && (
+            <View style={styles.welcomeIllustration}>
+              <Image
+                source={require('../assets/images/paywall-pets-v2.png')}
+                style={styles.welcomeIllustrationImage}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+          )}
+
+          <View style={[styles.titleSection, step === 0 && styles.titleSectionFirst]}>
             <Text style={styles.title}>{STEPS[step].subtitle}</Text>
           </View>
 
@@ -467,7 +481,7 @@ const animateProgress = (toStep: number) => {
                     <Ionicons
                       name={opt.icon}
                       size={30}
-                      color={species === opt.key ? Colors.accent : Colors.muted}
+                      color={species === opt.key ? Colors.white : Colors.muted}
                       style={styles.speciesEmoji}
                     />
                     <Text style={[styles.speciesText, species === opt.key && styles.speciesTextActive]}>
@@ -504,19 +518,38 @@ const animateProgress = (toStep: number) => {
                 value={breedSearch}
                 onChangeText={setBreedSearch}
                 autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
               />
-              <ScrollView style={styles.breedList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={styles.breedList}
+                contentContainerStyle={styles.breedListContent}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+              >
                 {filteredBreeds.map(b => (
                   <TouchableOpacity
                     key={b}
                     style={[styles.breedOption, breed === b && styles.breedOptionActive]}
-                    onPress={() => { setBreed(b); setBreedSearch(''); }}
+                    onPress={() => {
+                      setBreed(b);
+                      setBreedSearch('');
+                      Keyboard.dismiss();
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.breedText, breed === b && styles.breedTextActive]}>{b}</Text>
                     {breed === b && <Ionicons name="checkmark-circle" size={20} color={Colors.accent} />}
                   </TouchableOpacity>
                 ))}
+                {filteredBreeds.length === 0 && (
+                  <Text style={styles.emptyBreedText}>
+                    No encontramos esa raza. Puedes buscar otra o elegir “Other”.
+                  </Text>
+                )}
               </ScrollView>
             </View>
           )}
@@ -636,7 +669,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
   },
+  contentFill: { flex: 1 },
   titleSection: { marginBottom: Spacing.xl },
+  titleSectionFirst: { marginBottom: Spacing.lg },
   title: {
     fontSize: FontSize.xxl,
     fontWeight: FontWeight.bold,
@@ -647,7 +682,20 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.muted,
     lineHeight: 23,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  welcomeIllustration: {
+    height: 86,
+    marginBottom: Spacing.md,
+    borderRadius: Radius.xl,
+    backgroundColor: '#FDF8F1',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomeIllustrationImage: {
+    width: '100%',
+    height: '100%',
   },
   firstFieldLabel: {
     fontSize: FontSize.sm,
@@ -681,7 +729,8 @@ const styles = StyleSheet.create({
     color: Colors.ink,
     marginBottom: Spacing.md,
   },
-  breedList: { maxHeight: 340 },
+  breedList: { flex: 1 },
+  breedListContent: { paddingBottom: Spacing.md },
   breedOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -694,6 +743,14 @@ const styles = StyleSheet.create({
   breedOptionActive: { backgroundColor: Colors.accentLight },
   breedText: { fontSize: FontSize.md, color: Colors.ink },
   breedTextActive: { color: Colors.accent, fontWeight: FontWeight.semibold },
+  emptyBreedText: {
+    fontSize: FontSize.sm,
+    lineHeight: 20,
+    color: Colors.muted,
+    textAlign: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+  },
   fieldLabel: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,

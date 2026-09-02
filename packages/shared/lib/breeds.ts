@@ -16,6 +16,7 @@ export const DOG_BREEDS = [
   'Jack Russell Terrier',
   'Labrador Retriever',
   'Maltese',
+  'Maltipoo',
   'Pitbull',
   'Poodle',
   'Pomeranian',
