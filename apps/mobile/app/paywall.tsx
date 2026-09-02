@@ -1,11 +1,13 @@
+import { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../constants/theme';
-import { PREMIUM_FEATURES } from '../constants/revenueCat';
+import { ENTITLEMENT_ID, PREMIUM_FEATURES } from '../constants/revenueCat';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { PACKAGE_TYPE } from 'react-native-purchases';
+import { PACKAGE_TYPE, type PurchasesPackage } from 'react-native-purchases';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { track } from '../lib/analytics';
 
 const PRIVACY_URL = 'https://vivrapet.com/privacy';
@@ -13,7 +15,23 @@ const TERMS_URL = 'https://vivrapet.com/terms';
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { packages, purchase, restore, isLoading, refresh } = useSubscription();
+  const {
+    packages,
+    paywallOffering,
+    purchase,
+    restore,
+    isPremium,
+    isLoading,
+    refresh,
+  } = useSubscription();
+  const activePlan = useRef<'anual' | 'mensual' | 'otro'>('otro');
+  const transactionInProgress = useRef(false);
+
+  // A web, referral, promo or shared Premium user must never see a RevenueCat
+  // paywall just because Apple has no entitlement for that account.
+  useEffect(() => {
+    if (!isLoading && isPremium && !transactionInProgress.current) router.back();
+  }, [isLoading, isPremium, router]);
 
   const monthly = packages.find(p => p.packageType === PACKAGE_TYPE.MONTHLY);
   const yearly = packages.find(p => p.packageType === PACKAGE_TYPE.ANNUAL);
@@ -26,23 +44,103 @@ export default function PaywallScreen() {
     // Se registran intento y resultado por separado: la diferencia entre los
     // dos ES la tasa de abandono en el momento de pagar.
     const plan = pkg === yearly ? 'anual' : 'mensual';
+    transactionInProgress.current = true;
     track('click', `compra_intento_${plan}`);
     const success = await purchase(pkg);
     track('click', `compra_${success ? 'exito' : 'abandono'}_${plan}`);
     if (success) {
       router.back();
+    } else {
+      transactionInProgress.current = false;
     }
   }
 
   async function handleRestore() {
+    transactionInProgress.current = true;
     track('click', 'restaurar_compra');
     const success = await restore();
     if (success) {
       Alert.alert('Compra restaurada', 'Tu suscripción Premium ha sido restaurada.');
       router.back();
     } else {
+      transactionInProgress.current = false;
       Alert.alert('Sin compras', 'No se encontraron compras anteriores.');
     }
+  }
+
+  function getPlan(pkg: PurchasesPackage): 'anual' | 'mensual' | 'otro' {
+    if (pkg.packageType === PACKAGE_TYPE.ANNUAL) return 'anual';
+    if (pkg.packageType === PACKAGE_TYPE.MONTHLY) return 'mensual';
+    return 'otro';
+  }
+
+  if (!isLoading && !isPremium && paywallOffering) {
+    return (
+      <RevenueCatUI.Paywall
+        style={styles.revenueCatPaywall}
+        options={{ offering: paywallOffering, displayCloseButton: true }}
+        onPurchaseStarted={({ packageBeingPurchased }) => {
+          transactionInProgress.current = true;
+          activePlan.current = getPlan(packageBeingPurchased);
+          track('click', `compra_intento_${activePlan.current}`);
+        }}
+        onPurchaseCompleted={({ customerInfo }) => {
+          const premium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+          track('click', `compra_${premium ? 'exito' : 'sin_entitlement'}_${activePlan.current}`);
+          if (premium) {
+            router.back();
+            void refresh();
+          } else {
+            transactionInProgress.current = false;
+            void refresh();
+            Alert.alert(
+              'Compra pendiente',
+              'Apple confirmó la compra, pero Premium todavía no se activó. Usa “Restaurar compras” en unos segundos.',
+            );
+          }
+        }}
+        onPurchaseCancelled={() => {
+          transactionInProgress.current = false;
+          track('click', `compra_abandono_${activePlan.current}`);
+        }}
+        onPurchaseError={({ error }) => {
+          transactionInProgress.current = false;
+          console.error('RevenueCat paywall purchase error:', error);
+          track('click', `compra_error_${activePlan.current}`);
+          Alert.alert('Error de compra', 'No se pudo completar la compra. Intenta de nuevo.');
+        }}
+        onRestoreStarted={() => {
+          transactionInProgress.current = true;
+          track('click', 'restaurar_compra');
+        }}
+        onRestoreCompleted={({ customerInfo }) => {
+          const premium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
+          if (premium) {
+            Alert.alert('Compra restaurada', 'Tu suscripción Premium ha sido restaurada.');
+            router.back();
+            void refresh();
+          } else {
+            transactionInProgress.current = false;
+            void refresh();
+            Alert.alert('Sin compras', 'No se encontraron compras anteriores.');
+          }
+        }}
+        onRestoreError={({ error }) => {
+          transactionInProgress.current = false;
+          console.error('RevenueCat paywall restore error:', error);
+          Alert.alert('No se pudo restaurar', 'Intenta de nuevo en unos segundos.');
+        }}
+        onDismiss={() => router.back()}
+      />
+    );
+  }
+
+  if (!isLoading && isPremium) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator color={Colors.accent} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -181,6 +279,15 @@ export default function PaywallScreen() {
 }
 
 const styles = StyleSheet.create({
+  revenueCatPaywall: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.canvas,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.canvas,

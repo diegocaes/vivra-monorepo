@@ -15,6 +15,11 @@ export const PRODUCT_IDS = {
 // Entitlement identifier — configured in RevenueCat dashboard
 export const ENTITLEMENT_ID = 'premium';
 
+// Paywall v2 lives in its own Offering while it is tested. The App Store
+// version currently under review still uses `default`; this identifier is only
+// consumed by the next native build, where the old paywall remains a fallback.
+export const PAYWALL_OFFERING_ID = 'paywall_v2_test';
+
 // Free plan limits — multi-mascota es FREE (estrategia de retención 2026-07)
 export const FREE_LIMITS = {
   MAX_PETS: 10,

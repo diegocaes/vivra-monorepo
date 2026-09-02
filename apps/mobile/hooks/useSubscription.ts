@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from 'react-native';
-import Purchases, { type PurchasesPackage, type CustomerInfo } from 'react-native-purchases';
-import { ENTITLEMENT_ID } from '../constants/revenueCat';
+import Purchases, {
+  type CustomerInfo,
+  type PurchasesOffering,
+  type PurchasesPackage,
+} from 'react-native-purchases';
+import { ENTITLEMENT_ID, PAYWALL_OFFERING_ID } from '../constants/revenueCat';
 import { useAuth } from './useAuth';
 import { supabase } from '../lib/supabase';
 import {
@@ -15,6 +19,7 @@ interface SubscriptionState {
   isLoading: boolean;
   packages: PurchasesPackage[];
   currentOffering: string | null;
+  paywallOffering: PurchasesOffering | null;
   purchase: (pkg: PurchasesPackage) => Promise<boolean>;
   restore: () => Promise<boolean>;
   refresh: () => Promise<void>;
@@ -35,6 +40,7 @@ export function useSubscriptionState(): SubscriptionState {
   const [isLoading, setIsLoading] = useState(true);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [currentOffering, setCurrentOffering] = useState<string | null>(null);
+  const [paywallOffering, setPaywallOffering] = useState<PurchasesOffering | null>(null);
 
   // Initialize RevenueCat.
   // No se pueden agregar `checkSubscription`/`loadOfferings` a las deps: son
@@ -171,18 +177,24 @@ export function useSubscriptionState(): SubscriptionState {
   const loadOfferings = useCallback(async () => {
     if (!canUseNativeRevenueCat()) {
       setCurrentOffering(null);
+      setPaywallOffering(null);
       setPackages([]);
       return;
     }
 
     try {
       const offerings = await Purchases.getOfferings();
-      if (offerings.current) {
-        setCurrentOffering(offerings.current.identifier);
-        setPackages(offerings.current.availablePackages);
-      }
+      // The new RevenueCat paywall is deliberately attached to an isolated
+      // Offering. If it is unavailable for any reason, the existing `default`
+      // Offering and the hand-built paywall continue to work.
+      const revenueCatPaywallOffering = offerings.all[PAYWALL_OFFERING_ID] ?? null;
+      const packageOffering = revenueCatPaywallOffering ?? offerings.current;
+      setPaywallOffering(revenueCatPaywallOffering);
+      setCurrentOffering(packageOffering?.identifier ?? null);
+      setPackages(packageOffering?.availablePackages ?? []);
     } catch (e) {
       console.error('Load offerings error:', e);
+      setPaywallOffering(null);
     }
   }, []);
 
@@ -226,7 +238,25 @@ export function useSubscriptionState(): SubscriptionState {
   // Memoizado: el valor va a un Context, así que una identidad nueva en cada
   // render re-renderizaría a TODOS los consumidores sin que nada haya cambiado.
   return useMemo(
-    () => ({ isPremium, isLoading, packages, currentOffering, purchase, restore, refresh }),
-    [isPremium, isLoading, packages, currentOffering, purchase, restore, refresh],
+    () => ({
+      isPremium,
+      isLoading,
+      packages,
+      currentOffering,
+      paywallOffering,
+      purchase,
+      restore,
+      refresh,
+    }),
+    [
+      isPremium,
+      isLoading,
+      packages,
+      currentOffering,
+      paywallOffering,
+      purchase,
+      restore,
+      refresh,
+    ],
   );
 }
