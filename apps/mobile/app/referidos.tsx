@@ -118,11 +118,11 @@ export default function ReferidosScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity style={styles.headerSide} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Volver">
             <Ionicons name="chevron-back" size={24} color={Colors.ink} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Referidos</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSide} />
         </View>
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={Colors.accent} />
@@ -136,11 +136,11 @@ export default function ReferidosScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <TouchableOpacity style={styles.headerSide} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Volver">
             <Ionicons name="chevron-back" size={24} color={Colors.ink} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Referidos</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSide} />
         </View>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.heroSection}>
@@ -174,11 +174,11 @@ export default function ReferidosScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header bar */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Volver">
           <Ionicons name="chevron-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Referidos</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.headerSide} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -287,7 +287,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+    minHeight: 60,
+  },
+  headerSide: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontSize: FontSize.lg,

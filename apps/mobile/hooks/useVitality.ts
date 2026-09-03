@@ -3,7 +3,7 @@ import { calculateVitalityScore, type VitalityScoreResult, type ScoreInput } fro
 import type { PetData } from './usePet';
 
 export function useVitality(petData: PetData): VitalityScoreResult | null {
-  const { pet, vaccines, weightRecords, foods, vetVisits, groomings, bloodTests, preventives } = petData;
+  const { pet, vaccines, weightRecords, foods, vetVisits, groomings, preventives } = petData;
 
   return useMemo(() => {
     if (!pet) return null;
@@ -30,10 +30,9 @@ export function useVitality(petData: PetData): VitalityScoreResult | null {
         start_date: f.start_date,
         created_at: f.created_at,
       })),
-      bloodTests: bloodTests.map(b => ({ date: b.date })),
       preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given, next_due: p.next_due })),
     };
 
     return calculateVitalityScore(input);
-  }, [pet, vaccines, weightRecords, foods, vetVisits, groomings, bloodTests, preventives]);
+  }, [pet, vaccines, weightRecords, foods, vetVisits, groomings, preventives]);
 }

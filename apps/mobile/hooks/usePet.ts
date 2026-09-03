@@ -32,8 +32,6 @@ export interface PetData {
   foods: Pick<Food, 'brand' | 'daily_grams' | 'bag_size' | 'bag_unit' | 'type' | 'food_type' | 'start_date' | 'end_date' | 'price' | 'notes' | 'created_at'>[];
   vetVisits: { date: string; reason: string; location: string | null }[];
   groomings: { type: string; services: string[] | null; date: string; location: string | null; groomer_name: string | null }[];
-  /** Blood test records sorted by date desc. Used for the vitality score bonus + reminder. */
-  bloodTests: { date: string }[];
   /** All preventives sorted by date_given desc. 'combinado' counts as both antipulgas + desparasitante. */
   preventives: PreventiveRow[];
   lastAntipulgas: { date_given: string; next_due: string | null; product_name: string | null } | null;
@@ -55,7 +53,6 @@ export function usePet(): PetData {
   const [foods, setFoods] = useState<PetData['foods']>([]);
   const [vetVisits, setVetVisits] = useState<PetData['vetVisits']>([]);
   const [groomings, setGroomings] = useState<PetData['groomings']>([]);
-  const [bloodTests, setBloodTests] = useState<PetData['bloodTests']>([]);
   const [preventives, setPreventives] = useState<PreventiveRow[]>([]);
   const [lastAntipulgas, setLastAntipulgas] = useState<PetData['lastAntipulgas']>(null);
   const [lastDesparasitante, setLastDesparasitante] = useState<PetData['lastDesparasitante']>(null);
@@ -146,7 +143,6 @@ export function usePet(): PetData {
         foodsRes,
         visitsRes,
         groomingsRes,
-        bloodTestsRes,
         preventivesRes,
         coOwnersRes,
       ] = await Promise.all([
@@ -155,7 +151,6 @@ export function usePet(): PetData {
         supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', targetPet.id).order('created_at', { ascending: false }),
         supabase.from('vet_visits').select('date, reason, location').eq('pet_id', targetPet.id).order('date', { ascending: false }),
         supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', targetPet.id).order('date', { ascending: false }),
-        supabase.from('blood_tests').select('date').eq('pet_id', targetPet.id).order('date', { ascending: false }),
         supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', targetPet.id).order('date_given', { ascending: false }),
         user && targetPet.user_id === user.id
           ? supabase
@@ -171,7 +166,6 @@ export function usePet(): PetData {
         { name: 'alimentación', error: foodsRes.error },
         { name: 'visitas veterinarias', error: visitsRes.error },
         { name: 'grooming', error: groomingsRes.error },
-        { name: 'exámenes', error: bloodTestsRes.error },
         { name: 'preventivos', error: preventivesRes.error },
         { name: 'personas compartidas', error: coOwnersRes.error },
       ]);
@@ -206,7 +200,6 @@ export function usePet(): PetData {
       setFoods(foodsRes.data ?? []);
       setVetVisits(visitsRes.data ?? []);
       setGroomings(groomingsRes.data ?? []);
-      setBloodTests(bloodTestsRes.data ?? []);
       setPreventives(allPreventives);
       setLastAntipulgas(lastAnti);
       setLastDesparasitante(lastDes);
@@ -319,7 +312,6 @@ export function usePet(): PetData {
     foods,
     vetVisits,
     groomings,
-    bloodTests,
     preventives,
     lastAntipulgas,
     lastDesparasitante,
@@ -337,7 +329,6 @@ export function usePet(): PetData {
     foods,
     vetVisits,
     groomings,
-    bloodTests,
     preventives,
     lastAntipulgas,
     lastDesparasitante,

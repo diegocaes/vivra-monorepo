@@ -30,13 +30,7 @@ const [vaccinesRes, visitsRes, groomingsRes, flightsRes, preventivesRes] = await
   supabase.from('preventive_treatments').select('id, type, date_given, product_name').eq('pet_id', pet.id),
 ]);
 
-let bloodTestsData: { id: string; date: string }[] = [];
-try {
-  const { data } = await supabase.from('blood_tests').select('id, date').eq('pet_id', pet.id);
-  bloodTestsData = data ?? [];
-} catch { /* la tabla puede no existir todavía */ }
-
-type Categoria = 'vaccine' | 'vet' | 'grooming' | 'flight' | 'preventive' | 'reminder' | 'blood_test';
+type Categoria = 'vaccine' | 'vet' | 'grooming' | 'flight' | 'preventive' | 'reminder';
 
 interface Evento {
   id: string;
@@ -56,7 +50,6 @@ const CATEGORIAS: Record<Categoria, { label: string; punto: string; chip: string
   grooming:   { label: 'Estética',      punto: 'bg-pink-500',   chip: 'bg-pink-50 border-pink-100',     texto: 'text-pink-600' },
   flight:     { label: 'Vuelos',        punto: 'bg-accent',     chip: 'bg-accent/10 border-accent/20',  texto: 'text-accent' },
   preventive: { label: 'Preventivos',   punto: 'bg-green-500',  chip: 'bg-green-50 border-green-100',   texto: 'text-green-600' },
-  blood_test: { label: 'Sangre',        punto: 'bg-red-500',    chip: 'bg-red-50 border-red-100',       texto: 'text-red-600' },
   reminder:   { label: 'Recordatorios', punto: 'bg-amber-500',  chip: 'bg-amber-50 border-amber-100',   texto: 'text-amber-600' },
 };
 
@@ -103,16 +96,6 @@ for (const [tipo, ultima] of Object.entries(ultimaPorTipo)) {
     title: tipo === 'antipulgas' ? 'Próximo antipulgas' : 'Próximo desparasitante',
     subtitle: 'Siguiente dosis', category: 'reminder', icon: 'campana', href: '/salud/preventivos',
   });
-}
-
-for (const bt of bloodTestsData) {
-  eventos.push({ id: `blood-${bt.id}`, date: bt.date, title: 'Examen de sangre', subtitle: 'Análisis realizado', category: 'blood_test', icon: 'sangre', href: '/salud' });
-}
-if (bloodTestsData.length > 0) {
-  const ultimo = [...bloodTestsData].sort((a, b) => b.date.localeCompare(a.date))[0];
-  const proximo = new Date(ultimo.date + 'T00:00:00');
-  proximo.setFullYear(proximo.getFullYear() + 1);
-  eventos.push({ id: 'blood-next', date: proximo.toISOString().slice(0, 10), title: 'Próximo examen de sangre', subtitle: 'Recomendado anual', category: 'reminder', icon: 'campana', href: '/salud' });
 }
 
 const validos = eventos.filter(e => !!e.date);

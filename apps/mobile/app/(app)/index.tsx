@@ -18,7 +18,6 @@ import { CareCard } from '../../components/pet/CareCard';
 import { PetSelector } from '../../components/pet/PetSelector';
 import { DashboardSkeleton } from '../../components/shared/SkeletonLoader';
 import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
-import { Card } from '../../components/ui/Card';
 import { buildVaccineOverview, daysUntilDate, formatDate, formatGroomingServices } from '@vivra/shared';
 
 /**
@@ -287,19 +286,30 @@ export default function DashboardScreen() {
         {/* Hero card */}
         <PetHeroCard pet={petData.pet} />
 
-        {/* A newly created pet needs an invitation, not health alarms. */}
+        {/* Progressive disclosure: a brand-new profile gets one clear next
+            step. The regular dashboard appears after the first real record. */}
         {isProfileStarting && (
-          <Card style={styles.setupCard}>
-            <View style={styles.setupIcon}>
-              <Ionicons name="sparkles" size={20} color={Colors.accent} />
+          <View style={styles.startingGuide}>
+            <View style={styles.startingGuideIcon}>
+              <Ionicons name="medkit-outline" size={23} color={Colors.accent} />
             </View>
-            <View style={styles.setupCopy}>
-              <Text style={styles.setupTitle}>¡{petData.pet.name} ya está en Vivra!</Text>
-              <Text style={styles.setupText}>
-                Agrega su información poco a poco. Puedes empezar por vacunas, peso o alimentación.
+            <View style={styles.startingGuideCopy}>
+              <Text style={styles.startingGuideTitle}>Empieza con su primera vacuna</Text>
+              <Text style={styles.startingGuideText}>
+                Así comienzas el historial de {petData.pet.name}. Puedes completar lo demás poco a poco.
               </Text>
+              <TouchableOpacity
+                style={styles.startingGuideAction}
+                onPress={() => router.navigate('/(app)/salud/vacunas' as any)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Registrar primera vacuna"
+              >
+                <Text style={styles.startingGuideActionText}>Registrar vacuna</Text>
+                <Ionicons name="arrow-forward" size={16} color={Colors.accent} />
+              </TouchableOpacity>
             </View>
-          </Card>
+          </View>
         )}
 
         {/* Preventivo reminder — only after a registered treatment date passes. */}
@@ -333,24 +343,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        {isProfileStarting && (
-          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/perfil' as any)}>
-            <Card style={styles.vitalitySetupCard}>
-              <View style={styles.vitalitySetupIcon}>
-                <Ionicons name="heart-outline" size={24} color={Colors.accent} />
-              </View>
-              <View style={styles.setupCopy}>
-                <Text style={styles.vitalitySetupTitle}>Tu resumen se irá completando</Text>
-                <Text style={styles.vitalitySetupText}>
-                  Vivra organizará la información a medida que registres datos de {petData.pet.name}.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
-            </Card>
-          </TouchableOpacity>
-        )}
-
-        {(!vaccineDismissStorageKey || (
+        {!isProfileStarting && (!vaccineDismissStorageKey || (
           checkedVaccineKey === vaccineDismissStorageKey
           && dismissedVaccineKey !== vaccineDismissStorageKey
         )) && <TouchableOpacity
@@ -394,7 +387,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>}
 
         {/* Food summary — averages and trazabilidad, no countdown */}
-        {hasFood ? (
+        {!isProfileStarting && (hasFood ? (
           <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/alimentacion' as any)}>
             <FoodSummaryCard foods={petData.foods} />
           </TouchableOpacity>
@@ -408,10 +401,10 @@ export default function DashboardScreen() {
             <Text style={styles.foodCtaText}>Agrega la alimentación de {petData.pet.name}</Text>
             <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
           </TouchableOpacity>
-        )}
+        ))}
 
         {/* Care grid — 2×2 quick access. */}
-        <View style={styles.careGrid}>
+        {!isProfileStarting && <View style={styles.careGrid}>
           <View style={styles.careCol}>
             <ReminderCard
               type="antipulgas"
@@ -474,7 +467,7 @@ export default function DashboardScreen() {
               onPress={() => router.navigate('/(app)/salud/historial' as any)}
             />
           </View>
-        </View>
+        </View>}
 
         {/* Trial expiring banner */}
         {isTrial && trialDaysLeft !== null && trialDaysLeft <= 1 && (
@@ -513,7 +506,7 @@ export default function DashboardScreen() {
         )}
 
         {/* Premium upsell */}
-        {!isPremium && !isTrial && (
+        {!isProfileStarting && !isPremium && !isTrial && (
           <TouchableOpacity
             style={styles.premiumBanner}
             onPress={() => router.push('/paywall' as any)}
@@ -627,39 +620,47 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     color: Colors.ink,
   },
-  setupCard: {
+  startingGuide: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     backgroundColor: Colors.accentLight,
-    borderColor: `${Colors.accent}28`,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
   },
-  setupIcon: {
-    width: 36,
-    height: 36,
+  startingGuideIcon: {
+    width: 44,
+    height: 44,
     borderRadius: Radius.full,
     backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  setupCopy: { flex: 1 },
-  setupTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: Colors.ink },
-  setupText: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 18 },
-  vitalitySetupCard: {
+  startingGuideCopy: { flex: 1 },
+  startingGuideTitle: {
+    fontSize: FontSize.md,
+    fontWeight: FontWeight.bold,
+    color: Colors.ink,
+  },
+  startingGuideText: {
+    fontSize: FontSize.sm,
+    color: Colors.muted,
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  startingGuideAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.xs,
+    alignSelf: 'flex-start',
+    marginTop: Spacing.md,
+    minHeight: 34,
   },
-  vitalitySetupIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+  startingGuideActionText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent,
   },
-  vitalitySetupTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink },
-  vitalitySetupText: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 17 },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',

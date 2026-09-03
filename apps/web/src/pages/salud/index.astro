@@ -34,13 +34,6 @@ const [
   supabase.from('preventive_treatments').select('type, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);
 
-// Blood tests (may not exist yet)
-let bloodTests: { id: string; date: string }[] = [];
-try {
-  const { data } = await supabase.from('blood_tests').select('id, date').eq('pet_id', pet.id).order('date', { ascending: false });
-  bloodTests = data ?? [];
-} catch { /* table may not exist yet */ }
-
 const scoreInput: ScoreInput = {
   pet: {
     species: pet.species ?? 'dog',
@@ -56,7 +49,6 @@ const scoreInput: ScoreInput = {
   groomings: groomings ?? [],
   foods: foods ?? [],
   preventives: (preventives ?? []) as { type: 'antipulgas' | 'desparasitante' | 'combinado'; date_given: string }[],
-  bloodTests,
 };
 
 const score = calculateVitalityScore(scoreInput);
@@ -70,30 +62,6 @@ const latestWeight = weightRecords?.[0]?.weight_kg ?? pet.weight_kg;
 const vaccineCount = vaccines?.length ?? 0;
 const visitCount = vetVisits?.length ?? 0;
 
-// Blood test status
-const lastBloodTest = bloodTests[0] ?? null;
-const bloodTestDaysAgo = lastBloodTest
-  ? Math.floor((Date.now() - new Date(lastBloodTest.date + 'T00:00:00').getTime()) / 86400000)
-  : null;
-const bloodTestUpToDate = bloodTestDaysAgo !== null && bloodTestDaysAgo <= 365;
-
-// Handle blood test POST
-if (Astro.request.method === 'POST') {
-  const formData = await Astro.request.formData();
-  const action = formData.get('_action') as string;
-  if (action === 'add_blood_test') {
-    await supabase.from('blood_tests').insert({
-      pet_id: pet.id,
-      date: formData.get('blood_test_date') as string,
-      notes: (formData.get('blood_test_notes') as string) || null,
-    });
-    return Astro.redirect('/salud?saved=1');
-  }
-  if (action === 'delete_blood_test') {
-    await supabase.from('blood_tests').delete().eq('id', formData.get('blood_test_id') as string).eq('pet_id', pet.id);
-    return Astro.redirect('/salud?deleted=1');
-  }
-}
 ---
 
 <MainLayout title="Salud">
@@ -237,56 +205,6 @@ if (Astro.request.method === 'POST') {
       <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
     </a>
 
-    {/* Blood test annual reminder */}
-    <div class:list={['rounded-2xl bg-card border px-4 py-3.5', bloodTestUpToDate ? 'border-green-200' : 'border-amber-200']}>
-      <div class="flex items-center gap-3">
-        <div class:list={['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', bloodTestUpToDate ? 'bg-green-50' : 'bg-amber-50']}>
-          <svg class:list={['h-4 w-4', bloodTestUpToDate ? 'text-green-600' : 'text-amber-500']} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-        </div>
-        <div class="flex-1">
-          <p class="text-sm font-semibold text-ink">Examen de sangre anual</p>
-          <p class="text-[11px] text-muted">
-            {bloodTestUpToDate
-              ? `Al día · hace ${bloodTestDaysAgo} días`
-              : lastBloodTest
-                ? `Hace ${bloodTestDaysAgo} días · renovar`
-                : 'Recomendado al menos 1 vez al año'}
-          </p>
-        </div>
-        {bloodTestUpToDate ? (
-          <svg class="h-5 w-5 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        ) : (
-          <button type="button" id="toggle-blood-test-form" class="shrink-0 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors active:scale-95">
-            Registrar
-          </button>
-        )}
-      </div>
-      {!bloodTestUpToDate && (
-        <div id="blood-test-form" class="hidden mt-3 pt-3 border-t border-card-border">
-          <form method="POST" class="flex items-end gap-2">
-            <input type="hidden" name="_action" value="add_blood_test" />
-            <div class="flex-1">
-              <label class="block text-xs font-medium text-muted mb-1">Fecha del examen</label>
-              <input type="date" name="blood_test_date" required value={new Date().toISOString().split('T')[0]} class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
-            </div>
-            <div class="flex-1">
-              <label class="block text-xs font-medium text-muted mb-1">Notas (opcional)</label>
-              <input type="text" name="blood_test_notes" placeholder="Resultados, vet..." class="w-full rounded-xl border border-card-border bg-canvas px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent transition-colors" />
-            </div>
-            <button type="submit" class="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-dark transition-colors active:scale-95">
-              Guardar
-            </button>
-          </form>
-        </div>
-      )}
-      {lastBloodTest && (
-        <form method="POST" class="mt-2">
-          <input type="hidden" name="_action" value="delete_blood_test" />
-          <input type="hidden" name="blood_test_id" value={lastBloodTest.id} />
-        </form>
-      )}
-    </div>
-
     <a href="/salud/historial" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-blue-200 active:scale-95">
       <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50">
         <svg class="h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
@@ -387,14 +305,6 @@ if (Astro.request.method === 'POST') {
         });
       });
 
-      // Blood test form toggle
-      var bloodBtn = document.getElementById('toggle-blood-test-form');
-      var bloodForm = document.getElementById('blood-test-form');
-      if (bloodBtn && bloodForm) {
-        bloodBtn.addEventListener('click', function() {
-          bloodForm.classList.toggle('hidden');
-        });
-      }
     });
   </script>
 

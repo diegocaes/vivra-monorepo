@@ -72,10 +72,6 @@ export interface FoodRecord {
   created_at?: string | null;
 }
 
-export interface BloodTestRecord {
-  date: string; // ISO date
-}
-
 export interface PreventiveRecord {
   type: 'antipulgas' | 'desparasitante' | 'combinado';
   date_given: string; // ISO date
@@ -90,7 +86,6 @@ export interface ScoreInput {
   vetVisits: VetVisit[];
   groomings: GroomingRecord[];
   foods: FoodRecord[];
-  bloodTests?: BloodTestRecord[];
   /** Registros de antipulgas/desparasitante/combinado. 'combinado' cuenta como ambos. */
   preventives?: PreventiveRecord[];
 }
@@ -211,7 +206,7 @@ function isCoreVaccine(name: string): boolean {
 
 const PILLAR_DESC = {
   peso: 'Compara el peso actual con el rango ideal de la raza. Un peso saludable reduce riesgos articulares y metabólicos.',
-  cuidado: 'Evalúa vacunas, visitas al veterinario, antipulgas/desparasitante y exámenes de sangre. La prevención es la base de una vida larga.',
+  cuidado: 'Evalúa vacunas, visitas al veterinario y el cuidado preventivo contra pulgas y parásitos. La prevención es la base de una vida larga.',
   raza: 'Factores genéticos y de edad que influyen en la salud. Cada raza tiene predisposiciones específicas.',
   nutricion: 'Refleja si llevas el registro del alimento al día: marca, tipo y ración. Tener esta información organizada ayuda a tu veterinario. No evalúa si la porción es la correcta — esa la define tu vet o nutricionista.',
 } as const;
@@ -336,7 +331,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     };
   }
 
-  // Budget: vaccines 8 · vet 8 · preventives 4 · blood test bonus up to +2 → cap 20
+  // Budget: vaccines 8 · vet 8 · preventives 4 = 20.
   // Sub-score vacunas (8 pts)
   let vaccineScore = 0;
   if (vaccines.length === 0) {
@@ -419,19 +414,7 @@ function scoreCuidado(input: ScoreInput): PillarScore {
     tips.push('La próxima fecha de desparasitación ya pasó — revisa el plan con tu vet');
   }
 
-  // Bonus: examen de sangre anual (+2 pts si hay uno reciente)
-  const bloodTests = input.bloodTests ?? [];
-  const hasRecentBlood = bloodTests.some(bt => daysBetween(bt.date) <= 365);
-  let bloodBonus = 0;
-  if (hasRecentBlood) {
-    bloodBonus = 2;
-  } else if (bloodTests.length === 0) {
-    tips.push('Un examen de sangre anual ayuda a detectar problemas a tiempo');
-  } else {
-    tips.push('Ha pasado más de un año desde el último examen de sangre');
-  }
-
-  const total = clamp(vaccineScore + vetScore + preventiveScore + bloodBonus, 2, 20);
+  const total = clamp(vaccineScore + vetScore + preventiveScore, 2, 20);
   let status: string;
   if (total >= 18) status = 'Cuidado preventivo al día';
   else if (total >= 14) status = 'Buen seguimiento preventivo';
@@ -730,21 +713,6 @@ function buildFlags(input: ScoreInput): ScoreFlag[] {
         href: '/salud/historial',
       });
     }
-  }
-
-  // Recordatorio: examen de sangre anual
-  const bloodTests = input.bloodTests ?? [];
-  const hasRecentBloodTest = bloodTests.some(bt => daysBetween(bt.date) <= 365);
-  if (!hasRecentBloodTest) {
-    flags.push({
-      id: 'blood_test',
-      severity: bloodTests.length === 0 ? 'tip' : 'reminder',
-      message: bloodTests.length === 0
-        ? 'Un examen de sangre anual es clave para la detección temprana'
-        : 'Ha pasado más de un año desde el último examen de sangre',
-      action: 'Registrar examen de sangre',
-      href: '/salud/historial',
-    });
   }
 
   // Recordatorio: faltan datos clave (solo si hay pocos datos)

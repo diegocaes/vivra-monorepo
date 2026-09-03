@@ -87,13 +87,6 @@ const preventives = (allPreventives ?? []).flatMap(treatment => {
 const lastAntipulgas = preventives.filter(p => p.type === 'antipulgas' || p.type === 'combinado');
 const lastDesparasitante = preventives.filter(p => p.type === 'desparasitante' || p.type === 'combinado');
 
-// Blood tests (may not exist yet)
-let bloodTests: { date: string }[] = [];
-try {
-  const { data } = await supabase.from('blood_tests').select('date').eq('pet_id', pet.id).order('date', { ascending: false });
-  bloodTests = data ?? [];
-} catch { /* table may not exist yet */ }
-
 // Derived counts and recent items from full queries
 const vaccineCount = allVaccines?.length ?? 0;
 const visitCount = allVetVisits?.length ?? 0;
@@ -147,7 +140,6 @@ const vitalityInput: ScoreInput = {
   vetVisits: allVetVisits ?? [],
   groomings: (allGroomings ?? []).map(g => ({ date: g.date })),
   foods: (foods ?? []).filter(f => f.daily_grams && f.bag_size),
-  bloodTests,
   preventives: preventives.map(p => ({ type: p.type, date_given: p.date_given, next_due: p.next_due })),
 };
 const dashScore = calculateVitalityScore(vitalityInput);

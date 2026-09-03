@@ -192,7 +192,6 @@ Deno.serve(async (req) => {
       // Parent records are last so foreign-key dependants are already gone.
       { name: 'pets', run: () => admin.from('pets').delete().eq('user_id', userId) },
       { name: 'user_subscriptions', run: () => admin.from('user_subscriptions').delete().eq('user_id', userId) },
-      { name: 'profiles', run: () => admin.from('profiles').delete().eq('id', userId) },
     ]);
 
     // Never delete Auth if any owned data could not be removed. The account
