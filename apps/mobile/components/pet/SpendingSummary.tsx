@@ -1,15 +1,17 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useEffect, useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
-import { supabase } from '../../lib/supabase';
+import { Colors, Spacing, FontSize, FontWeight } from '../../constants/theme';
 import { Card } from '../ui/Card';
-import { formatCurrency, sumAmounts } from '@vivra/shared';
+import { formatCurrency } from '@vivra/shared';
 import { track } from '../../lib/analytics';
+import { DataLoadNotice } from '../shared/DataLoadNotice';
+import type { SpendingTotals } from '../../hooks/usePetSpending';
 
 interface SpendingSummaryProps {
-  petId: string;
+  totals: SpendingTotals | null;
+  error: unknown | null;
+  onRetry: () => Promise<void>;
   isPremium: boolean;
 }
 
@@ -20,52 +22,20 @@ interface SpendingCategory {
   total: number;
 }
 
-export function SpendingSummary({ petId, isPremium }: SpendingSummaryProps) {
+export function SpendingSummary({ totals, error, onRetry, isPremium }: SpendingSummaryProps) {
   const router = useRouter();
-  const [categories, setCategories] = useState<SpendingCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+  if (error) return <DataLoadNotice message="No pudimos cargar los gastos." onRetry={onRetry} />;
+  if (!totals) return null;
 
-  const fetchSpending = useCallback(async () => {
-    try {
-      const [vetRes, groomRes, flightRes, treatRes, prevRes, foodRes] = await Promise.all([
-        supabase.from('vet_visits').select('cost').eq('pet_id', petId),
-        supabase.from('groomings').select('cost').eq('pet_id', petId),
-        supabase.from('flights').select('ticket_price').eq('pet_id', petId),
-        supabase.from('treats').select('price').eq('pet_id', petId),
-        supabase.from('preventive_treatments').select('cost').eq('pet_id', petId),
-        supabase.from('foods').select('price').eq('pet_id', petId),
-      ]);
-
-      // Log silent errors so they surface in dev without breaking the UI.
-      for (const [name, res] of [
-        ['vet_visits', vetRes], ['groomings', groomRes], ['flights', flightRes],
-        ['treats', treatRes], ['preventive_treatments', prevRes], ['foods', foodRes],
-      ] as const) {
-        if (res.error) console.warn(`[SpendingSummary] ${name} error:`, res.error.message);
-      }
-
-      // `sumAmounts` es la misma función que usa el perfil web y la pantalla
-      // de alimentación: un solo criterio para que los totales cuadren.
-      setCategories([
-        { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: sumAmounts(foodRes.data, 'price') },
-        { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: sumAmounts(vetRes.data, 'cost') },
-        { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: sumAmounts(groomRes.data, 'cost') },
-        { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: sumAmounts(flightRes.data, 'ticket_price') },
-        { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: sumAmounts(treatRes.data, 'price') },
-        { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: sumAmounts(prevRes.data, 'cost') },
-      ]);
-    } catch (e: any) {
-      console.warn('[SpendingSummary] unexpected error:', e?.message ?? e);
-    } finally {
-      setLoading(false);
-    }
-  }, [petId]);
-
-  useEffect(() => { fetchSpending(); }, [fetchSpending]);
-
-  const grandTotal = Math.round(categories.reduce((s, c) => s + c.total, 0) * 100) / 100;
-
-  if (loading) return null;
+  const categories: SpendingCategory[] = [
+    { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: totals.alimento },
+    { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: totals.vet },
+    { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: totals.grooming },
+    { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: totals.vuelos },
+    { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: totals.snacks },
+    { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: totals.preventivos },
+  ];
+  const grandTotal = Math.round(categories.reduce((sum, category) => sum + category.total, 0) * 100) / 100;
 
   // El TOTAL es visible para todos. El desglose por categoría es premium.
   return (
@@ -125,6 +95,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   lockedLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  lockedTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
   lockedDesc: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
 });

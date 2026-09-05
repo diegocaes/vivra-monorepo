@@ -102,7 +102,7 @@ function petInitial(name: string) {
   <!-- Nav -->
   <nav class="flex-1 px-3 py-3 space-y-0.5">
     {navItems.map((item) => (
-      <a href={item.href} class:list={['sidebar-link', isActive(item.match) && 'active']} data-astro-prefetch="load">
+      <a href={item.href} class:list={['sidebar-link', isActive(item.match) && 'active']} data-astro-prefetch="hover">
         <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-icon={item.icon}>
           <use href={`#sbi-${item.icon}`} />
         </svg>

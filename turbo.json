@@ -3,22 +3,24 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "build/**", ".vercel/output/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "dist/**",
+        ".vercel/output/**"
+      ],
       "env": [
         "PUBLIC_SUPABASE_URL",
-        "PUBLIC_SUPABASE_ANON_KEY"
+        "PUBLIC_SUPABASE_ANON_KEY",
+        "PUBLIC_SENTRY_DSN"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env",
+        ".env.*",
+        "$TURBO_ROOT$/packages/shared/**"
       ]
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "lint": {
-      "dependsOn": ["^build"]
-    },
-    "typecheck": {
-      "dependsOn": ["^build"]
     }
   }
 }

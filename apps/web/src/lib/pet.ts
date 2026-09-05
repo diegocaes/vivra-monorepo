@@ -9,11 +9,35 @@ export interface PetContext {
   isOwner: boolean;
 }
 
+// Middleware creates a client per request. Reuse its in-flight result between
+// the page and layout; never share authenticated data across clients/requests.
+const petContexts = new WeakMap<SupabaseClient<Database>, {
+  userId: string;
+  activePetId: string | null;
+  result: Promise<PetContext>;
+}>();
+
 /**
  * Fetches all pets for a user (owned + shared) and returns the active one.
  * The active pet is determined by activePetId (from cookie), falling back to the first pet.
  */
-export async function getActivePet(
+export function getActivePet(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  activePetId: string | null,
+): Promise<PetContext> {
+  const cached = petContexts.get(supabase);
+  if (cached?.userId === userId && cached.activePetId === activePetId) return cached.result;
+
+  const result = fetchActivePet(supabase, userId, activePetId).catch(error => {
+    if (petContexts.get(supabase)?.result === result) petContexts.delete(supabase);
+    throw error;
+  });
+  petContexts.set(supabase, { userId, activePetId, result });
+  return result;
+}
+
+async function fetchActivePet(
   supabase: SupabaseClient<Database>,
   userId: string,
   activePetId: string | null,
@@ -29,6 +53,10 @@ export async function getActivePet(
       .select('pet_id, pets(*)')
       .eq('shared_with', userId),
   ]);
+
+  // A failed lookup is not an empty account; don't redirect it to onboarding.
+  if (ownedRes.error) throw ownedRes.error;
+  if (sharedRes.error) throw sharedRes.error;
 
   const ownedPets = ownedRes.data ?? [];
   const sharedPets = (sharedRes.data ?? [])

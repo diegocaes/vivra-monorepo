@@ -36,7 +36,7 @@ export default function WeightChart({ records }: Props) {
     record: r,
   }));
 
-  // Smooth curve path using cardinal spline
+  // Connect records in chronological order.
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
 
   const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${(PAD.top + chartH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(PAD.top + chartH).toFixed(1)} Z`;
@@ -79,11 +79,12 @@ export default function WeightChart({ records }: Props) {
       </div>
 
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+        <title>Evolución del peso</title>
         {/* Grid lines */}
-        {yTicks.map((val, i) => {
+        {yTicks.map((val) => {
           const y = PAD.top + chartH - ((val - minW) / range) * chartH;
           return (
-            <g key={i}>
+            <g key={val}>
               <line x1={PAD.left} y1={y} x2={WIDTH - PAD.right} y2={y}
                 stroke={GRID} strokeWidth="1" />
               <text x={PAD.left - 8} y={y + 4} textAnchor="end"
@@ -106,8 +107,8 @@ export default function WeightChart({ records }: Props) {
           strokeLinecap="round" strokeLinejoin="round" />
 
         {/* Data points */}
-        {points.map((p, i) => (
-          <g key={i}>
+        {points.map((p) => (
+          <g key={p.record.id}>
             <circle cx={p.x} cy={p.y} r="5" fill="white" stroke={ACCENT} strokeWidth="2.5" />
             <title>{`${p.record.weight_kg} kg — ${formatShort(p.record.date)}`}</title>
           </g>

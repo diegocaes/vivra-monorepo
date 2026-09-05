@@ -1,0 +1,32 @@
+name: Verify
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm build:web
+        env:
+          PUBLIC_SUPABASE_URL: https://example.supabase.co
+          PUBLIC_SUPABASE_ANON_KEY: local-smoke-placeholder
+      - name: Public web smoke
+        run: |
+          pnpm --filter web dev --host 127.0.0.1
+          trap 'pnpm --filter web exec astro dev logs; pnpm --filter web exec astro dev stop' EXIT
+          for attempt in {1..30}; do
+            if curl --silent --fail http://localhost:4321/login > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm smoke:web
+        env:
+          PUBLIC_SUPABASE_URL: https://example.supabase.co
+          PUBLIC_SUPABASE_ANON_KEY: local-smoke-placeholder

@@ -55,9 +55,8 @@ if (!pet) {
   return Astro.redirect('/onboarding');
 }
 
-const premium = await getPremiumStatus(supabase, user.id);
-
 const [
+  premium,
   { data: allGroomings },
   { data: allVaccines },
   { data: allVetVisits },
@@ -65,6 +64,7 @@ const [
   { data: foods },
   { data: allPreventives },
 ] = await Promise.all([
+  getPremiumStatus(supabase, user.id),
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('vaccines').select('id, name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false }),
   supabase.from('vet_visits').select('date, reason').eq('pet_id', pet.id).order('date', { ascending: false }),

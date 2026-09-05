@@ -16,6 +16,14 @@ tags:
       text: "Tab Inicio"
       selected: true
     timeout: 15000
+# The development warning toast overlaps the tab bar on iOS.
+- runFlow:
+    when:
+      visible: ".*Open debugger to view warnings.*"
+    commands:
+      - tapOn:
+          text: ".*Open debugger to view warnings.*"
+          point: "94%,50%"
 - tapOn: "Tab Salud"
 - assertVisible:
     text: "Tab Salud"

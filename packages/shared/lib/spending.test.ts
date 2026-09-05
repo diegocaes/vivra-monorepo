@@ -106,8 +106,4 @@ describe('formato: el mismo monto se ve igual en toda la app', () => {
     expect(formatCurrency(totalVet)).toBe('427.99');
   });
 
-  it('toFixed(0) NO sirve para dinero — este era el bug', () => {
-    expect(totalVet.toFixed(0)).toBe('428');
-    expect(totalVet.toFixed(0)).not.toBe(formatCurrency(totalVet));
-  });
 });

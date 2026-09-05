@@ -79,7 +79,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
             </span>
           )}
         </div>
-        {records.length >= 2 && <WeightChart records={records} client:load />}
+        {records.length >= 2 && <WeightChart records={records} />}
       </div>
 
       <MetricGrid items={[

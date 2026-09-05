@@ -121,7 +121,7 @@ describe('calculateVitalityScore', () => {
     expect(result.pillars).toHaveLength(4);
     expect(result.total).toBeGreaterThan(0);
     expect(result.total).toBeLessThanOrEqual(100);
-    result.pillars.forEach((p) => expect(p.max).toBe(25));
+    for (const pillar of result.pillars) expect(pillar.max).toBe(25);
   });
 
   it('nunca usa lenguaje alarmante en el headline', () => {

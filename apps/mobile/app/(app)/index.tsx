@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePetContext } from '../../contexts/PetContext';
 import { useVitality } from '../../hooks/useVitality';
+import { useDashboardStatus } from '../../hooks/useDashboardStatus';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { PetHeroCard } from '../../components/pet/PetHeroCard';
 import { VitalityWidget } from '../../components/pet/VitalityWidget';
@@ -94,9 +95,8 @@ export default function DashboardScreen() {
   const vitality = useVitality(petData);
   const { isPremium } = useSubscription();
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [trialDaysLeft, setTrialDaysLeft] = useState<number | null>(null);
-  const [isTrial, setIsTrial] = useState(false);
+  const { data: dashboardStatus, error: statusError, refresh: refreshStatus } = useDashboardStatus(supabase, user?.id ?? null);
+  const { unreadCount = 0, isTrial = false, trialDaysLeft = null } = dashboardStatus ?? {};
   const [dismissedVaccineKey, setDismissedVaccineKey] = useState<string | null>(null);
   const [checkedVaccineKey, setCheckedVaccineKey] = useState<string | null>(null);
   const vaccineSummary = buildVaccineSummary(petData.vaccines);
@@ -138,49 +138,14 @@ export default function DashboardScreen() {
     await AsyncStorage.setItem(vaccineDismissStorageKey, '1');
   }, [vaccineDismissStorageKey]);
 
-  // Fetch unread notification count + trial status.
-  // `refreshing` va en las deps aunque no se lea en el cuerpo: se usa como
-  // disparador para que el pull-to-refresh vuelva a traer estos contadores.
-  useEffect(() => {
-    if (!user) {
-      setUnreadCount(0);
-      setTrialDaysLeft(null);
-      setIsTrial(false);
-      return;
-    }
-    supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
-      .eq('dismissed', false)
-      .then(({ count }) => setUnreadCount(count ?? 0))
-      .then(undefined, () => {});
-
-    // Check Supabase trial status (for referral trials, independent of RevenueCat)
-    supabase
-      .from('user_subscriptions')
-      .select('plan, source, premium_until, trial_ends_at')
-      .eq('user_id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.plan === 'premium' && data?.source === 'trial' && data?.premium_until) {
-          const days = Math.max(0, Math.ceil((new Date(data.premium_until).getTime() - Date.now()) / 86400000));
-          setTrialDaysLeft(days);
-          setIsTrial(true);
-        } else {
-          setTrialDaysLeft(null);
-          setIsTrial(false);
-        }
-      })
-      .then(undefined, () => {});
-  }, [user, refreshing]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await petData.refresh();
-    setRefreshing(false);
-  }, [petData.refresh]);
+    try {
+      await Promise.all([petData.refresh(), refreshStatus()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [petData.refresh, refreshStatus]);
 
   // Loading state
   if (petData.loading && !refreshing) {
@@ -521,7 +486,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
-        <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
+        <DataLoadNotice message={petData.error ?? (statusError ? 'No pudimos cargar las notificaciones y la suscripción.' : null)} onRetry={onRefresh} />
       </ScrollView>
 
     </SafeAreaView>

@@ -2,20 +2,24 @@
   "name": "vivra-monorepo",
   "private": true,
   "scripts": {
-    "dev:web": "turbo run dev --filter=web",
-    "dev:mobile": "turbo run dev --filter=mobile",
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile dev",
     "build:web": "turbo run build --filter=web",
-    "build:shared": "turbo run build --filter=@vivra/shared",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "cd apps/mobile && npx tsc --noEmit && cd ../web && npx astro check",
-    "db:types": "npx --yes supabase@2.116.0 gen types typescript --project-id upjiewrirkzhjeciwugg --schema public > packages/shared/lib/database.types.ts"
+    "typecheck": "pnpm -r --parallel typecheck",
+    "db:types": "npx --yes supabase@2.116.0 gen types typescript --project-id upjiewrirkzhjeciwugg --schema public > packages/shared/lib/database.types.ts",
+    "verify": "pnpm lint && pnpm test && pnpm typecheck",
+    "doctor": "node scripts/doctor.mjs",
+    "smoke:web": "node scripts/smoke-web.mjs",
+    "test:mobile:navigation": "maestro test -e APP_ID=com.vivrapet.app apps/mobile/.maestro/flows/core-navigation.yaml apps/mobile/.maestro/flows/forms-open-close.yaml"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
+    "happy-dom": "^20.14.0",
     "turbo": "^2.5.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

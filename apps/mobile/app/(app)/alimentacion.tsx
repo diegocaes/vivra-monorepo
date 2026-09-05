@@ -88,7 +88,7 @@ function FoodSpendChart({ foods, treats }: { foods: Food[]; treats: Treat[] }) {
           const foodY = H - PAD.bottom - foodH;
           const treatY = foodY - treatH;
           return (
-            <G key={i}>
+            <G key={m.label}>
               {m.food > 0 && (
                 <Rect x={x} y={foodY} width={barW} height={foodH} rx={3} fill={Colors.accent} opacity={0.85} />
               )}
@@ -157,7 +157,6 @@ export default function AlimentacionScreen() {
   const { isPremium } = useSubscription();
   const [foods, setFoods] = useState<Food[]>([]);
   const [treats, setTreats] = useState<Treat[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Food form
@@ -189,7 +188,7 @@ export default function AlimentacionScreen() {
   // a propósito, no de `pet`. Con el objeto completo, cualquier cambio de la
   // mascota dispararía un refetch innecesario de alimentos y snacks.
   const fetchData = useCallback(async () => {
-    if (!pet) { setLoading(false); return; }
+    if (!pet) return;
 
     const [foodsRes, treatsRes] = await Promise.all([
       supabase.from('foods').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }),
@@ -200,10 +199,9 @@ export default function AlimentacionScreen() {
     if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
     setFoods(foodsRes.data ?? []);
     setTreats(treatsRes.data ?? []);
-    setLoading(false);
   }, [pet?.id]);
 
-  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

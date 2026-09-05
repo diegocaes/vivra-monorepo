@@ -2,6 +2,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshCon
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
+import { usePetSpending } from '../../hooks/usePetSpending';
 import { Ionicons } from '@expo/vector-icons';
 let ImagePicker: typeof import('expo-image-picker') | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
@@ -54,6 +56,8 @@ export default function PerfilScreen() {
   const petData = usePetContext();
   const { pet, pets, isOwner, coOwners, setActivePetId, refresh } = petData;
   const [refreshing, setRefreshing] = useState(false);
+  const isFocused = useIsFocused();
+  const spending = usePetSpending(supabase, user?.id ?? null, pet?.id ?? null, isFocused);
 
   // Edit form
   const [showEdit, setShowEdit] = useState(false);
@@ -70,8 +74,11 @@ export default function PerfilScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    setRefreshing(false);
+    try {
+      await Promise.all([refresh(), spending.refresh()]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const openEdit = () => {
@@ -424,7 +431,7 @@ export default function PerfilScreen() {
             </Card>
 
             {/* Spending summary */}
-            <SpendingSummary petId={pet.id} isPremium={isPremium} />
+            <SpendingSummary totals={spending.data} error={spending.error} onRetry={spending.refresh} isPremium={isPremium} />
 
             {/* Theme color (collapsed — set once, rarely changed) */}
             <CollapsibleCard title="Color del perfil">

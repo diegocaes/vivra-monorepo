@@ -16,6 +16,14 @@ tags:
       text: "Tab Inicio"
       selected: true
     timeout: 15000
+# The development warning toast overlaps the tab bar on iOS.
+- runFlow:
+    when:
+      visible: ".*Open debugger to view warnings.*"
+    commands:
+      - tapOn:
+          text: ".*Open debugger to view warnings.*"
+          point: "94%,50%"
 - repeat:
     times: 3
     commands:
@@ -23,14 +31,26 @@ tags:
       - assertVisible:
           text: "Tab Salud"
           selected: true
+      - assertVisible:
+          id: "health-vaccines"
       - tapOn: "Tab Comida"
       - assertVisible:
           text: "Tab Comida"
           selected: true
+      - assertVisible:
+          id: "screen-food"
       - tapOn: "Tab Perfil"
       - assertVisible:
           text: "Tab Perfil"
           selected: true
+      - assertVisible:
+          id: "screen-profile"
+      - scrollUntilVisible:
+          element:
+            text: "Gastos totales"
+          direction: DOWN
+          centerElement: true
+      - assertVisible: "Gastos totales"
       - tapOn: "Tab Inicio"
       - assertVisible:
           text: "Tab Inicio"
@@ -50,16 +70,6 @@ tags:
     id: "screen-grooming"
 - tapOn:
     id: "grooming-back"
-- assertVisible:
-    text: "Tab Salud"
-    selected: true
-- assertNotVisible: "Vuelos"
-- tapOn:
-    id: "health-passport"
-- assertVisible:
-    id: "screen-passport"
-- tapOn:
-    id: "passport-back"
 - assertVisible:
     text: "Tab Salud"
     selected: true

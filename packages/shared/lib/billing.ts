@@ -12,8 +12,8 @@ export const PREMIUM_PRICE_COPY = {
 } as const;
 
 export function annualSavingsPercent(
-  monthly = PREMIUM_PRICE_COPY.monthly,
-  yearly = PREMIUM_PRICE_COPY.yearly,
+  monthly: number = PREMIUM_PRICE_COPY.monthly,
+  yearly: number = PREMIUM_PRICE_COPY.yearly,
 ): number {
   if (!Number.isFinite(monthly) || !Number.isFinite(yearly) || monthly <= 0 || yearly < 0) {
     return 0;
@@ -22,7 +22,7 @@ export function annualSavingsPercent(
 }
 
 export function monthlyEquivalent(
-  yearly = PREMIUM_PRICE_COPY.yearly,
+  yearly: number = PREMIUM_PRICE_COPY.yearly,
 ): number {
   if (!Number.isFinite(yearly) || yearly < 0) return 0;
   return Math.round((yearly / 12) * 100) / 100;

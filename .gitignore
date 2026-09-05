@@ -38,6 +38,8 @@ android/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+package-lock.json
+apps/mobile/.maestro/artifacts/
 
 # macOS
 .DS_Store
