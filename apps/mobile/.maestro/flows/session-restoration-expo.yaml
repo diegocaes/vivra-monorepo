@@ -1,0 +1,24 @@
+appId: host.exp.Exponent
+name: Restaura sesión y mascota al reabrir Expo Go
+tags:
+  - smoke
+  - startup
+  - expo-go
+---
+# Requires an existing signed-in session and PET_NAME from that account.
+- repeat:
+    times: 3
+    commands:
+      - stopApp
+      - launchApp
+      - tapOn: "http://localhost:8081"
+      - extendedWaitUntil:
+          visible: "${PET_NAME}"
+          timeout: 20000
+      - assertVisible:
+          id: "screen-home"
+      - assertNotVisible:
+          id: "login-email"
+      - assertNotVisible: "No pudimos iniciar Vivra"
+      - assertNotVisible: "No pudimos cargar a tu mascota"
+      - assertNotVisible: "Bienvenido a Vivra"

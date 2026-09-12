@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { useAuth } from '../hooks/useAuth';
 import { useNotifications } from '../hooks/useNotifications';
 import { supabase } from '../lib/supabase';
+import { lookupStartupPets } from '../lib/startupPets';
 import { LoadingScreen } from '../components/shared/LoadingScreen';
 import { StartupRecoveryScreen } from '../components/shared/StartupRecoveryScreen';
 import { OfflineBanner } from '../components/shared/OfflineBanner';
@@ -72,45 +73,20 @@ function RootLayoutContent() {
       failLookup(new Error('Pet lookup timed out'), 'timeout');
     }, PET_LOOKUP_TIMEOUT_MS);
 
-    // Check owned + shared pets
-    Promise.all([
-      supabase
-        .from('pets')
-        .select('id, name', { count: 'exact' })
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(1),
-      supabase
-        .from('pet_shares')
-        .select('id', { count: 'exact' })
-        .eq('shared_with', user.id)
-        .limit(1),
-    ])
-      .then(([ownedRes, sharedRes]) => {
-        if (cancelled || settled) return;
-        // If either query errored, we can't trust the result — keep hasPets
-        // as null and offer retry rather than routing the user to onboarding
-        // and risking a duplicate pet.
-        if (ownedRes.error || sharedRes.error) {
-          console.warn(
-            '[layout] pets fetch error:',
-            ownedRes.error?.message || sharedRes.error?.message,
-          );
-          failLookup(ownedRes.error || sharedRes.error, 'query_error');
-          return;
-        }
+    const controller = new AbortController();
+    lookupStartupPets(supabase, user.id, controller.signal)
+      .then((has) => {
+        if (cancelled) return;
         settled = true;
         clearTimeout(timeout);
-        const has = ((ownedRes.count ?? 0) + (sharedRes.count ?? 0)) > 0;
+        setPetLookupError(false);
         setHasPets(has);
       })
-      .then(undefined, (e) => {
-        console.warn('[layout] pets fetch threw:', e);
-        failLookup(e, 'query_threw');
-      });
+      .catch((error) => failLookup(error, 'query_error'));
 
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timeout);
     };
   }, [user?.id, petLookupAttempt]);
@@ -118,9 +94,10 @@ function RootLayoutContent() {
   // `router` de expo-router es un singleton estable entre renders, así que no
   // agrega valor en las deps y solo generaría ruido.
   useEffect(() => {
-    if (loading || startupError || (session && hasPets === null && !petLookupError)) return;
+    if (loading || (!startupError && session && hasPets === null && !petLookupError)) return;
 
     SplashScreen.hideAsync();
+    if (startupError) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -136,7 +113,7 @@ function RootLayoutContent() {
     }
   }, [session, loading, startupError, segments, hasPets, petLookupError]);
 
-  if (loading || (session && hasPets === null && !petLookupError)) {
+  if (loading || (!startupError && session && hasPets === null && !petLookupError)) {
     return <LoadingScreen />;
   }
 

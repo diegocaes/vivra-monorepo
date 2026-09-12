@@ -81,7 +81,7 @@ describe('auth bootstrap', () => {
     cleanup();
   });
 
-  it('shows recovery after a timeout and ignores a late initial session', async () => {
+  it('recovers when getSession completes after the timeout', async () => {
     vi.useFakeTimers();
     let resolveSession!: (value: { data: { session: Session | null } }) => void;
     const auth = createClient(() => new Promise((resolve) => { resolveSession = resolve; }));
@@ -101,7 +101,61 @@ describe('auth bootstrap', () => {
     await Promise.resolve();
 
     expect(onTimeout).toHaveBeenCalledOnce();
-    expect(onSession).not.toHaveBeenCalled();
+    expect(onSession).toHaveBeenCalledWith(fakeSession('late-user'));
     cleanup();
   });
+
+  it.each(['INITIAL_SESSION', 'SIGNED_OUT'] as const)('handles %s after timeout without accepting stale results', async (event) => {
+    vi.useFakeTimers();
+    let resolveSession!: (value: { data: { session: Session | null } }) => void;
+    const auth = createClient(() => new Promise(resolve => { resolveSession = resolve; }));
+    const onSession = vi.fn();
+    const cleanup = startAuthBootstrap({
+      client: auth.client, timeoutMs: 8_000, onSession,
+      onEvent: vi.fn(), onTimeout: vi.fn(), onError: vi.fn(),
+    });
+    vi.advanceTimersByTime(8_000);
+    const session = event === 'SIGNED_OUT' ? null : fakeSession('current');
+    auth.emit(event, session);
+    resolveSession({ data: { session: fakeSession('stale') } });
+    await Promise.resolve();
+    expect(onSession).toHaveBeenCalledExactlyOnceWith(session);
+    cleanup();
+  });
+
+  it('ignores late results after cleanup or retry', async () => {
+    let resolveSession!: (value: { data: { session: Session | null } }) => void;
+    const auth = createClient(() => new Promise(resolve => { resolveSession = resolve; }));
+    const onSession = vi.fn();
+    const cleanup = startAuthBootstrap({
+      client: auth.client, timeoutMs: 8_000, onSession,
+      onEvent: vi.fn(), onTimeout: vi.fn(), onError: vi.fn(),
+    });
+    cleanup();
+    auth.emit('INITIAL_SESSION', fakeSession('old'));
+    resolveSession({ data: { session: fakeSession('old') } });
+    await Promise.resolve();
+    expect(onSession).not.toHaveBeenCalled();
+  });
+
+  it('reports resolved Supabase errors without treating them as signed out', async () => {
+    vi.useFakeTimers();
+    const error = new Error('Refresh failed');
+    const auth = createClient(async () => ({ data: { session: null }, error }));
+    const onSession = vi.fn();
+    const onError = vi.fn();
+    const onTimeout = vi.fn();
+    const cleanup = startAuthBootstrap({
+      client: auth.client, timeoutMs: 8_000, onSession,
+      onEvent: vi.fn(), onTimeout, onError,
+    });
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(onTimeout).not.toHaveBeenCalled();
+    auth.emit('INITIAL_SESSION', fakeSession('recovered'));
+    expect(onSession).toHaveBeenCalledWith(fakeSession('recovered'));
+    cleanup();
+  });
+
 });

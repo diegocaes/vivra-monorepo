@@ -46,6 +46,16 @@ MAESTRO_CLI_NO_ANALYTICS=1 maestro test \
 Expo Go sirve para navegación y formularios. Compras, notificaciones push y
 la integración nativa de Sentry deben probarse con el build nativo.
 
+Para comprobar que una sesión existente y su mascota se restauran tras tres
+reinicios, ejecuta desde la raíz (sustituye el nombre por el de la cuenta abierta):
+
+```bash
+maestro test -e PET_NAME=Tinto apps/mobile/.maestro/flows/session-restoration-expo.yaml
+```
+
+El flujo exige contenido real de la mascota, además del contenedor de Inicio;
+no inicia sesión ni modifica los datos. Requiere Metro en `localhost:8081`.
+
 No ejecutes todos los flows como una sola suite: los de arranque requieren una
 sesión cerrada y los de navegación/formularios requieren una sesión iniciada.
 `pnpm test:mobile:navigation`, desde la raíz, ejecuta únicamente los dos últimos

@@ -4,7 +4,7 @@ export interface AuthBootstrapClient {
   onAuthStateChange: (
     callback: (event: AuthChangeEvent, session: Session | null) => void,
   ) => { data: { subscription: { unsubscribe: () => void } } };
-  getSession: () => Promise<{ data: { session: Session | null } }>;
+  getSession: () => Promise<{ data: { session: Session | null }; error?: unknown }>;
 }
 
 interface AuthBootstrapOptions {
@@ -41,7 +41,7 @@ export function startAuthBootstrap({
 
   const timeout = setTimeout(() => {
     if (!active || settled) return;
-    settled = true;
+    // The timeout reveals recovery UI; a late session can still recover.
     onTimeout();
   }, timeoutMs);
 
@@ -61,10 +61,13 @@ export function startAuthBootstrap({
   });
 
   client.getSession()
-    .then(({ data: { session } }) => finish(session))
+    .then(({ data: { session }, error }) => {
+      if (error) throw error;
+      finish(session);
+    })
     .catch((error) => {
       if (!active || settled) return;
-      settled = true;
+      clearTimeout(timeout);
       onError(error);
     });
 
