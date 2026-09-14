@@ -1,0 +1,53 @@
+appId: host.exp.Exponent
+name: Onboarding sencillo sin guardar mascotas
+---
+- stopApp
+- launchApp
+- openLink: "exp://localhost:8081/--/onboarding"
+- extendedWaitUntil:
+    visible: "¿Qué mascota tienes?"
+    timeout: 20000
+- tapOn: "Perro"
+- tapOn:
+    id: "onboarding-name"
+- inputText: "Luna QA"
+- tapOn: "Continuar"
+- assertVisible: "¿Qué raza es Luna QA?"
+- tapOn:
+    id: "onboarding-breed-search"
+- inputText: "pastor"
+- tapOn: "Pastor alemán"
+- tapOn: "Continuar"
+- assertVisible: "¿Luna QA es macho o hembra?"
+- tapOn: "Hembra"
+- assertVisible: "¿Cuándo nació Luna QA?"
+- tapOn: "Agregar después"
+- tapOn:
+    id: "onboarding-weight"
+- inputText: "0"
+- tapOn: "Continuar"
+- assertVisible: "Escribe un peso entre 0,1 y 150 kg, o agrégalo después."
+- tapOn:
+    id: "onboarding-weight"
+- eraseText
+- inputText: "6,5"
+- tapOn: "Continuar"
+- assertVisible: "Una foto de Luna QA"
+- assertVisible: "Crear perfil"
+# Never submit: this flow must not create a pet in the signed-in account.
+- repeat:
+    times: 6
+    commands:
+      - tapOn: "Volver"
+- assertVisible: "¿Qué mascota tienes?"
+- tapOn: "Gato"
+- assertVisible: "¿Cómo se llama?"
+- assertVisible: "Luna QA"
+- tapOn: "Continuar"
+- assertVisible: "¿Luna QA es macho o hembra?"
+- assertNotVisible: "Buscar raza"
+- tapOn: "Agregar después"
+- tapOn: "Agregar después"
+- tapOn: "Agregar después"
+- assertVisible: "Una foto de Luna QA"
+- assertVisible: "Crear perfil"

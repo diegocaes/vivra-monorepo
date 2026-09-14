@@ -46,6 +46,17 @@ MAESTRO_CLI_NO_ANALYTICS=1 maestro test \
 Expo Go sirve para navegación y formularios. Compras, notificaciones push y
 la integración nativa de Sentry deben probarse con el build nativo.
 
+Para recorrer el onboarding nuevo sin crear una mascota, con una sesión ya
+iniciada y Metro del checkout en `localhost:8081`, ejecuta desde la raíz:
+
+```bash
+maestro test apps/mobile/.maestro/flows/onboarding-draft-expo.yaml
+```
+
+Comprueba perro/gato, búsqueda de raza, peso inválido y decimal con coma,
+datos conservados al volver y omisión de campos opcionales. Se detiene antes
+de guardar: no verifica la creación en Supabase ni la subida de fotos.
+
 Para comprobar que una sesión existente y su mascota se restauran tras tres
 reinicios, ejecuta desde la raíz (sustituye el nombre por el de la cuenta abierta):
 

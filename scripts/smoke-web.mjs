@@ -6,7 +6,9 @@ for (const path of ['/', '/login', '/privacy', '/terms']) {
   const response = await fetch(new URL(path, base), { redirect: 'manual', signal: AbortSignal.timeout(15_000) });
   assert.equal(response.status, 200, `${path}: expected a public page`);
   assert.match(response.headers.get('content-type') || '', /text\/html/);
-  assert.match(await response.text(), /<html[\s>]/, `${path}: missing HTML document`);
+  const html = await response.text();
+  assert.match(html, /<html[\s>]/, `${path}: missing HTML document`);
+  assert.match(html, /name="apple-itunes-app" content="app-id=6761087142"/, `${path}: missing Vivra Smart App Banner`);
   process.stdout.write(`PASS ${path}\n`);
 }
 const protectedPage = await fetch(new URL('/dashboard', base), { redirect: 'manual', signal: AbortSignal.timeout(15_000) });

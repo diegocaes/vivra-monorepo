@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
+import { localDateKey } from '@vivra/shared/lib/vaccines';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -54,12 +55,12 @@ export function DatePickerField({
     if (Platform.OS === 'android') {
       setShow(false);
       if (selectedDate) {
-        onChange(selectedDate.toISOString().split('T')[0]);
+        onChange(localDateKey(selectedDate));
       }
     } else {
       // iOS: keep modal open, update value in real time
       if (selectedDate) {
-        onChange(selectedDate.toISOString().split('T')[0]);
+        onChange(localDateKey(selectedDate));
       }
     }
   };
