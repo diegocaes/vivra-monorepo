@@ -18,8 +18,9 @@ interface AuthBootstrapOptions {
 
 /**
  * Coordinates Supabase's INITIAL_SESSION event and getSession fallback.
- * Whichever resolves first wins the bootstrap; later auth events continue to
- * update the app normally. Kept outside React so this race is unit-testable.
+ * A non-null initial event can restore the session immediately. A null event
+ * must wait for getSession: Supabase also emits null when refreshing fails.
+ * Later auth events continue to update the app normally.
  */
 export function startAuthBootstrap({
   client,
@@ -49,7 +50,7 @@ export function startAuthBootstrap({
     data: { subscription },
   } = client.onAuthStateChange((event, session) => {
     if (event === 'INITIAL_SESSION') {
-      finish(session);
+      if (session) finish(session);
       return;
     }
 

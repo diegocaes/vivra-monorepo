@@ -7,6 +7,7 @@ import type { Pet, Vaccine, WeightRecord, Food, PreventiveTreatment } from '@viv
 import { isPetRow } from '@vivra/shared/lib/database';
 import { buildVaccineOverview, friendlyError, isPreventiveType, preventiveNextDue, resolveActivePet, type PreventiveType } from '@vivra/shared';
 import { captureError } from '../lib/sentry';
+import { retryRead } from '../lib/retryRead';
 import { firstSupabaseFailure } from '../lib/supabaseResults';
 import { loadActivePetId, saveActivePetId } from '../lib/activePetStorage';
 
@@ -83,15 +84,15 @@ export function usePet(): PetData {
 
     // Fetch owned pets + shared pets in parallel
     const [ownedRes, sharedRes] = await Promise.all([
-      supabase
+      retryRead(() => supabase
         .from('pets')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: true }),
-      supabase
+        .order('created_at', { ascending: true })),
+      retryRead(() => supabase
         .from('pet_shares')
         .select('pet_id, pets(*)')
-        .eq('shared_with', user.id),
+        .eq('shared_with', user.id)),
     ]);
 
     const failure = firstSupabaseFailure([
@@ -146,17 +147,17 @@ export function usePet(): PetData {
         preventivesRes,
         coOwnersRes,
       ] = await Promise.all([
-        supabase.from('vaccines').select('id, name, date_given, next_due, brand, lot_number').eq('pet_id', targetPet.id).order('date_given', { ascending: false }),
-        supabase.from('weight_records').select('weight_kg, date').eq('pet_id', targetPet.id).order('date', { ascending: false }),
-        supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', targetPet.id).order('created_at', { ascending: false }),
-        supabase.from('vet_visits').select('date, reason, location').eq('pet_id', targetPet.id).order('date', { ascending: false }),
-        supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', targetPet.id).order('date', { ascending: false }),
-        supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', targetPet.id).order('date_given', { ascending: false }),
+        retryRead(() => supabase.from('vaccines').select('id, name, date_given, next_due, brand, lot_number').eq('pet_id', targetPet.id).order('date_given', { ascending: false })),
+        retryRead(() => supabase.from('weight_records').select('weight_kg, date').eq('pet_id', targetPet.id).order('date', { ascending: false })),
+        retryRead(() => supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, food_type, start_date, end_date, price, notes, created_at').eq('pet_id', targetPet.id).order('created_at', { ascending: false })),
+        retryRead(() => supabase.from('vet_visits').select('date, reason, location').eq('pet_id', targetPet.id).order('date', { ascending: false })),
+        retryRead(() => supabase.from('groomings').select('type, services, date, location, groomer_name').eq('pet_id', targetPet.id).order('date', { ascending: false })),
+        retryRead(() => supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', targetPet.id).order('date_given', { ascending: false })),
         user && targetPet.user_id === user.id
-          ? supabase
+          ? retryRead(() => supabase
               .from('pet_shares')
               .select('id, shared_with, shared_with_email, shared_with_name')
-              .eq('pet_id', targetPet.id)
+              .eq('pet_id', targetPet.id))
           : Promise.resolve({ data: [] as CoOwner[], error: null }),
       ]);
 

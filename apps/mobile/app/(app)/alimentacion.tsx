@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect, Text as SvgText, Line, G } from 'react-native-svg';
@@ -20,6 +20,8 @@ import type { Food, Treat } from '@vivra/shared/lib/database';
 import { track } from '../../lib/analytics';
 import { AddButton } from '../../components/ui/AddButton';
 import { DataLoadNotice } from '../../components/shared/DataLoadNotice';
+import { loadFoodHistory } from '../../lib/foodHistory';
+import { captureError } from '../../lib/sentry';
 
 const FOOD_OPTIONS = Object.entries(FOOD_TYPES).map(([key, label]) => ({ key, label }));
 const UNIT_OPTIONS = [
@@ -158,6 +160,8 @@ export default function AlimentacionScreen() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [treats, setTreats] = useState<Treat[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequest = useRef(0);
 
   // Food form
   const [showFoodForm, setShowFoodForm] = useState(false);
@@ -190,18 +194,28 @@ export default function AlimentacionScreen() {
   const fetchData = useCallback(async () => {
     if (!pet) return;
 
-    const [foodsRes, treatsRes] = await Promise.all([
-      supabase.from('foods').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-      supabase.from('treats').select('*').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-    ]);
-
-    if (foodsRes.error) console.warn('[Alimentacion] foods error:', foodsRes.error.message);
-    if (treatsRes.error) console.warn('[Alimentacion] treats error:', treatsRes.error.message);
-    setFoods(foodsRes.data ?? []);
-    setTreats(treatsRes.data ?? []);
+    const request = ++loadRequest.current;
+    try {
+      const result = await loadFoodHistory(supabase, pet.id);
+      if (request !== loadRequest.current) return;
+      setFoods(result.foods);
+      setTreats(result.treats);
+      setLoadError(null);
+    } catch (error) {
+      if (request !== loadRequest.current) return;
+      // Keep this pet's last confirmed history when a refresh fails.
+      setLoadError('No pudimos actualizar la alimentación. Inténtalo de nuevo.');
+      captureError(error, { phase: 'food_history_load' });
+    }
   }, [pet?.id]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    setFoods([]);
+    setTreats([]);
+    setLoadError(null);
+    void fetchData();
+    return () => { loadRequest.current += 1; };
+  }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -403,6 +417,7 @@ export default function AlimentacionScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
         <DataLoadNotice message={petData.error} onRetry={petData.refresh} />
+        <DataLoadNotice message={loadError} onRetry={fetchData} />
 
         {/* Stats card — averages and trazabilidad. No countdown, no alarm. */}
         {stats.totalBags > 0 ? (
@@ -456,7 +471,7 @@ export default function AlimentacionScreen() {
               </TouchableOpacity>
             ))}
           </Card>
-        ) : (
+        ) : !loadError ? (
           <Card>
             <View style={styles.emptyCard}>
               <Ionicons name="restaurant-outline" size={36} color={Colors.cardBorder} />
@@ -465,7 +480,7 @@ export default function AlimentacionScreen() {
               <Button title="Agregar alimento" onPress={openAddFood} style={{ marginTop: Spacing.sm }} />
             </View>
           </Card>
-        )}
+        ) : null}
 
         {/* Treats stats — only show if user has logged any */}
         {treats.length > 0 && (

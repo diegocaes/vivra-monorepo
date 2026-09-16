@@ -121,7 +121,7 @@ function RootLayoutContent() {
     return (
       <StartupRecoveryScreen
         title="No pudimos iniciar Vivra"
-        message="Revisa tu conexión e inténtalo de nuevo. Tus datos no se han modificado."
+        message="No logramos recuperar tu sesión. Inténtalo de nuevo; si el problema continúa, revisa tu conexión."
         onRetry={retryStartup}
       />
     );

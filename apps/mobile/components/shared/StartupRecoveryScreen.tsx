@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../ui/Button';
@@ -14,14 +14,14 @@ interface StartupRecoveryScreenProps {
 export function StartupRecoveryScreen({ title, message, onRetry }: StartupRecoveryScreenProps) {
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.iconWrap}>
           <Ionicons name="cloud-offline-outline" size={34} color={Colors.accent} />
         </View>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.message}>{message}</Text>
         <Button title="Reintentar" onPress={onRetry} style={styles.button} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -29,7 +29,7 @@ export function StartupRecoveryScreen({ title, message, onRetry }: StartupRecove
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.canvas },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.xl,
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentLight,
     marginBottom: Spacing.lg,
   },
-  title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
+  title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink, textAlign: 'center' },
   message: {
     maxWidth: 290,
     marginTop: Spacing.sm,
@@ -52,5 +52,5 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: 'center',
   },
-  button: { alignSelf: 'stretch', marginTop: Spacing.xl, maxWidth: 300 },
+  button: { width: '100%', marginTop: Spacing.xl, maxWidth: 300 },
 });

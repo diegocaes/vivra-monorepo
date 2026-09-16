@@ -32,6 +32,36 @@ afterEach(() => {
 });
 
 describe('auth bootstrap', () => {
+  it('does not mistake a failed refresh INITIAL_SESSION for a signed-out account', async () => {
+    const error = new Error('Network request failed');
+    const auth = createClient(async () => ({ data: { session: null }, error }));
+    const onSession = vi.fn();
+    const onError = vi.fn();
+    const cleanup = startAuthBootstrap({
+      client: auth.client, timeoutMs: 8_000, onSession,
+      onEvent: vi.fn(), onTimeout: vi.fn(), onError,
+    });
+    auth.emit('INITIAL_SESSION', null);
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(error));
+    expect(onSession).not.toHaveBeenCalled();
+    auth.emit('TOKEN_REFRESHED', fakeSession('recovered'));
+    expect(onSession).toHaveBeenCalledExactlyOnceWith(fakeSession('recovered'));
+    cleanup();
+  });
+
+  it('opens login when getSession confirms no saved session', async () => {
+    const auth = createClient(async () => ({ data: { session: null }, error: null }));
+    const onSession = vi.fn();
+    const cleanup = startAuthBootstrap({
+      client: auth.client, timeoutMs: 8_000, onSession,
+      onEvent: vi.fn(), onTimeout: vi.fn(), onError: vi.fn(),
+    });
+    auth.emit('INITIAL_SESSION', null);
+    await Promise.resolve();
+    expect(onSession).toHaveBeenCalledExactlyOnceWith(null);
+    cleanup();
+  });
+
   it('uses one listener and only resolves the initial session once', async () => {
     const session = fakeSession('user-1');
     const auth = createClient(async () => ({ data: { session } }));

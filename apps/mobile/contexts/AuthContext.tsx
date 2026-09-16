@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import * as Notifications from 'expo-notifications';
+import { AppState } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { clearRevenueCatUser } from '../lib/revenueCatSession';
 import { startAuthBootstrap } from '../lib/authBootstrap';
@@ -41,6 +42,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [attempt, setAttempt] = useState(0);
   const deviceStateCleared = useRef(false);
 
+  // Native apps must explicitly pause/resume Supabase's refresh loop.
+  useEffect(() => {
+    const updateRefresh = (state: string) => {
+      const operation = state === 'active'
+        ? supabase.auth.startAutoRefresh()
+        : supabase.auth.stopAutoRefresh();
+      void operation.catch(error => captureError(error, { phase: 'auth_auto_refresh' }));
+    };
+    updateRefresh(AppState.currentState);
+    const subscription = AppState.addEventListener('change', updateRefresh);
+    return () => {
+      subscription.remove();
+      void supabase.auth.stopAutoRefresh().catch(error => captureError(error, { phase: 'auth_auto_refresh' }));
+    };
+  }, []);
+
   const clearDeviceStateOnce = useCallback(() => {
     if (deviceStateCleared.current) return;
     deviceStateCleared.current = true;
@@ -80,6 +97,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retryStartup = useCallback(() => {
     setAttempt(current => current + 1);
   }, []);
+
+  useEffect(() => {
+    if (!startupError) return;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') retryStartup();
+    });
+    return () => subscription.remove();
+  }, [startupError, retryStartup]);
 
   const signOut = useCallback(async () => {
     try {
