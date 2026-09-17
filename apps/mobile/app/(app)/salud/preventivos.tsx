@@ -315,7 +315,7 @@ export default function PreventivosScreen() {
         {renderList(desparasitante, 'Historial Desparasitante')}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingTreatment ? `Editar ${formLabel}` : `Agregar ${formLabel}`}>
+      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingTreatment ? `Editar ${formLabel}` : `Agregar ${formLabel}`} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <DatePickerField
           label="Fecha de aplicación"
           value={dateApplied}
@@ -337,6 +337,7 @@ export default function PreventivosScreen() {
             : 'Confirma la fecha con tu veterinario o la etiqueta del producto.'}
         </Text>
         <FormField
+          testID="preventive-product"
           label="Producto (opcional)"
           value={productName}
           onChangeText={setProductName}
@@ -350,6 +351,7 @@ export default function PreventivosScreen() {
           keyboardType="decimal-pad"
         />
         <FormField
+          testID="preventive-notes"
           label="Notas (opcional)"
           value={notes}
           onChangeText={setNotes}
@@ -357,7 +359,6 @@ export default function PreventivosScreen() {
           multiline
           style={{ minHeight: 60 }}
         />
-        <Button title="Guardar" onPress={handleSave} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );

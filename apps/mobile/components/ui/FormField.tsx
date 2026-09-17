@@ -12,6 +12,7 @@ export function FormField({ label, error, style, ...props }: FormFieldProps) {
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={[styles.input, error && styles.inputError, style]}
+        accessibilityLabel={label}
         placeholderTextColor={Colors.muted}
         {...props}
       />

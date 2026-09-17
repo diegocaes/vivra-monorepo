@@ -78,3 +78,8 @@ y Perfil. Ya no busca `health-passport`, un botón eliminado de Salud. Las captu
 y logs de Maestro ayudan a distinguir una sesión ausente de un fallo de navegación.
 Los flows cierran el aviso de desarrollo “Open debugger to view warnings” cuando
 aparece: ese aviso cubre la barra de tabs e intercepta los taps en iOS.
+
+El flujo de formularios también abre el preventivo combinado (título largo),
+comprueba Cancelar y Guardar al escribir, recorre hasta las notas y cancela
+sin guardar. Al reabrir, comprueba que el borrador se limpió. Requiere una
+sesión con mascota y el código actual servido por Metro.

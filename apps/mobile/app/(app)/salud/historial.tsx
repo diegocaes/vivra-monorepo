@@ -221,7 +221,7 @@ export default function HistorialScreen() {
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingVisit ? 'Editar visita' : 'Agregar visita'}>
+      <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingVisit ? 'Editar visita' : 'Agregar visita'} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <FormField label="Motivo" value={reason} onChangeText={setReason} placeholder="Ej: Revisión anual, Urgencia..." />
         <DatePickerField label="Fecha" value={date} onChange={setDate} maxDate={new Date()} />
         <FormField label="Veterinario (opcional)" value={vetName} onChangeText={setVetName} placeholder="Nombre del veterinario" />
@@ -230,7 +230,6 @@ export default function HistorialScreen() {
         <FormField label="Tratamiento (opcional)" value={treatment} onChangeText={setTreatment} placeholder="Medicamentos, instrucciones..." multiline style={{ minHeight: 60 }} />
         <FormField label="Costo (opcional)" value={cost} onChangeText={setCost} placeholder="0.00" keyboardType="decimal-pad" />
         <FormField label="Notas (opcional)" value={notes} onChangeText={setNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
-        <Button title="Guardar" onPress={handleSave} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );

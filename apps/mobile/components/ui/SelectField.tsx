@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Keyboard } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
@@ -20,7 +20,10 @@ export function SelectField({ label, value, options, onSelect, error }: SelectFi
       <Text style={styles.label}>{label}</Text>
       <TouchableOpacity
         style={[styles.trigger, error && styles.triggerError]}
-        onPress={() => setOpen(!open)}
+        onPress={() => { Keyboard.dismiss(); setOpen(!open); }}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: open }}
         activeOpacity={0.7}
       >
         <Text style={[styles.triggerText, !selected && styles.placeholder]}>
@@ -31,7 +34,7 @@ export function SelectField({ label, value, options, onSelect, error }: SelectFi
 
       {open && (
         <View style={styles.dropdown}>
-          <ScrollView nestedScrollEnabled style={styles.dropdownScroll}>
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.dropdownScroll}>
             {options.map(opt => (
               <TouchableOpacity
                 key={opt.key}
@@ -78,6 +81,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.bad,
   },
   triggerText: {
+    flex: 1,
+    marginRight: Spacing.sm,
     fontSize: FontSize.md,
     color: Colors.ink,
   },

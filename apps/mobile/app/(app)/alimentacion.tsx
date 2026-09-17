@@ -600,7 +600,7 @@ export default function AlimentacionScreen() {
       </ScrollView>
 
       {/* Food form */}
-      <BottomSheet visible={showFoodForm} onClose={() => setShowFoodForm(false)} title={editingFood ? 'Editar alimento' : 'Agregar alimento'}>
+      <BottomSheet visible={showFoodForm} onClose={() => setShowFoodForm(false)} title={editingFood ? 'Editar alimento' : 'Agregar alimento'} footer={<Button title="Guardar" onPress={handleSaveFood} loading={savingFood} />}>
         {!editingFood && foods.length > 0 && (
           <TouchableOpacity
             style={styles.duplicateBtn}
@@ -637,11 +637,10 @@ export default function AlimentacionScreen() {
           Vacío = bolsa actual. Se autocompleta cuando registras la siguiente.
         </Text>
         <FormField label="Notas (opcional)" value={foodNotes} onChangeText={setFoodNotes} placeholder="Observaciones, reacciones, dónde la compraste..." multiline style={{ minHeight: 60 }} />
-        <Button title="Guardar" onPress={handleSaveFood} loading={savingFood} />
       </BottomSheet>
 
       {/* Treat form */}
-      <BottomSheet visible={showTreatForm} onClose={() => { setShowTreatForm(false); resetTreatForm(); }} title={editingTreat ? 'Editar snack' : 'Agregar snack'}>
+      <BottomSheet visible={showTreatForm} onClose={() => { setShowTreatForm(false); resetTreatForm(); }} title={editingTreat ? 'Editar snack' : 'Agregar snack'} footer={<Button title="Guardar" onPress={handleSaveTreat} loading={savingTreat} />}>
         {!editingTreat && treats.length > 0 && (
           <TouchableOpacity
             style={styles.duplicateBtn}
@@ -658,7 +657,6 @@ export default function AlimentacionScreen() {
         <FormField label="Precio (opcional)" value={treatPrice} onChangeText={setTreatPrice} placeholder="0.00" keyboardType="decimal-pad" />
         <DatePickerField label="Fecha de compra" value={treatDate} onChange={setTreatDate} maxDate={new Date()} />
         <FormField label="Notas (opcional)" value={treatNotes} onChangeText={setTreatNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
-        <Button title="Guardar" onPress={handleSaveTreat} loading={savingTreat} />
       </BottomSheet>
     </SafeAreaView>
   );

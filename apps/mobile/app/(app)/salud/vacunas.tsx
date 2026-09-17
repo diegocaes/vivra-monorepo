@@ -379,7 +379,7 @@ export default function VacunasScreen() {
         <Text style={styles.medicalNote}>Las fechas y productos deben copiarse del carné o confirmarse con el veterinario. Vivra organiza el historial, no define el esquema de vacunación.</Text>
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={closeForm} title={editingVaccine ? 'Editar aplicación' : 'Registrar vacuna'}>
+      <BottomSheet visible={showForm} onClose={closeForm} title={editingVaccine ? 'Editar aplicación' : 'Registrar vacuna'} footer={<Button title={editingVaccine ? 'Guardar cambios' : 'Registrar aplicación'} onPress={handleSave} loading={saving} />}>
         <View style={styles.formIntro}><Ionicons name="information-circle-outline" size={19} color={Colors.accent} /><Text style={styles.formIntroText}>Copia la información de esta dosis. Solo vacuna y fecha aplicada son obligatorias.</Text></View>
         <SelectField label="Vacuna" value={name} options={vaccineOptions} onSelect={setName} />
         {name === 'Otra' && <FormField label="Nombre escrito en el carné" value={customName} onChangeText={setCustomName} placeholder="Ej: Lyme, Influenza…" autoCapitalize="words" />}
@@ -390,7 +390,6 @@ export default function VacunasScreen() {
         <FormField label="Número de lote (opcional)" value={lotNumber} onChangeText={setLotNumber} placeholder="Ej: AB1234" autoCapitalize="characters" />
         <FormField label="Veterinario o clínica (opcional)" value={vetName} onChangeText={setVetName} placeholder="Nombre que aparece en el carné" />
         <FormField label="Notas (opcional)" value={notes} onChangeText={setNotes} placeholder="Observaciones de esta aplicación" multiline style={styles.notesField} />
-        <Button title={editingVaccine ? 'Guardar cambios' : 'Registrar aplicación'} onPress={handleSave} loading={saving} />
         {editingVaccine && (
           <TouchableOpacity style={styles.deleteRecord} onPress={() => handleDelete(editingVaccine.id)}>
             <Ionicons name="trash-outline" size={17} color={Colors.bad} /><Text style={styles.deleteRecordText}>Eliminar esta aplicación</Text>

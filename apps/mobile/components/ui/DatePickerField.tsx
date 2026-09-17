@@ -7,7 +7,9 @@ import {
   StyleSheet,
   Platform,
   Pressable,
+  Keyboard,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { localDateKey } from '@vivra/shared/lib/vaccines';
@@ -47,6 +49,7 @@ export function DatePickerField({
   error,
 }: DatePickerFieldProps) {
   const [show, setShow] = useState(false);
+  const insets = useSafeAreaInsets();
 
   // Use value date, fall back to today for the picker initial position
   const pickerDate = value ? parseDate(value) : (maxDate && maxDate < new Date() ? maxDate : new Date());
@@ -71,7 +74,9 @@ export function DatePickerField({
 
       <TouchableOpacity
         style={[styles.field, error && styles.fieldError]}
-        onPress={() => setShow(true)}
+        onPress={() => { Keyboard.dismiss(); setShow(true); }}
+        accessibilityRole="button"
+        accessibilityLabel={label}
         activeOpacity={0.7}
       >
         <Text style={[styles.valueText, !value && styles.placeholderText]}>
@@ -102,9 +107,8 @@ export function DatePickerField({
           onRequestClose={() => setShow(false)}
         >
           <Pressable style={styles.backdrop} onPress={() => setShow(false)} />
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{label}</Text>
               <TouchableOpacity
                 style={styles.doneTouch}
                 onPress={() => setShow(false)}
@@ -113,6 +117,7 @@ export function DatePickerField({
               >
                 <Text style={styles.doneBtn}>Listo</Text>
               </TouchableOpacity>
+              <Text accessibilityRole="header" style={styles.sheetTitle}>{label}</Text>
             </View>
             <DateTimePicker
               value={pickerDate}
@@ -213,22 +218,19 @@ const styles = StyleSheet.create({
   sheetHeader: {
     width: '100%',
     minHeight: 56,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.cardBorder,
   },
   sheetTitle: {
-    flex: 1,
+    textAlign: 'center',
     fontSize: FontSize.md,
     fontWeight: FontWeight.semibold,
     color: Colors.ink,
-    paddingRight: Spacing.md,
   },
   doneTouch: {
+    alignSelf: 'flex-end',
     minWidth: 52,
     minHeight: 44,
     alignItems: 'flex-end',

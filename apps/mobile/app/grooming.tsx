@@ -224,7 +224,7 @@ export default function GroomingScreen() {
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingGrooming ? 'Editar grooming' : 'Agregar grooming'}>
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingGrooming ? 'Editar grooming' : 'Agregar grooming'} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <View style={styles.servicesField}>
           <Text style={styles.servicesLabel}>Servicios incluidos</Text>
           <Text style={styles.servicesHint}>Selecciona uno o varios</Text>
@@ -252,7 +252,6 @@ export default function GroomingScreen() {
         <FormField label="Ubicación (opcional)" value={location} onChangeText={setLocation} placeholder="Pet Spa, clínica..." />
         <FormField label="Costo (opcional)" value={cost} onChangeText={setCost} placeholder="0.00" keyboardType="decimal-pad" />
         <FormField label="Notas (opcional)" value={notes} onChangeText={setNotes} placeholder="Observaciones..." multiline style={{ minHeight: 60 }} />
-        <Button title="Guardar" onPress={handleSave} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );

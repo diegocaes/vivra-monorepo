@@ -46,3 +46,42 @@ tags:
 - assertNotVisible: "Agregar grooming"
 - assertVisible:
     id: "screen-grooming"
+- tapOn:
+    id: "grooming-back"
+- scrollUntilVisible:
+    element:
+      id: "health-preventives"
+    direction: UP
+    centerElement: true
+- tapOn:
+    id: "health-preventives"
+- assertVisible: "Registrar combinado"
+- tapOn: "Registrar combinado"
+# Long titles previously pushed Cancelar beyond the screen edge.
+- assertVisible: "Agregar Combinado.*"
+- assertVisible:
+    id: "form-cancel"
+- assertVisible: "Guardar"
+- tapOn:
+    id: "preventive-product"
+- inputText: "Borrador de prueba"
+- assertVisible:
+    id: "form-cancel"
+- assertVisible: "Guardar"
+- scrollUntilVisible:
+    element:
+      id: "preventive-notes"
+    direction: DOWN
+- tapOn:
+    id: "preventive-notes"
+- inputText: "Sin guardar"
+- assertVisible: "Guardar"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Agregar Combinado.*"
+- assertVisible: "Registrar combinado"
+- tapOn: "Registrar combinado"
+- assertNotVisible: "Borrador de prueba"
+- assertNotVisible: "Sin guardar"
+- tapOn:
+    id: "form-cancel"

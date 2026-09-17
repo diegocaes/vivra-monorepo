@@ -1,12 +1,9 @@
-import { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
-  Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,76 +18,81 @@ interface BottomSheetProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
 }
 
-export function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
+export function BottomSheet({ visible, onClose, title, children, footer }: BottomSheetProps) {
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const translateY = useRef(new Animated.Value(screenHeight)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(translateY, {
-        toValue: screenHeight,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, screenHeight]);
+  const close = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.overlay}
-      >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <View style={styles.overlay}>
         <View pointerEvents="none" style={styles.scrim} />
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={() => { Keyboard.dismiss(); onClose(); }} />
-        <Animated.View style={[styles.sheet, { transform: [{ translateY }], paddingBottom: Math.max(insets.bottom, Spacing.lg), maxHeight: screenHeight * 0.85 }]}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={styles.closeBtn}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            style={styles.content}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={close}
+          accessible={false}
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={[styles.keyboardArea, { paddingTop: Math.max(insets.top + Spacing.sm, screenHeight * 0.1) }]}
+          pointerEvents="box-none"
+        >
+          <View
+            accessibilityViewIsModal
+            style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}
           >
-            {children}
-          </ScrollView>
-        </Animated.View>
-      </KeyboardAvoidingView>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <TouchableOpacity
+                testID="form-cancel"
+                style={styles.closeTouch}
+                onPress={close}
+                accessibilityRole="button"
+                accessibilityLabel="Cancelar"
+              >
+                <Text style={styles.closeBtn}>Cancelar</Text>
+              </TouchableOpacity>
+              <Text accessibilityRole="header" style={styles.title}>{title}</Text>
+            </View>
+            <ScrollView
+              style={styles.content}
+              contentContainerStyle={styles.contentContainer}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              showsVerticalScrollIndicator
+            >
+              {children}
+            </ScrollView>
+            {footer && <View style={styles.footer}>{footer}</View>}
+          </View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
+  overlay: { flex: 1 },
+  keyboardArea: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject },
   scrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(17, 24, 39, 0.28)',
   },
   sheet: {
+    maxHeight: '100%',
+    flexShrink: 1,
     backgroundColor: Colors.card,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
-    paddingBottom: Spacing.lg,
+    overflow: 'hidden',
   },
   handle: {
     width: 36,
@@ -99,29 +101,41 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cardBorder,
     alignSelf: 'center',
     marginTop: Spacing.sm,
-    marginBottom: Spacing.xs,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexShrink: 0,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingBottom: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: Colors.cardBorder,
   },
   title: {
+    textAlign: 'center',
     fontSize: FontSize.lg,
     fontWeight: FontWeight.bold,
     color: Colors.ink,
+  },
+  closeTouch: {
+    alignSelf: 'flex-end',
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
   },
   closeBtn: {
     fontSize: FontSize.md,
     color: Colors.accent,
     fontWeight: FontWeight.medium,
   },
-  content: {
+  content: { flexShrink: 1 },
+  contentContainer: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+    paddingVertical: Spacing.md,
+  },
+  footer: {
+    flexShrink: 0,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
   },
 });

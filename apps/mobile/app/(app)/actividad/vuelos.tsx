@@ -275,7 +275,7 @@ export default function VuelosScreen() {
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingFlight ? 'Editar vuelo' : 'Nuevo vuelo'}>
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingFlight ? 'Editar vuelo' : 'Nuevo vuelo'} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <FormField label="Aerolínea" value={airline} onChangeText={setAirline} placeholder="Ej: Copa Airlines" />
         <FormField label="Nro. de vuelo (opcional)" value={flightNumber} onChangeText={setFlightNumber} placeholder="Ej: CM 391" />
         <View style={styles.formRow}>
@@ -304,7 +304,6 @@ export default function VuelosScreen() {
           </TouchableOpacity>
         ))}
 
-        <Button title="Guardar" onPress={handleSave} loading={saving} style={{ marginTop: Spacing.md }} />
       </BottomSheet>
     </SafeAreaView>
   );

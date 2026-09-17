@@ -663,7 +663,7 @@ export default function PerfilScreen() {
       </ScrollView>
 
       {/* Edit form */}
-      <BottomSheet visible={showEdit} onClose={() => setShowEdit(false)} title="Editar perfil">
+      <BottomSheet visible={showEdit} onClose={() => setShowEdit(false)} title="Editar perfil" footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <FormField label="Nombre" value={name} onChangeText={setName} placeholder="Nombre de tu mascota" />
         {/* Raza: solo perros — los gatos usan un perfil felino general sin raza */}
         {pet?.species !== 'cat' && (
@@ -687,7 +687,6 @@ export default function PerfilScreen() {
         <FormField label="Microchip ID" value={chipId} onChangeText={setChipId} placeholder="Número de chip" />
         <FormField label="Color pelaje" value={color} onChangeText={setColor} placeholder="Ej: Dorado, Negro" />
         <SelectField label="Tipo de soporte" value={supportType} options={SUPPORT_OPTIONS} onSelect={setSupportType} />
-        <Button title="Guardar" onPress={handleSave} loading={saving} style={{ marginTop: Spacing.sm }} />
       </BottomSheet>
 
       <SharePetSheet visible={showShareSheet} onClose={() => setShowShareSheet(false)} />

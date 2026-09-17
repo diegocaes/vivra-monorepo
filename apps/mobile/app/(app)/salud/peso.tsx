@@ -307,7 +307,7 @@ export default function PesoScreen() {
         )}
       </ScrollView>
 
-      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingRecord ? 'Editar peso' : 'Registrar peso'}>
+      <BottomSheet visible={showForm} onClose={() => setShowForm(false)} title={editingRecord ? 'Editar peso' : 'Registrar peso'} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <FormField
           label="Peso (kg)"
           value={weightKg}
@@ -329,7 +329,6 @@ export default function PesoScreen() {
           multiline
           style={{ minHeight: 60 }}
         />
-        <Button title="Guardar" onPress={handleSave} loading={saving} />
       </BottomSheet>
     </SafeAreaView>
   );
