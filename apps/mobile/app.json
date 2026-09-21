@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vivra",
     "slug": "vivra-mobile",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.vivrapet.app",
@@ -17,6 +17,8 @@
       "bundleIdentifier": "com.vivrapet.app",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "CFBundleDevelopmentRegion": "es",
+        "CFBundleLocalizations": ["es"],
         "NSCameraUsageDescription": "Vivra necesita acceso a la cámara para tomar fotos de tu mascota.",
         "NSPhotoLibraryUsageDescription": "Vivra necesita acceso a tus fotos para seleccionar una imagen de tu mascota.",
         "NSUserNotificationsUsageDescription": "Vivra te envía recordatorios de salud, vacunas y cuidados de tu mascota.",

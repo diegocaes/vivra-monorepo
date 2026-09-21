@@ -63,14 +63,14 @@ if (user) {
     <title>{title} | Vivra</title>
     <ClientRouter />
   </head>
-  <body class="min-h-screen bg-canvas" data-pet-theme={petTheme}>
+  <body class="app-shell min-h-screen bg-canvas" data-pet-theme={petTheme}>
     <Sidebar activePet={activePet} pets={pets} unreadCount={unreadCount} />
 
     <!-- Mobile top bar spacer -->
     <div class="h-13 lg:hidden"></div>
 
     <!-- Main content — offset by sidebar on desktop -->
-    <main class="lg:ml-55 px-4 py-6 sm:px-6 lg:px-8 max-w-full">
+    <main class="app-content lg:ml-55 px-4 py-6 sm:px-6 lg:px-8 max-w-full">
       <div class="mx-auto max-w-3xl">
         <slot />
       </div>

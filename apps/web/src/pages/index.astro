@@ -173,15 +173,15 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       :root {
-        --orange: #F97316;
-        --orange-dark: #EA6C0A;
+        --orange: #BD4B22;
+        --orange-dark: #963817;
         --orange-light: rgba(249,115,22,0.10);
-        --ink: #0F1117;
-        --ink-2: #1A1D26;
-        --muted: #6B7280;
+        --ink: #292620;
+        --ink-2: #403A31;
+        --muted: #716C64;
         --muted-light: #9CA3AF;
-        --card-border: #EAECF0;
-        --canvas: #F7F8FA;
+        --card-border: #E8E2D8;
+        --canvas: #F7F4EE;
       }
       html { scroll-behavior: smooth; }
       body {
@@ -198,13 +198,15 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          NAV — fixed, blur, minimal
          ──────────────────────────────────────────── */
       nav {
-        position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+        position: fixed; top: 16px; left: 24px; right: 24px; z-index: 100;
+        max-width: 1240px; margin: 0 auto; border-radius: 20px;
+        box-shadow: 0 8px 32px rgb(55 42 25 / 5%);
         display: flex; align-items: center; justify-content: space-between;
         padding: 0 32px; height: 64px;
-        background: rgba(255,255,255,0.78);
+        background: rgba(255,254,251,0.94);
         backdrop-filter: saturate(180%) blur(18px);
         -webkit-backdrop-filter: saturate(180%) blur(18px);
-        border-bottom: 1px solid rgba(15,17,23,0.06);
+        border: 1px solid var(--card-border);
       }
       .nav-logo { display: flex; align-items: center; text-decoration: none; }
       .nav-logo img { height: 64px; width: auto; }
@@ -224,7 +226,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .nav-cta:hover { background: var(--ink-2); transform: translateY(-1px); }
       @media (max-width: 640px) {
-        nav { padding: 0 16px; }
+        nav { padding: 0 12px; top: 10px; left: 12px; right: 12px; }
         /* Se ocultan los enlaces de sección, pero NO "Entrar": sin él, un usuario
            que ya tiene cuenta no tiene cómo iniciar sesión desde el móvil salvo
            bajando hasta el footer — y la mayoría del tráfico es móvil. */
@@ -240,33 +242,20 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         position: relative;
         background: white;
         color: var(--ink);
-        padding: 140px 32px 120px;
+        padding: 156px 40px 88px;
         overflow: hidden;
         isolation: isolate;
       }
       .hero::before {
-        content: '';
-        position: absolute; inset: 0; z-index: -1;
-        background:
-          radial-gradient(ellipse 60% 40% at 80% 20%, rgba(249,115,22,0.10) 0%, transparent 60%),
-          radial-gradient(ellipse 50% 60% at 20% 80%, rgba(249,115,22,0.06) 0%, transparent 70%);
-      }
-      .hero::after {
-        content: '';
-        position: absolute; inset: 0; z-index: -1;
-        background-image:
-          linear-gradient(to right, rgba(15,17,23,0.035) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(15,17,23,0.035) 1px, transparent 1px);
-        background-size: 64px 64px;
-        mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent 80%);
-        -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent 80%);
+        content: ''; position: absolute; inset: 0; z-index: -1;
+        background: #F7F4EE;
       }
       .hero-inner {
         max-width: 1200px;
         margin: 0 auto;
         display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 64px;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 56px;
         align-items: center;
       }
       .hero-pill {
@@ -283,16 +272,13 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: var(--orange); box-shadow: 0 0 8px var(--orange);
       }
       .hero h1 {
-        font-size: clamp(40px, 6.5vw, 76px);
-        font-weight: 900; line-height: 1.02;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: clamp(44px, 5.5vw, 72px);
+        font-weight: 400; line-height: 1.04;
         letter-spacing: -3px;
         margin: 0 0 24px;
       }
-      .hero h1 .gradient-text {
-        background: linear-gradient(110deg, #F97316 0%, #EA580C 55%, #C2410C 100%);
-        -webkit-background-clip: text; background-clip: text;
-        color: transparent;
-      }
+      .hero h1 .gradient-text { color: var(--orange); font-style: italic; }
       .hero p.lead {
         font-size: clamp(17px, 1.8vw, 21px);
         color: var(--muted);
@@ -306,10 +292,10 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         padding: 15px 30px; border-radius: 12px;
         font-size: 15px; font-weight: 700; text-decoration: none;
         display: inline-flex; align-items: center; gap: 10px;
-        box-shadow: 0 8px 32px rgba(249,115,22,0.35);
+        box-shadow: 0 4px 0 #963817, 0 8px 24px rgb(150 56 23 / 12%);
         transition: all 0.15s ease;
       }
-      .btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(249,115,22,0.5); }
+      .btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); box-shadow: 0 4px 0 #792D12, 0 12px 28px rgb(150 56 23 / 18%); }
       .btn-primary svg { width: 16px; height: 16px; }
       .btn-secondary-dark {
         background: white;
@@ -335,13 +321,11 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         position: relative;
         display: flex; justify-content: center;
       }
+      .hero-mockup-wrap { padding: 36px 0; }
       .hero-mockup-wrap::before {
-        content: '';
-        position: absolute;
-        width: 380px; height: 380px;
-        background: radial-gradient(circle, rgba(249,115,22,0.22) 0%, transparent 65%);
-        filter: blur(70px);
-        z-index: 0;
+        content: ''; position: absolute; inset: 0 -12px;
+        background: #E4E9DA; border-radius: 220px 220px 40px 40px;
+        border: 1px solid #D3DCC8; transform: rotate(3deg); z-index: 0;
       }
       /* Screenshots reales de la app en marcos de iPhone — 3 en desktop, 1 en mobile */
       .hero-phones {
@@ -352,20 +336,20 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: #13161C;
         border: 6px solid #13161C;
         border-radius: 34px;
-        box-shadow: 0 24px 48px rgba(15,17,23,0.25);
+        box-shadow: 0 22px 38px rgb(41 38 32 / 18%);
         height: auto;
       }
       .phone-main {
         position: relative; z-index: 2;
-        width: 250px;
+        width: 222px;
       }
       .phone-side {
         position: absolute; z-index: 1;
-        width: 190px;
+        width: 164px;
         opacity: 0.92;
       }
-      .phone-side.left  { transform: rotate(-7deg) translateX(-150px) translateY(18px); }
-      .phone-side.right { transform: rotate(7deg) translateX(150px) translateY(18px); }
+      .phone-side.left  { transform: rotate(-7deg) translateX(-128px) translateY(18px); }
+      .phone-side.right { transform: rotate(7deg) translateX(128px) translateY(18px); }
       @media (max-width: 1100px) {
         .phone-side.left  { transform: rotate(-7deg) translateX(-120px) translateY(18px); }
         .phone-side.right { transform: rotate(7deg) translateX(120px) translateY(18px); }
@@ -376,7 +360,9 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
 
       @media (max-width: 900px) {
-        .hero { padding: 120px 24px 80px; text-align: center; }
+        .hero { padding: 128px 24px 56px; text-align: center; }
+        .hero-mockup-wrap { max-width: 420px; width: 100%; margin: 0 auto; }
+        .hero h1 { letter-spacing: -2px; }
         .hero-inner { grid-template-columns: 1fr; gap: 48px; }
         .hero p.lead { margin-left: auto; margin-right: auto; }
         .hero-actions { justify-content: center; }
@@ -390,7 +376,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: var(--canvas);
         border-top: 1px solid var(--card-border);
         border-bottom: 1px solid var(--card-border);
-        padding: 32px 24px;
+        padding: 24px;
       }
       .trust-bar-inner {
         max-width: 1100px; margin: 0 auto;
@@ -409,18 +395,19 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          HOW IT WORKS — 3 steps
          ──────────────────────────────────────────── */
       .how-section {
-        padding: 120px 24px 80px;
+        padding: 88px 24px 64px;
         background: white;
       }
       .section-inner { max-width: 1100px; margin: 0 auto; }
       .section-eyebrow {
-        font-size: 11px; font-weight: 700; letter-spacing: 3.2px;
+        font-size: 11px; font-weight: 700; letter-spacing: 2px;
         text-transform: uppercase; color: var(--orange);
         display: block; margin-bottom: 16px;
       }
       .section-title {
-        font-size: clamp(32px, 4.8vw, 52px);
-        font-weight: 900; letter-spacing: -2px;
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: clamp(34px, 4.8vw, 54px);
+        font-weight: 400; letter-spacing: -1.8px;
         line-height: 1.05;
         margin-bottom: 16px;
       }
@@ -429,8 +416,11 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         color: var(--muted);
         max-width: 620px;
         line-height: 1.6;
-        margin-bottom: 64px;
+        margin-bottom: 40px;
       }
+      .walkthrough-link { display: inline-block; margin-top: 20px; color: #9A3412; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+      .how-screenshot { display: block; width: 100%; max-width: 240px; height: auto; box-shadow: 0 12px 32px rgb(55 42 25 / 10%); margin: 24px auto -44px; border-radius: 20px; border: 1px solid var(--card-border); }
+      #how { scroll-margin-top: 96px; }
       .how-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -442,16 +432,19 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: var(--canvas);
         border: 1px solid var(--card-border);
         border-radius: 24px;
-        padding: 48px 32px 32px;
+        padding: 32px 28px 0;
+        overflow: hidden;
         transition: all 0.2s ease;
       }
-      .how-card:hover { border-color: rgba(249,115,22,0.3); transform: translateY(-4px); }
+      .how-card:hover { border-color: #B7C4A8; }
+      .how-card:nth-child(2) { background: #F4E7D9; }
+      .how-card:nth-child(3) { background: #E9EDDF; }
       .how-card::before {
         counter-increment: step;
         content: counter(step);
         position: absolute; top: 24px; right: 28px;
-        font-size: 56px; font-weight: 900;
-        color: rgba(15,17,23,0.06);
+        font-family: Georgia, serif; font-size: 38px; font-weight: 400;
+        color: #8A7864;
         line-height: 1;
       }
       .how-icon {
@@ -471,7 +464,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          FEATURES — bento grid
          ──────────────────────────────────────────── */
       .features-section {
-        padding: 80px 24px 120px;
+        padding: 64px 24px 88px;
         background: white;
       }
       .features-bento {
@@ -492,7 +485,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .bento-card.featured {
         grid-column: span 2;
         grid-row: span 1;
-        background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
+        background: #F4E7D9;
         border-color: rgba(249,115,22,0.25);
         color: var(--ink);
         display: flex;
@@ -553,7 +546,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          PASSPORT SECTION — dark accent
          ──────────────────────────────────────────── */
       .passport-section {
-        padding: 120px 24px;
+        padding: 88px 24px;
         background: var(--canvas);
         color: var(--ink);
         text-align: center;
@@ -582,7 +575,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         position: relative;
       }
       .pp-cover {
-        background: linear-gradient(160deg, #7C2D12, #EA580C);
+        background: #414E3B;
         padding: 28px 24px;
         text-align: center;
       }
@@ -598,13 +591,13 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          APP STORE CTA SECTION
          ──────────────────────────────────────────── */
       .appstore-section {
-        padding: 120px 24px;
+        padding: 88px 24px;
         background: white;
         text-align: center;
       }
       .appstore-section .appstore-card {
-        max-width: 720px; margin: 0 auto;
-        background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+        max-width: 1100px; margin: 0 auto;
+        background: #292F28;
         color: white;
         border-radius: 32px;
         padding: 64px 48px;
@@ -628,7 +621,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .appstore-card h2 {
         font-size: clamp(32px, 5vw, 52px);
-        font-weight: 900; letter-spacing: -2px;
+        font-family: Georgia, serif; font-weight: 400; letter-spacing: -1.5px;
         line-height: 1.05; margin-bottom: 16px;
       }
       .appstore-card p {
@@ -666,7 +659,8 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .price-card.featured {
         border: 2px solid var(--orange);
-        box-shadow: 0 16px 48px rgba(249,115,22,0.12);
+        background: #FFF7ED;
+        box-shadow: 0 12px 32px rgb(55 42 25 / 6%);
         position: relative;
       }
       .price-badge {
@@ -701,12 +695,12 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          FAQ SECTION
          ──────────────────────────────────────────── */
       .faq-section { padding: 100px 24px; background: var(--canvas); }
-      .faq-grid { display: grid; gap: 12px; max-width: 720px; margin: 0 auto; }
+      .faq-grid { display: grid; gap: 0; max-width: 720px; margin: 0 auto; }
       .faq-item {
         background: white;
         border: 1px solid var(--card-border);
-        border-radius: 16px;
-        padding: 22px 26px;
+        border-radius: 0; border-width: 0 0 1px;
+        background: transparent; padding: 24px 0;
       }
       .faq-item summary {
         cursor: pointer; list-style: none;
@@ -727,20 +721,16 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
          FINAL CTA
          ──────────────────────────────────────────── */
       .final-cta {
-        padding: 120px 24px;
+        padding: 88px 24px;
         background: white;
         text-align: center;
       }
       .final-cta h2 {
         font-size: clamp(36px, 5.5vw, 64px);
-        font-weight: 900; letter-spacing: -2.5px;
+        font-family: Georgia, serif; font-weight: 400; letter-spacing: -2px;
         line-height: 1.02; margin-bottom: 20px;
       }
-      .final-cta h2 span {
-        background: linear-gradient(110deg, var(--orange), #FFB74A);
-        -webkit-background-clip: text; background-clip: text;
-        color: transparent;
-      }
+      .final-cta h2 span { color: var(--orange); font-style: italic; }
       .final-cta p {
         color: var(--muted); font-size: 18px; line-height: 1.55;
         max-width: 460px; margin: 0 auto 40px;
@@ -764,7 +754,8 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: var(--canvas);
         border-top: 1px solid var(--card-border);
         color: var(--muted);
-        padding: 48px 32px 32px;
+        padding: 32px 28px 0;
+        overflow: hidden;
       }
       .footer-inner {
         max-width: 1100px; margin: 0 auto;
@@ -789,6 +780,22 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       @media (max-width: 768px) {
         .footer-inner { grid-template-columns: 1fr 1fr; gap: 32px; }
         .footer-brand { grid-column: span 2; }
+      }
+      @media (max-width: 380px) {
+        .nav-logo img { height: 48px; }
+        .nav-cta { padding: 9px 12px; white-space: nowrap; }
+        .nav-links .nav-login { padding: 8px 6px; font-size: 13px; }
+        .hero-actions a { font-size: 13px; padding-left: 16px; padding-right: 16px; }
+      }
+      @media (max-width: 640px) {
+        .hero-actions { flex-direction: column; align-items: stretch; }
+        .hero-actions a { justify-content: center; }
+        .hero h1 { font-size: clamp(40px, 10.5vw, 52px); }
+        .hero-trust { gap: 14px; }
+        .how-section, .features-section, .pricing-section, .faq-section, .passport-section, .appstore-section, .final-cta { padding: 56px 24px; }
+        .appstore-section .appstore-card { padding: 40px 24px; }
+        .bento-card.featured { padding: 28px; }
+        .price-card { padding: 30px 24px; }
       }
     </style>
   </head>
@@ -818,22 +825,23 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
             Disponible en App Store
           </div>
           <h1>
-            Todo lo de tu mascota,<br />
-            <span class="gradient-text">en un solo lugar.</span>
+            Vacunas e historial de tu mascota,<br />
+            <span class="gradient-text">siempre a mano.</span>
           </h1>
           <p class="lead">
-            Vacunas, peso, veterinario, alimentación y pasaporte de viaje. Todo organizado, siempre contigo. Para que cuidar a tu perro o a tu gato sea simple.
+            Guarda sus vacunas, sigue su peso y consulta sus cuidados cuando los necesites. En la web o en tu iPhone.
           </p>
           <div class="hero-actions">
             <a href="/register" class="btn-primary">
-              Empezar gratis
+              Crear cuenta gratis en la web
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
             </a>
             <a href={APP_STORE_URL} target="_blank" rel="noopener" class="btn-secondary-dark">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-              Descargar en iPhone
+              Descargar para iPhone
             </a>
           </div>
+          <a href="#how" class="walkthrough-link">Ver cómo funciona, sin registrarte →</a>
           <div class="hero-trust">
             <span class="hero-trust-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
@@ -864,7 +872,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       <div class="trust-bar-inner">
         <span class="trust-bar-item">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          iOS 16+
+          iOS 15.1+
         </span>
         <span class="trust-bar-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -885,24 +893,27 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <section class="how-section" id="how">
       <div class="section-inner">
         <span class="section-eyebrow">Cómo funciona</span>
-        <h2 class="section-title">Empezar es muy fácil</h2>
-        <p class="section-sub">En menos de 2 minutos tienes todo lo de tu mascota organizado y listo para compartir con el veterinario.</p>
+        <h2 class="section-title">Así se ve cuidar con Vivra</h2>
+        <p class="section-sub">Un recorrido por tres pantallas reales de la app para iPhone. Explóralas antes de crear tu cuenta.</p>
 
         <div class="how-grid">
           <div class="how-card">
             <div class="how-icon"><Icon name="mascota" class="h-7 w-7" /></div>
             <h3>Crea su perfil</h3>
-            <p>Agregas nombre, raza, foto, microchip y datos básicos. Una vez. Y queda contigo para siempre.</p>
+            <p>Reúne su nombre, raza, fecha de nacimiento y microchip en una ficha fácil de consultar.</p>
+            <img class="how-screenshot" src="/app-perfil.webp" width="640" height="1387" alt="Pantalla de perfil de Tinto con su raza, nacimiento, peso y microchip" loading="lazy" />
           </div>
           <div class="how-card">
             <div class="how-icon"><Icon name="documento" class="h-7 w-7" /></div>
-            <h3>Registra lo importante</h3>
-            <p>Vacunas, peso, visitas al vet, alimentación, gastos. La app te recuerda cuándo toca lo que toca.</p>
+            <h3>Sigue su evolución</h3>
+            <p>Añade sus registros de peso y consulta la gráfica y el historial para ver cómo cambia con el tiempo.</p>
+            <img class="how-screenshot" src="/app-peso.webp" width="640" height="1387" alt="Pantalla de peso con la gráfica de evolución de Tinto y sus registros por fecha" loading="lazy" />
           </div>
           <div class="how-card">
             <div class="how-icon"><Icon name="descarga" class="h-7 w-7" /></div>
-            <h3>Sincroniza y comparte</h3>
-            <p>Misma información en iPhone y web. Imprimes el pasaporte para viajes y compartes acceso con tu pareja.</p>
+            <h3>Consulta sus próximos cuidados</h3>
+            <p>Abre el inicio para ver los próximos preventivos y las últimas visitas al veterinario en un mismo lugar.</p>
+            <img class="how-screenshot" src="/app-home.webp" width="640" height="1387" alt="Inicio de Vivra con próximos antipulgas y desparasitante y la última visita al veterinario" loading="lazy" />
           </div>
         </div>
       </div>
@@ -1045,7 +1056,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Varias mascotas (perros y gatos)</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Indicador de Bienestar + total de gastos</li>
           </ul>
-          <a href="/register" class="price-cta ghost">Empezar gratis</a>
+          <a href="/register" class="price-cta ghost">Crear cuenta gratis en la web</a>
         </div>
 
         <div class="price-card featured">
@@ -1114,7 +1125,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       <p>Tu mascota va a vivir mejor cuando tú tengas todo bajo control. Crea tu cuenta en menos de 1 minuto.</p>
       <div class="final-cta-actions">
         <a href="/register" class="btn-primary">
-          Crear cuenta gratis
+          Crear cuenta gratis en la web
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
         </a>
         <a href="/login" class="btn-light-secondary">Ya tengo cuenta</a>

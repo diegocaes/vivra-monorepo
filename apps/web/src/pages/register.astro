@@ -163,26 +163,12 @@ if (refFromUrl && initialRefValid) {
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <title>Crear cuenta | Vivra</title>
-    <style>
-      .right-panel {
-        position: relative;
-      }
-      .right-panel::before {
-        content: '';
-        position: absolute; inset: 0;
-        background-image: url('/bg_home.webp');
-        background-size: 380px auto;
-        background-repeat: repeat;
-        opacity: 0.10;
-        pointer-events: none;
-        mix-blend-mode: multiply;
-      }
-    </style>
+
   </head>
-  <body class="flex min-h-screen bg-canvas">
+  <body class="auth-shell flex min-h-screen bg-canvas">
 
     <!-- Left panel (desktop only) -->
-    <div class="hidden lg:flex lg:flex-col lg:w-105 lg:shrink-0 bg-sidebar text-white p-10 relative overflow-hidden">
+    <div class="auth-story hidden lg:flex lg:flex-col lg:w-105 lg:shrink-0 bg-sidebar text-white p-10 relative overflow-hidden">
       <div class="absolute inset-0 opacity-10">
         <div class="absolute top-20 -left-20 h-64 w-64 rounded-full bg-accent blur-3xl"></div>
         <div class="absolute bottom-20 right-10 h-48 w-48 rounded-full bg-amber blur-3xl"></div>
@@ -224,8 +210,8 @@ if (refFromUrl && initialRefValid) {
     </div>
 
     <!-- Right panel -->
-    <div class="right-panel flex flex-1 items-center justify-center p-6">
-      <div class="w-full max-w-sm">
+    <div class="auth-stage flex flex-1 items-center justify-center p-6">
+      <div class="auth-card w-full max-w-sm">
 
         <!-- Mobile logo -->
         <div class="mb-8 text-center lg:hidden animate-fade-up">
@@ -271,27 +257,6 @@ if (refFromUrl && initialRefValid) {
                 {error === 'no_ref' && 'Ocurrio un error. Intenta de nuevo.'}
               </div>
             )}
-
-            <!-- Referral code (optional) -->
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-ink mb-1.5">Codigo de referido <span class="text-muted font-normal">(opcional)</span></label>
-              <input
-                type="text"
-                name="ref_code"
-                id="ref-code-input"
-                value={initialRef}
-                autocomplete="off"
-                placeholder="Ej: TINTO2847"
-                class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 uppercase tracking-wider font-mono"
-              />
-              {refRejected ? (
-                <p class="text-xs text-amber-600 mt-1">El código <strong>{candidateRef}</strong> no es válido. Puedes continuar sin código.</p>
-              ) : initialRef ? (
-                <p class="text-xs text-accent mt-1">✓ Código aplicado: ambos ganan premium gratis al unirse.</p>
-              ) : (
-                <p class="text-xs text-muted mt-1">Si alguien te invitó, ingresa su código aquí</p>
-              )}
-            </div>
 
             <!-- Google OAuth -->
             <form method="POST" id="google-form-reg">
@@ -385,14 +350,35 @@ if (refFromUrl && initialRefValid) {
               <button
                 type="submit"
                 id="btn-register"
-                class="w-full rounded-xl px-6 py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-95"
-                style="background:#F97316; box-shadow:0 4px 14px rgba(249,115,22,0.35);"
-                onmouseover="this.style.background='#EA6C0A'"
-                onmouseout="this.style.background='#F97316'"
+                class="w-full rounded-xl bg-accent hover:bg-accent-dark px-6 py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-95"
               >
                 Crear cuenta
               </button>
             </form>
+
+            <!-- Referral code (optional) -->
+            <details class="mt-4" open={!!initialRef || refRejected}>
+              <summary class="cursor-pointer text-sm font-semibold text-accent py-2">Tengo un código</summary>
+              <div class="pt-2">
+                <label for="ref-code-input" class="block text-sm font-medium text-ink mb-1.5">Código de referido <span class="text-muted font-normal">(opcional)</span></label>
+                <input
+                  type="text"
+                  name="ref_code"
+                  id="ref-code-input"
+                  value={initialRef}
+                  autocomplete="off"
+                  placeholder="Ej: TINTO2847"
+                  class="w-full rounded-xl border border-card-border bg-white px-4 py-2.5 text-ink placeholder-muted text-sm transition-all duration-200 hover:border-gray-300 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 uppercase tracking-wider font-mono"
+                />
+                {refRejected ? (
+                  <p class="text-xs text-amber-600 mt-1">El código <strong>{candidateRef}</strong> no es válido. Puedes continuar sin código.</p>
+                ) : initialRef ? (
+                  <p class="text-xs text-accent mt-1">✓ Código aplicado: ambos ganan premium gratis al unirse.</p>
+                ) : (
+                  <p class="text-xs text-muted mt-1">Si alguien te invitó, ingresa su código aquí</p>
+                )}
+              </div>
+            </details>
 
             <p class="mt-5 text-center text-sm text-muted">
               ¿Ya tienes cuenta?
@@ -533,7 +519,7 @@ if (refFromUrl && initialRefValid) {
           });
         }
       }
-      document.addEventListener('astro:page-load', setupRegister);
+      setupRegister();
     </script>
     <Analytics />
     <SpeedInsights />

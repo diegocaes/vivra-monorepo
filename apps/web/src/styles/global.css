@@ -2,17 +2,17 @@
 
 @theme {
   /* New design system */
-  --color-canvas: #F7F8FA;
-  --color-sidebar: #13161C;
-  --color-sidebar-hover: #1E2228;
-  --color-sidebar-active: #252A32;
+  --color-canvas: #F7F4EE;
+  --color-sidebar: #292620;
+  --color-sidebar-hover: #39352D;
+  --color-sidebar-active: #464035;
   --color-card: #FFFFFF;
-  --color-card-border: #EAECF0;
+  --color-card-border: #E8E2D8;
   --color-accent: #F97316;
   --color-accent-dark: #EA580C;
   --color-accent-light: #FFF7ED;
-  --color-ink: #0F1117;
-  --color-muted: #6B7280;
+  --color-ink: #292620;
+  --color-muted: #716C64;
   --color-amber: #F59E0B;
   --color-amber-light: #FCD34D;
   --color-amber-dark: #D97706;
@@ -101,24 +101,24 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
+    padding: 11px 14px;
+    border-radius: 12px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #9CA3AF;
+    color: #C1BBAF;
     transition: background 0.15s, color 0.15s;
     text-decoration: none;
   }
   .sidebar-link:hover {
-    background: #1E2228;
+    background: #39352D;
     color: #E5E7EB;
   }
   .sidebar-link.active {
-    background: #252A32;
+    background: #464035;
     color: #FFFFFF;
   }
   .sidebar-link.active svg {
-    color: #F97316;
+    color: #FDBA74;
   }
 }
 
@@ -179,4 +179,47 @@ html {
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* Warm surfaces shared by the marketing and signed-in experiences. */
+::selection { background: #FADAC3; color: #292620; }
+.ui-card { box-shadow: 0 3px 16px rgb(55 42 25 / 3%); }
+.app-shell { background-image: radial-gradient(ellipse at top right, #FFF1DF, transparent 55%); }
+.app-content { padding-top: 36px; padding-bottom: 56px; }
+.app-content h1 { letter-spacing: -0.045em; }
+.app-sidebar { border-right: 1px solid #443E33; }
+.sidebar-link.active { box-shadow: inset 3px 0 #FDBA74; }
+.section-header { gap: 20px; align-items: flex-start; }
+.section-header h1 { font-size: clamp(1.65rem, 3vw, 2rem); line-height: 1.15; }
+.section-header p { margin-top: 8px; line-height: 1.6; }
+.section-header > a { flex-shrink: 0; border-bottom: 1px solid currentColor; padding-bottom: 3px; }
+
+.auth-shell { background: #F7F4EE; --color-accent: #BD4B22; --color-accent-dark: #963817; }
+.auth-story { background: #292F28; margin: 20px; border-radius: 28px; min-height: calc(100dvh - 40px); }
+.auth-story h2 { font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2.4rem, 4vw, 3.5rem); font-weight: 400; letter-spacing: -0.045em; line-height: 1.1; }
+.auth-story > .absolute { display: none; }
+.auth-story::after { content: ''; display: block; height: 200px; margin: 40px 0; background: url('/bg_home.webp') center / 280px; border-radius: 100px 100px 24px 24px; opacity: 0.16; }
+.auth-story > .mt-auto { order: 1; }
+.auth-story > .mt-auto p { color: #BDBFB8; }
+.auth-card #login-form > div:last-child > a { background: #F7F4EE; border: 1px solid #E8E2D8; color: #292620; }
+.auth-stage { padding: 40px 24px; }
+.auth-card { max-width: 460px; padding: 36px; background: #FFFEFB; border: 1px solid #E8E2D8; border-radius: 28px; box-shadow: 0 16px 64px rgb(55 42 25 / 5%); position: relative; }
+.auth-card h2 { font-size: 1.75rem; letter-spacing: -0.04em; }
+.auth-card input:not([type='hidden']) { min-height: 48px; background-color: #FFF; font-size: 16px; }
+.auth-card button[type='submit'] { min-height: 48px; }
+.auth-card summary { padding: 12px 0; }
+.public-page main { margin-top: 36px; margin-bottom: 48px; background: #FFFEFB; border: 1px solid #E8E2D8; border-radius: 28px; }
+.public-page h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; letter-spacing: -0.045em; }
+@media (min-width: 1024px) {
+  .app-content { padding-right: 48px; padding-left: 48px; }
+  .auth-story { width: 42%; max-width: 580px; padding: 48px; }
+}
+@media (max-width: 640px) {
+  .auth-stage { padding: 24px 16px; }
+  .auth-card { padding: 28px 22px; border-radius: 24px; }
+  .section-header { flex-wrap: wrap; gap: 12px; }
+  .public-page main { margin: 16px 12px 32px; padding: 28px 20px; border-radius: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
