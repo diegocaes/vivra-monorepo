@@ -1,6 +1,15 @@
 # Plan de salida Vivra 1.3.0
 
-Fecha: 29 de septiembre de 2026. Estado: propuesta; sin commit, build nuevo, envío a revisión ni campaña ejecutados.
+Fecha: 29 de septiembre de 2026. Plan inicial y registro de decisiones.
+
+## Estado de ejecución
+
+- Commit del candidato: 86d0f48. Build EAS de producción 1.3.0 (23): aef6d52d-3f48-42f4-9111-2c7b1163074c.
+- Verificación técnica: 128 pruebas correctas, tipos y build web correctos, smoke público 6/6 y exportación iOS correcta.
+- ASC: borrador 1.3.0 con novedades y notas de revisión actualizadas, liberación manual y distribución escalonada de siete días.
+- El usuario autorizó después usar TestFlight para simplificar la prueba en su iPhone. La preparación ad hoc se canceló; no se generó un segundo build.
+- La revisión de compras/push nativos queda a cargo del usuario. La publicación al público y el anuncio siguen pendientes. Las capturas heredadas de 1.2.3 deben actualizarse antes del envío final a revisión.
+- El resto de este documento conserva el plan inicial, incluido el camino sin TestFlight que fue sustituido por la decisión anterior.
 
 ## Base confirmada
 
