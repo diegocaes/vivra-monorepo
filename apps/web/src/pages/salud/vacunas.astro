@@ -2,10 +2,12 @@
 import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
 import Icon from '../../components/ui/Icon.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
+import HealthHeader from '../../components/health/HealthHeader.astro';
+import HealthLoadNotice from '../../components/health/HealthLoadNotice.astro';
 import {
   buildVaccineOverview,
   daysUntilDate,
+  localDateKey,
   formatDate,
   vaccineBrandOptions,
   vaccineOptionsForSpecies,
@@ -21,7 +23,7 @@ if (!pet) return Astro.redirect('/perfil?new=1');
 
 const vaccineOptions = vaccineOptionsForSpecies(pet.species);
 const brandOptions = vaccineBrandOptions();
-const today = new Date().toISOString().slice(0, 10);
+const today = localDateKey();
 
 function redirectError(message: string) {
   return Astro.redirect('/salud/vacunas?toast_error=' + encodeURIComponent(message));
@@ -88,7 +90,7 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const { data: vaccineRows } = await supabase
+const { data: vaccineRows, error: vaccineLoadError } = await supabase
   .from('vaccines').select('*').eq('pet_id', pet.id).order('date_given', { ascending: false });
 const vaccines = vaccineRows ?? [];
 const overview = buildVaccineOverview(vaccines, today);
@@ -123,41 +125,22 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
 ---
 
 <MainLayout title="Vacunas">
-  <a href="/salud" class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink">
-    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-    Salud
-  </a>
-  <SectionHeader title="Vacunas" subtitle={`Carné digital e historial de ${pet.name}`} />
+  <HealthHeader pet={pet} active="vacunas" title="Vacunas" subtitle={`Carné digital e historial de ${pet.name}`} />
 
-  <section class="mb-5 overflow-hidden rounded-3xl border border-card-border bg-card animate-fade-up">
-    <div class="flex gap-4 p-5 sm:p-6">
-      <div class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-light text-accent">
-        <Icon name="vacuna" class="h-7 w-7" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-accent">Carné digital</p>
-        <h2 class="mt-1 text-xl font-bold text-ink">{summary.title}</h2>
-        <p class="mt-1 max-w-xl text-sm leading-relaxed text-muted">{summary.text}</p>
-      </div>
+  {vaccineLoadError ? <HealthLoadNotice href="/salud/vacunas" subject="las vacunas" /> : <>
+    <section class="health-section-summary">
+      <span class:list={['health-summary-ring', { warning: overview.overdueCount > 0 || overview.dueSoonCount > 0 }]}><Icon name="vacuna" class="h-7 w-7" /></span>
+      <div><h2>{summary.title}</h2><p>{summary.text}</p></div>
+    </section>
+    <div class="health-metric-strip">
+      <div><strong>{vaccines.length}</strong><p>Dosis registradas</p></div>
+      <div><strong>{overview.latestByName.length}</strong><p>Tipos de vacuna</p></div>
+      <div><strong>{overview.schedule.length}</strong><p>Con próxima fecha</p></div>
     </div>
-    <div class="grid grid-cols-3 border-t border-card-border">
-      <div class="px-3 py-4 text-center">
-        <p class="text-xl font-black text-ink">{vaccines.length}</p>
-        <p class="mt-0.5 text-[10px] text-muted">dosis</p>
-      </div>
-      <div class="border-x border-card-border px-3 py-4 text-center">
-        <p class="text-xl font-black text-ink">{overview.latestByName.length}</p>
-        <p class="mt-0.5 text-[10px] text-muted">vacunas</p>
-      </div>
-      <div class="px-3 py-4 text-center">
-        <p class:list={['text-xl font-black', overview.overdueCount > 0 ? 'text-red-500' : 'text-ink']}>{overview.schedule.length}</p>
-        <p class="mt-0.5 text-[10px] text-muted">con próxima fecha</p>
-      </div>
-    </div>
-  </section>
+  </>}
 
   <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
-    <button type="button" id="toggle-vaccine-form" class="w-full action-primary">
+    <button type="button" id="toggle-vaccine-form" aria-controls="vaccine-form-body" aria-expanded={openNewForm} class="w-full action-primary">
       <span class="flex items-center gap-2.5">
         <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15">
           <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -222,7 +205,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
 
   <section class="mb-7 animate-fade-up animate-fade-up-delay-1">
     <div class="overflow-hidden rounded-2xl border border-card-border bg-card">
-      <button type="button" id="toggle-vaccine-card" class="flex w-full items-center justify-between gap-4 p-4 transition-colors hover:bg-canvas">
+      <button type="button" id="toggle-vaccine-card" aria-controls="vaccine-card-body" aria-expanded="false" class="flex w-full items-center justify-between gap-4 p-4 transition-colors hover:bg-canvas">
         <span class="flex min-w-0 items-center gap-3 text-left">
           {pet.vaccine_card_url ? (
             <img src={pet.vaccine_card_url} alt="Vista previa del carné" class="h-12 w-12 shrink-0 rounded-xl border border-card-border object-cover" />
@@ -275,7 +258,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
     </div>
   </section>
 
-  {overview.schedule.length > 0 && (
+  {!vaccineLoadError && overview.schedule.length > 0 && (
     <section class="mb-8 animate-fade-up animate-fade-up-delay-2">
       <div class="mb-3 flex items-end justify-between">
         <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Calendario</p><h2 class="mt-0.5 text-xl font-bold text-ink">Próximas dosis</h2></div>
@@ -304,7 +287,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
     </section>
   )}
 
-  <section class="animate-fade-up animate-fade-up-delay-2">
+  {!vaccineLoadError && <section class="animate-fade-up animate-fade-up-delay-2">
     <div class="mb-3 flex items-end justify-between">
       <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-muted">Aplicaciones</p><h2 class="mt-0.5 text-xl font-bold text-ink">Historial</h2></div>
       {vaccines.length > 0 && <span class="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-muted">{overview.history.length}</span>}
@@ -365,7 +348,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
         ))}
       </div>
     )}
-  </section>
+  </section>}
 
   <datalist id="vaccine-type-options">{vaccineOptions.filter(option => option.key !== 'Otra').map(option => <option value={option.key}>{option.label}</option>)}</datalist>
   <datalist id="vaccine-brand-options">{brandOptions.filter(option => option.key && option.key !== 'Otra').map(option => <option value={option.key}>{option.label}</option>)}</datalist>
@@ -384,6 +367,9 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
 
   <script is:inline>
     function setupVacunas() {
+      var pageControl = document.getElementById('toggle-vaccine-form');
+      if (!pageControl || pageControl.dataset.healthInitialized === '1') return;
+      pageControl.dataset.healthInitialized = '1';
       function bindSelect(selectId, inputId) {
         var select = document.getElementById(selectId);
         var input = document.getElementById(inputId);
@@ -419,7 +405,8 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
         if (!formBody) return;
         formBody.classList.remove('hidden');
         if (formIcon) formIcon.classList.add('rotate-180');
-        setTimeout(function () { formBody.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 30);
+        if (formToggle) formToggle.setAttribute('aria-expanded', 'true');
+        setTimeout(function () { formBody.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); }, 30);
       }
       if (formToggle && formToggle.dataset.bound !== '1') {
         formToggle.dataset.bound = '1';
@@ -427,6 +414,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
           var opening = formBody && formBody.classList.contains('hidden');
           if (formBody) formBody.classList.toggle('hidden');
           if (formIcon) formIcon.classList.toggle('rotate-180', opening);
+          formToggle.setAttribute('aria-expanded', String(opening));
         });
       }
       document.querySelectorAll('.empty-add-btn').forEach(function (button) { button.addEventListener('click', openForm); });
@@ -440,6 +428,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
           var opening = cardBody && cardBody.classList.contains('hidden');
           if (cardBody) cardBody.classList.toggle('hidden');
           if (cardIcon) cardIcon.classList.toggle('rotate-180', opening);
+          cardToggle.setAttribute('aria-expanded', String(opening));
         });
       }
 
@@ -447,7 +436,7 @@ const openNewForm = Astro.url.searchParams.get('new') === '1';
         var view = document.querySelector('.vaccine-view[data-id="' + id + '"]');
         var edit = document.querySelector('.vaccine-edit[data-id="' + id + '"]');
         if (view) view.classList.add('hidden');
-        if (edit) { edit.classList.remove('hidden'); edit.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        if (edit) { edit.classList.remove('hidden'); edit.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }); }
       }
       document.querySelectorAll('.edit-btn, .schedule-edit-btn').forEach(function (button) {
         button.addEventListener('click', function () { openEdit(button.dataset.id); });

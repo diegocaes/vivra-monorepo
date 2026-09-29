@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import Purchases, {
-  type CustomerInfo,
   type PurchasesOffering,
   type PurchasesPackage,
 } from 'react-native-purchases';
 import { ENTITLEMENT_ID, PAYWALL_OFFERING_ID } from '../constants/revenueCat';
+import { resolvePremiumAccess } from '../lib/premiumResolution';
 import { useAuth } from './useAuth';
 import { supabase } from '../lib/supabase';
 import {
@@ -16,6 +16,7 @@ import {
 
 interface SubscriptionState {
   isPremium: boolean;
+  error: string | null;
   isLoading: boolean;
   packages: PurchasesPackage[];
   currentOffering: string | null;
@@ -37,6 +38,10 @@ export type { SubscriptionState };
 export function useSubscriptionState(): SubscriptionState {
   const { user } = useAuth();
   const [isPremium, setIsPremium] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lastKnown = useRef({ premium: false, checkedAt: 0 });
+  const request = useRef(0);
+  useEffect(() => () => { request.current++; }, []);
   const [isLoading, setIsLoading] = useState(true);
   const [packages, setPackages] = useState<PurchasesPackage[]>([]);
   const [currentOffering, setCurrentOffering] = useState<string | null>(null);
@@ -67,6 +72,7 @@ export function useSubscriptionState(): SubscriptionState {
         }
       }
 
+      if (cancelled) return;
       try {
         await checkSubscription();
         if (!cancelled && canUseNativeRevenueCat()) await loadOfferings();
@@ -85,20 +91,11 @@ export function useSubscriptionState(): SubscriptionState {
   // `user` va en las deps a propósito: al cambiar de cuenta hay que
   // re-registrar el listener contra el nuevo usuario configurado en RevenueCat.
   useEffect(() => {
-    if (!canUseNativeRevenueCat() || !getRevenueCatUserId()) return;
-
-    const handler = (info: CustomerInfo) => {
-      const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      if (premium) {
-        setIsPremium(true);
-      } else {
-        // A RevenueCat "not active" update only answers the Apple-IAP part of
-        // the question. Re-evaluate web/referral/promo/shared access before
-        // marking the whole account free.
-        void checkSubscription();
-      }
-      // The server receives RevenueCat's signed webhook. Never let a mobile
-      // client write its own entitlement or expiry into Supabase.
+    if (!canUseNativeRevenueCat() || !user) return;
+    // Read the current, identified customer instead of trusting an event that
+    // may have been emitted during a different account's login.
+    const handler = () => {
+      if (getRevenueCatUserId() === user.id) void checkSubscription();
     };
 
     Purchases.addCustomerInfoUpdateListener(handler);
@@ -108,70 +105,44 @@ export function useSubscriptionState(): SubscriptionState {
     };
   }, [user]);
 
-  const checkSubscription = useCallback(async () => {
-    // 1. Check RevenueCat (paid IAP entitlement) — source of truth for IAP
-    if (canUseNativeRevenueCat()) {
-      try {
-        const rcInfo = await Purchases.getCustomerInfo();
-        const rcPremium = rcInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-        if (rcPremium) {
-          setIsPremium(true);
-          return;
-        }
-      } catch (e: any) {
-        console.warn('[useSubscription] RevenueCat getCustomerInfo failed:', e?.message ?? e);
-      }
+  const checkSubscription = useCallback(async (): Promise<boolean> => {
+    const checkId = ++request.current;
+    if (!user) { setIsPremium(false); return false; }
+    const result = await resolvePremiumAccess([
+      async () => {
+        if (!canUseNativeRevenueCat()) return false;
+        if (getRevenueCatUserId() !== user.id) await identifyRevenueCatUser(user.id);
+        if (getRevenueCatUserId() !== user.id) throw new Error('Subscription account changed');
+        const info = await Purchases.getCustomerInfo();
+        if (getRevenueCatUserId() !== user.id) throw new Error('Subscription account changed');
+        return info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+      },
+      async () => {
+        const { data, error: readError } = await supabase.from('user_subscriptions')
+          .select('plan, source, premium_until').eq('user_id', user.id).maybeSingle();
+        if (readError) throw readError;
+        return data?.plan === 'premium' && !!data.premium_until
+          && new Date(data.premium_until).getTime() > Date.now();
+      },
+      async () => {
+        const { data, error: readError } = await supabase.rpc('get_shared_premium_until');
+        if (readError) throw readError;
+        return !!data && new Date(data as string).getTime() > Date.now();
+      },
+    ]);
+    if (checkId !== request.current) return false;
+    if (result === null) {
+      setError('No pudimos comprobar tu suscripción. Revisa la conexión e intenta de nuevo.');
+      // Brief, account-scoped grace for a previously verified session. Unknown
+      // access never becomes a purchase prompt or a permanent Premium grant.
+      const cached = lastKnown.current.premium && Date.now() - lastKnown.current.checkedAt < 300_000;
+      setIsPremium(cached);
+      return cached;
     }
-
-    if (!user) { setIsPremium(false); return; }
-
-    // 2. Own Supabase subscription row (referral / trial / promo)
-    try {
-      const { data, error } = await supabase
-        .from('user_subscriptions')
-        .select('plan, source, premium_until')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.warn('[useSubscription] user_subscriptions read error:', error.message);
-      } else if (data?.plan === 'premium' && data?.premium_until) {
-        const until = new Date(data.premium_until).getTime();
-        const daysLeft = Math.ceil((until - Date.now()) / 86400000);
-        if (daysLeft > 0) {
-          setIsPremium(true);
-          return;
-        }
-        // On-load expiry defense (R7b): if a non-IAP premium has expired,
-        // ask the server to demote the row. Uses SECURITY DEFINER RPC because
-        // user_subscriptions is RLS-protected and authenticated users cannot
-        // UPDATE directly. Idempotent with the nightly pg_cron job.
-        if (data.source && ['referral', 'trial', 'promo'].includes(data.source)) {
-          const { error: rpcError } = await supabase.rpc('expire_my_premium_if_due');
-          if (rpcError) {
-            console.warn('[useSubscription] expire_my_premium_if_due failed:', rpcError.message);
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('[useSubscription] user_subscriptions check threw:', e?.message ?? e);
-    }
-
-    // 3. Co-owner inherited premium. A narrow SECURITY DEFINER RPC returns
-    //    only the effective date; clients never read a partner's billing row.
-    try {
-      const { data: sharedUntil, error: sharedError } = await supabase.rpc('get_shared_premium_until');
-      if (sharedError) {
-        console.warn('[useSubscription] shared premium check failed:', sharedError.message);
-      } else if (sharedUntil && new Date(sharedUntil as string).getTime() > Date.now()) {
-        setIsPremium(true);
-        return;
-      }
-    } catch (e: any) {
-      console.warn('[useSubscription] pet_shares check threw:', e?.message ?? e);
-    }
-
-    setIsPremium(false);
+    lastKnown.current = { premium: result, checkedAt: Date.now() };
+    setError(null);
+    setIsPremium(result);
+    return result;
   }, [user]);
 
   const loadOfferings = useCallback(async () => {
@@ -204,7 +175,7 @@ export function useSubscriptionState(): SubscriptionState {
     try {
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const premium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      setIsPremium(premium);
+      await checkSubscription();
       return premium;
     } catch (e: any) {
       if (e.userCancelled) return false;
@@ -212,21 +183,19 @@ export function useSubscriptionState(): SubscriptionState {
       Alert.alert('Error de compra', 'No se pudo completar la compra. Intenta de nuevo.');
       return false;
     }
-  }, []);
+  }, [checkSubscription]);
 
   const restore = useCallback(async (): Promise<boolean> => {
     if (!canUseNativeRevenueCat()) return false;
 
     try {
-      const info = await Purchases.restorePurchases();
-      const premium = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
-      setIsPremium(premium);
-      return premium;
+      await Purchases.restorePurchases();
+      return await checkSubscription();
     } catch (e) {
       console.error('Restore error:', e);
       return false;
     }
-  }, []);
+  }, [checkSubscription]);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -240,6 +209,7 @@ export function useSubscriptionState(): SubscriptionState {
   return useMemo(
     () => ({
       isPremium,
+      error,
       isLoading,
       packages,
       currentOffering,
@@ -250,6 +220,7 @@ export function useSubscriptionState(): SubscriptionState {
     }),
     [
       isPremium,
+      error,
       isLoading,
       packages,
       currentOffering,

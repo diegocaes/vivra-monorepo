@@ -73,8 +73,10 @@ sesión cerrada y los de navegación/formularios requieren una sesión iniciada.
 con el bundle ID nativo. Confirma que el build de desarrollo carga el Metro de
 este checkout; un build release instalado puede contener código anterior.
 
-El flow de navegación comprueba contenido de Salud y los contenedores de Comida
-y Perfil. Ya no busca `health-passport`, un botón eliminado de Salud. Las capturas
+El flow de navegación recorre Inicio, Salud, Cuidado, Viajes y Más tres veces.
+Comprueba Alimentación dentro de Cuidado, apertura del pasaporte desde Viajes
+y Gastos desde Más, además de abrir y volver de Grooming a Cuidado. También
+comprueba la separación de Mi mascota y Mi cuenta. Las capturas
 y logs de Maestro ayudan a distinguir una sesión ausente de un fallo de navegación.
 Los flows cierran el aviso de desarrollo “Open debugger to view warnings” cuando
 aparece: ese aviso cubre la barra de tabs e intercepta los taps en iOS.
@@ -83,3 +85,35 @@ El flujo de formularios también abre el preventivo combinado (título largo),
 comprueba Cancelar y Guardar al escribir, recorre hasta las notas y cancela
 sin guardar. Al reabrir, comprueba que el borrador se limpió. Requiere una
 sesión con mascota y el código actual servido por Metro.
+
+## Rediseño de bienvenida, vacunas y pasaporte
+
+Sin sesión, desde la raíz:
+
+```bash
+maestro test apps/mobile/.maestro/flows/welcome-navigation-expo.yaml
+```
+
+Con sesión y una vacuna con próxima fecha futura en la mascota seleccionada:
+
+```bash
+maestro test -e VACCINE_NAME=Bordetella apps/mobile/.maestro/flows/vaccine-passport-expo.yaml
+```
+
+Sustituye Bordetella por una vacuna de esa cuenta. Comprueba que carga el detalle,
+abre edición y alta, cancela ambas, entra al pasaporte y a Vuelos, y vuelve a Inicio.
+Guarda capturas en la carpeta de resultados de Maestro. No guarda registros.
+Los flows parametrizados abren explícitamente `exp://localhost:8081` cuando
+`APP_ID=host.exp.Exponent`, para probar el checkout actual incluso tras reiniciar Expo Go.
+
+## Salud: resumen e historial
+
+Con una mascota que tenga vacunas y preventivos registrados:
+
+```bash
+maestro test apps/mobile/.maestro/flows/health-layout-expo.yaml
+```
+
+Comprueba contenido de Salud, Resumen/Historial de vacunas, visitas y preventivos,
+formularios cancelados y el acceso rápido de nueva visita desde el botón «+».
+Toma capturas de las cuatro pantallas. No guarda ni elimina registros.

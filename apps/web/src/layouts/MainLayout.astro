@@ -1,4 +1,5 @@
 ---
+import AppTopbar from '../components/AppTopbar.astro';
 import Sidebar from '../components/Sidebar.astro';
 import FormEnhancements from '../components/ui/FormEnhancements.astro';
 import Toast from '../components/ui/Toast.astro';
@@ -49,7 +50,7 @@ if (user) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#13161C" />
+    <meta name="theme-color" content="#F7F4EE" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -69,9 +70,10 @@ if (user) {
     <!-- Mobile top bar spacer -->
     <div class="h-13 lg:hidden"></div>
 
+    <AppTopbar name={user?.user_metadata?.full_name || user?.user_metadata?.name || 'Mi cuenta'} unreadCount={unreadCount} />
     <!-- Main content — offset by sidebar on desktop -->
     <main class="app-content lg:ml-55 px-4 py-6 sm:px-6 lg:px-8 max-w-full">
-      <div class="mx-auto max-w-3xl">
+      <div class:list={['app-content-inner', { 'is-dashboard': ['/dashboard', '/cuidado', '/alimentacion', '/mas'].includes(Astro.url.pathname) || Astro.url.pathname.startsWith('/salud') }]}>
         <slot />
       </div>
     </main>

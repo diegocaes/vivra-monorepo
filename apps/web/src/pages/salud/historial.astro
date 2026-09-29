@@ -3,9 +3,10 @@ import MainLayout from '../../layouts/MainLayout.astro';
 import HistoryChart from '../../components/HistoryChart.astro';
 import Card from '../../components/ui/Card.astro';
 import EmptyState from '../../components/ui/EmptyState.astro';
-import MetricGrid from '../../components/ui/MetricGrid.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
-import { formatDate, parseNumericField, formatCurrency, sumAmounts } from '@vivra/shared';
+import Icon from '../../components/ui/Icon.astro';
+import HealthHeader from '../../components/health/HealthHeader.astro';
+import HealthLoadNotice from '../../components/health/HealthLoadNotice.astro';
+import { formatDate, parseNumericField, formatCurrency, sumAmounts, localDateKey } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
 import { getPremiumStatus } from '../../lib/premium';
 
@@ -15,11 +16,15 @@ if (!pet) return Astro.redirect('/perfil?new=1');
 
 const premium = await getPremiumStatus(supabase, user.id);
 
+function redirectError(message: string) {
+  return Astro.redirect('/salud/historial?toast_error=' + encodeURIComponent(message));
+}
+
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action') as string;
   if (action === 'add') {
-    await supabase.from('vet_visits').insert({
+    const { error } = await supabase.from('vet_visits').insert({
       pet_id: pet.id,
       date: formData.get('date') as string,
       reason: formData.get('reason') as string,
@@ -31,10 +36,11 @@ if (Astro.request.method === 'POST') {
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     });
+    if (error) return redirectError('No se pudo guardar el registro. Inténtalo de nuevo.');
   }
   if (action === 'edit') {
     const visitId = formData.get('visit_id') as string;
-    await supabase.from('vet_visits').update({
+    const { error } = await supabase.from('vet_visits').update({
       date: formData.get('date') as string,
       reason: formData.get('reason') as string,
       vet_name: (formData.get('vet_name') as string) || null,
@@ -45,16 +51,18 @@ if (Astro.request.method === 'POST') {
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     }).eq('id', visitId).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo guardar el registro. Inténtalo de nuevo.');
   }
   if (action === 'delete') {
     const visitId = formData.get('visit_id') as string;
-    await supabase.from('vet_visits').delete().eq('id', visitId).eq('pet_id', pet.id);
+    const { error } = await supabase.from('vet_visits').delete().eq('id', visitId).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo eliminar el registro. Inténtalo de nuevo.');
     return Astro.redirect('/salud/historial?deleted=1');
   }
   return Astro.redirect('/salud/historial?saved=1');
 }
 
-const { data: visits } = await supabase
+const { data: visits, error: loadError } = await supabase
   .from('vet_visits')
   .select('*')
   .eq('pet_id', pet.id)
@@ -64,31 +72,22 @@ const { data: visits } = await supabase
 // Misma suma y mismo formato que el perfil: `toFixed(0)` redondeaba a $428
 // lo que el perfil mostraba como $427.99, y el mismo gasto parecía distinto.
 const totalCost = sumAmounts(visits, 'cost');
-const lastVisitDays = visits?.[0]
-  ? Math.floor((Date.now() - new Date(visits[0].date + 'T00:00:00').getTime()) / 86400000)
-  : null;
+const visitsThisYear = visits?.filter(visit => visit.date.slice(0, 4) === localDateKey().slice(0, 4)).length ?? 0;
 ---
 
 <MainLayout title="Historial Veterinario">
-  <a href="/salud" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-4">
-    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-    Salud
-  </a>
-  <SectionHeader title="Historial veterinario" subtitle={`Visitas y tratamientos de ${pet.name}`} />
+  <HealthHeader pet={pet} active="historial" title="Visitas veterinarias" subtitle={`Consultas y tratamientos de ${pet.name}`} />
+  {loadError && <HealthLoadNotice href="/salud/historial" subject="las visitas veterinarias" />}
 
+  {!loadError && <>
   {/* ── ANALYTICS ── */}
   {visits && visits.length > 0 ? (
-    <div class="mb-5 animate-fade-up">
-      <MetricGrid items={[
-        { value: String(visits.length), label: 'visitas' },
-        { value: lastVisitDays !== null ? `${lastVisitDays}d` : '—', label: 'última visita' },
-        {
-          value: totalCost === 0 ? '—' : premium.isPremium ? `$${formatCurrency(totalCost)}` : '$•••',
-          label: 'total gastado',
-          href: totalCost === 0 || premium.isPremium ? undefined : '/premium',
-        },
-      ]} />
+    <div class="health-metric-strip">
+      <div><Icon name="vet" class="h-5 w-5 mx-auto mb-2 text-muted" /><strong>{visitsThisYear}</strong><p>Visitas este año</p></div>
+      <div><Icon name="calendario" class="h-5 w-5 mx-auto mb-2 text-muted" /><strong>{formatDate(visits[0].date)}</strong><p>Última visita</p></div>
+      <div><Icon name="vet" class="h-5 w-5 mx-auto mb-2 text-muted" /><strong>{visits[0].clinic_name || visits[0].vet_name || 'Sin registrar'}</strong><p>Clínica o veterinario de la última visita</p></div>
     </div>
+    <p class="health-metric-note">{visits.length} visitas registradas · Gasto total: {totalCost === 0 ? '—' : premium.isPremium ? `$${formatCurrency(totalCost)}` : '$•••'}{totalCost > 0 && !premium.isPremium && <a href="/premium"> Ver con Premium</a>}</p>
   ) : (
     <div class="mb-5 rounded-2xl border border-dashed border-card-border bg-card px-5 py-6 text-center animate-fade-up">
       <p class="text-sm font-semibold text-ink mb-1">Sin visitas registradas</p>
@@ -96,11 +95,15 @@ const lastVisitDays = visits?.[0]
     </div>
   )}
 
+  </>}
+
   {/* ── FORM (colapsable) ── */}
   <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
     <button
       type="button"
       id="toggle-historial-form"
+      aria-controls="historial-form-body"
+      aria-expanded={Astro.url.searchParams.get('new') === '1'}
       class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
@@ -112,7 +115,7 @@ const lastVisitDays = visits?.[0]
       <svg id="toggle-historial-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
-    <div id="historial-form-body" class="hidden mt-2">
+    <div id="historial-form-body" class:list={['mt-2', { hidden: Astro.url.searchParams.get('new') !== '1' }]}>
       <Card>
         <form method="POST" class="space-y-4">
           <input type="hidden" name="_action" value="add" />
@@ -160,6 +163,7 @@ const lastVisitDays = visits?.[0]
     </div>
   </div>
 
+  {!loadError && <>
   {/* ── GRÁFICO HISTÓRICO ── */}
   <HistoryChart
     items={(visits ?? []).map(v => ({ date: v.date, amount: v.cost }))}
@@ -235,15 +239,22 @@ const lastVisitDays = visits?.[0]
     </div>
   )}
 
+  </>}
+
   <script is:inline>
     document.addEventListener('astro:page-load', function() {
+      var pageControl = document.getElementById('toggle-historial-form');
+      if (!pageControl || pageControl.dataset.healthInitialized === '1') return;
+      pageControl.dataset.healthInitialized = '1';
       var toggleBtn = document.getElementById('toggle-historial-form');
       var formBody = document.getElementById('historial-form-body');
       var toggleIcon = document.getElementById('toggle-historial-icon');
+      if (toggleIcon && formBody && !formBody.classList.contains('hidden')) toggleIcon.style.transform = 'rotate(180deg)';
       if (toggleBtn) {
         toggleBtn.addEventListener('click', function() {
           var isOpen = formBody && !formBody.classList.contains('hidden');
           if (formBody) formBody.classList.toggle('hidden');
+          toggleBtn.setAttribute('aria-expanded', String(!isOpen));
           if (toggleIcon) toggleIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
         });
       }

@@ -54,7 +54,7 @@ export function ScoreCircle({
       </Svg>
       <View style={styles.labelContainer}>
         {showScore ? (
-          <Text style={[styles.score, { color }]}>{Math.round(score)}</Text>
+          <Text style={[styles.score, { color: Colors.ink }]}>{Math.round(score)}</Text>
         ) : (
           <Text style={styles.building}>...</Text>
         )}

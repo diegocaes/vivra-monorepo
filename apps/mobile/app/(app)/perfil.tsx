@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { PassportRow } from '../../components/pet/PassportContent';
 import { useIsFocused } from '@react-navigation/native';
 import { usePetSpending } from '../../hooks/usePetSpending';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +54,9 @@ export default function PerfilScreen() {
   const { user, signOut } = useAuth();
   const { isPremium } = useSubscription();
   const router = useRouter();
+  const { view = "menu" } = useLocalSearchParams<{ view?: string }>();
+  const isPetView = view === "pet";
+  const isAccountView = view === "account";
   const petData = usePetContext();
   const { pet, pets, isOwner, coOwners, setActivePetId, refresh } = petData;
   const [refreshing, setRefreshing] = useState(false);
@@ -67,7 +71,6 @@ export default function PerfilScreen() {
   const [breed, setBreed] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('');
-  const [weightKg, setWeightKg] = useState('');
   const [chipId, setChipId] = useState('');
   const [color, setColor] = useState('');
   const [supportType, setSupportType] = useState('');
@@ -84,7 +87,7 @@ export default function PerfilScreen() {
   const openEdit = () => {
     if (!pet) return;
     setName(pet.name); setBreed(pet.breed ?? ''); setBirthDate(pet.birth_date ?? '');
-    setGender(pet.gender ?? ''); setWeightKg(pet.weight_kg?.toString() ?? '');
+    setGender(pet.gender ?? '');
     setChipId(pet.chip_id ?? ''); setColor(pet.color ?? '');
     setSupportType(pet.support_type ?? '');
     setShowEdit(true);
@@ -95,29 +98,16 @@ export default function PerfilScreen() {
     if (!name.trim()) { Alert.alert('Error', 'El nombre es obligatorio'); return; }
     setSaving(true);
 
-    const newWeight = weightKg ? parseFloat(weightKg) : null;
-    const weightChanged = newWeight !== null && newWeight !== pet.weight_kg;
-
     const { error } = await supabase.from('pets').update({
       name: name.trim(),
       // Los gatos no manejan raza — nunca guardar breed para species 'cat'
       breed: pet.species === 'cat' ? null : (breed || null),
       birth_date: birthDate || null,
       gender: gender || null,
-      weight_kg: newWeight,
       chip_id: chipId || null,
       color: color || null,
       support_type: supportType || null,
     }).eq('id', pet.id);
-
-    if (!error && weightChanged && newWeight) {
-      await supabase.from('weight_records').insert({
-        pet_id: pet.id,
-        weight_kg: newWeight,
-        date: new Date().toISOString().slice(0, 10),
-        notes: 'Actualizado desde perfil',
-      });
-    }
 
     setSaving(false);
     if (error) {
@@ -319,11 +309,26 @@ export default function PerfilScreen() {
 
   const themeColor = PetThemeColors[pet?.theme_color ?? 'orange'] ?? Colors.accent;
 
+  if (view === 'menu') return <SafeAreaView testID="screen-more" style={styles.safe} edges={['top']}>
+    <View style={styles.header}><Text style={styles.title}>Más</Text></View>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Card>
+        <PassportRow icon="paw-outline" title="Mi mascota" subtitle="Identidad, foto y acceso compartido" onPress={() => router.setParams({ view: 'pet' })} />
+        <PassportRow icon="wallet-outline" title="Gastos" subtitle="Resumen de los costos registrados" onPress={() => router.setParams({ view: 'spending' })} />
+        <PassportRow icon="person-outline" title="Mi cuenta" subtitle="Acceso y suscripción" onPress={() => router.setParams({ view: 'account' })} />
+        <PassportRow icon="star-outline" title="Premium" subtitle="Tu plan y suscripción" onPress={() => router.push('/paywall')} />
+        <PassportRow icon="gift-outline" title="Invitar amigos" subtitle="Referidos y recompensas" onPress={() => router.push('/referidos')} />
+        <PassportRow icon="help-circle-outline" title="Ayuda y soporte" subtitle="Preguntas frecuentes y contacto" onPress={() => router.setParams({ view: 'support' })} />
+      </Card>
+    </ScrollView>
+  </SafeAreaView>;
+
   return (
     <SafeAreaView testID="screen-profile" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Perfil</Text>
-        {pet && (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver a Más" onPress={() => router.setParams({ view: "menu" })}><Ionicons name="arrow-back" size={24} color={Colors.ink} /></TouchableOpacity>
+        <Text style={styles.title}>{isPetView ? "Mi mascota" : view === "spending" ? "Gastos" : isAccountView ? "Mi cuenta" : "Ayuda y soporte"}</Text>
+        {pet && isPetView && (
           <TouchableOpacity onPress={openEdit}>
             <Ionicons name="create-outline" size={24} color={Colors.accent} />
           </TouchableOpacity>
@@ -339,6 +344,7 @@ export default function PerfilScreen() {
 
         {pet ? (
           <>
+            {isPetView && <>
             {/* Pet switcher */}
             {pets.length > 1 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.petChips}>
@@ -363,13 +369,13 @@ export default function PerfilScreen() {
             )}
 
             {/* Pet hero */}
-            <View style={[styles.heroCard, { backgroundColor: themeColor }]}>
+            <View style={styles.heroCard}>
               <TouchableOpacity onPress={handleChangePhoto} activeOpacity={0.8}>
                 {pet.photo_url ? (
-                  <Image source={{ uri: pet.photo_url }} style={styles.heroPhoto} />
+                  <Image source={{ uri: pet.photo_url }} style={[styles.heroPhoto, { borderColor: themeColor }]} />
                 ) : (
                   <View style={styles.heroPlaceholder}>
-                    <Ionicons name="camera" size={28} color="rgba(255,255,255,0.6)" />
+                    <Ionicons name="camera" size={28} color={Colors.accent} />
                   </View>
                 )}
                 <View style={styles.photoEditBadge}>
@@ -414,25 +420,6 @@ export default function PerfilScreen() {
               } />
             </CollapsibleCard>
 
-            {/* Passport quick access (lives under actividad/ routes; the tab was removed) */}
-            <Card>
-              <TouchableOpacity
-                style={styles.coOwnerRow}
-                onPress={() => router.push('/pasaporte' as any)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="document-text-outline" size={20} color={Colors.accent} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.coOwnerLabel}>Pasaporte</Text>
-                  <Text style={styles.coOwnerSub}>Identidad, vacunas y viajes de {pet.name}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
-              </TouchableOpacity>
-            </Card>
-
-            {/* Spending summary */}
-            <SpendingSummary totals={spending.data} error={spending.error} onRetry={spending.refresh} isPremium={isPremium} />
-
             {/* Theme color (collapsed — set once, rarely changed) */}
             <CollapsibleCard title="Color del perfil">
               <View style={styles.colorGrid}>
@@ -461,6 +448,37 @@ export default function PerfilScreen() {
               )}
             </CollapsibleCard>
 
+{isOwner && <Card>              {/* Co-owner row */}
+              {pet && isOwner && (
+                <TouchableOpacity
+                  style={styles.coOwnerRow}
+                  onPress={() => {
+                    if (isPremium) setShowShareSheet(true);
+                    else router.push('/paywall' as any);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="people-outline" size={20} color={Colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.coOwnerLabel}>
+                      {coOwners.length > 0
+                        ? (coOwners[0]?.shared_with_name || coOwners[0]?.shared_with_email || `Co-dueño (${coOwners.length})`)
+                        : 'Agregar co-dueño'}
+                    </Text>
+                    <Text style={styles.coOwnerSub}>
+                      {coOwners.length > 0
+                        ? (coOwners.length > 1 ? `+${coOwners.length - 1} más · Administrar acceso` : 'Co-dueño · Administrar acceso')
+                        : isPremium ? `Comparte a ${pet.name}` : 'Disponible con Premium'}
+                    </Text>
+                  </View>
+                  <Ionicons name={coOwners.length > 0 ? 'chevron-forward' : 'add-circle-outline'} size={20} color={Colors.accent} />
+                </TouchableOpacity>
+              )}
+
+</Card>}
+            </>}
+            {view === "spending" && <SpendingSummary totals={spending.data} error={spending.error} onRetry={spending.refresh} isPremium={isPremium} />}
+            {isAccountView && <>
             {/* Premium upsell */}
             {!isPremium && (
               <TouchableOpacity style={styles.premiumCard} onPress={() => router.push('/paywall' as any)}>
@@ -493,52 +511,13 @@ export default function PerfilScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Co-owner row */}
-              {pet && isOwner && (
-                <TouchableOpacity
-                  style={styles.coOwnerRow}
-                  onPress={() => {
-                    if (isPremium) setShowShareSheet(true);
-                    else router.push('/paywall' as any);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="people-outline" size={20} color={Colors.accent} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.coOwnerLabel}>
-                      {coOwners.length > 0
-                        ? (coOwners[0]?.shared_with_name || coOwners[0]?.shared_with_email || `Co-dueño (${coOwners.length})`)
-                        : 'Agregar co-dueño'}
-                    </Text>
-                    <Text style={styles.coOwnerSub}>
-                      {coOwners.length > 0
-                        ? (coOwners.length > 1 ? `+${coOwners.length - 1} más · Administrar acceso` : 'Co-dueño · Administrar acceso')
-                        : isPremium ? `Comparte a ${pet.name}` : 'Disponible con Premium'}
-                    </Text>
-                  </View>
-                  <Ionicons name={coOwners.length > 0 ? 'chevron-forward' : 'add-circle-outline'} size={20} color={Colors.accent} />
-                </TouchableOpacity>
-              )}
-
-              {/* Invite friends row */}
-              <TouchableOpacity
-                style={styles.coOwnerRow}
-                onPress={() => router.push('/referidos' as any)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="gift-outline" size={20} color={Colors.accent} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.coOwnerLabel}>Invitar amigos</Text>
-                  <Text style={styles.coOwnerSub}>Gana recompensas por cada referido</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={Colors.accent} />
-              </TouchableOpacity>
-
               <Button title="Cerrar sesión" onPress={signOut} variant="outline" style={{ marginTop: Spacing.md }} />
             </Card>
 
+            </>}
+            {view === "support" && <>
             {/* Legal & support (collapsed — rarely needed) */}
-            <CollapsibleCard title="Legal y soporte">
+            <CollapsibleCard title="Legal y soporte" defaultOpen>
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => Linking.openURL('https://vivrapet.com/faq')}
@@ -586,9 +565,10 @@ export default function PerfilScreen() {
               </TouchableOpacity>
             </CollapsibleCard>
 
+            </>}
             {/* Danger zone (collapsed — destructive actions shouldn't be one tap away) */}
-            <CollapsibleCard title="Zona de peligro" titleColor={Colors.bad}>
-              {petData.isOwner ? (
+            {(isPetView || isAccountView) && <CollapsibleCard title="Zona de peligro" titleColor={Colors.bad}>
+              {isPetView && (petData.isOwner ? (
                 <TouchableOpacity style={styles.dangerBtn} onPress={handleDeletePet}>
                   <Ionicons name="trash-outline" size={16} color={Colors.bad} />
                   <Text style={styles.dangerText}>Eliminar a {pet.name}</Text>
@@ -620,15 +600,15 @@ export default function PerfilScreen() {
                   <Ionicons name="log-out-outline" size={16} color={Colors.bad} />
                   <Text style={styles.dangerText}>Dejar de seguir a {pet.name}</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.dangerBtn} onPress={handleDeleteAccount}>
+              ))}
+              {isAccountView && <TouchableOpacity style={styles.dangerBtn} onPress={handleDeleteAccount}>
                 <Ionicons name="warning-outline" size={16} color={Colors.bad} />
                 <Text style={styles.dangerText}>Eliminar mi cuenta</Text>
-              </TouchableOpacity>
-            </CollapsibleCard>
+              </TouchableOpacity>}
+            </CollapsibleCard>}
 
             {/* Add pet button (if only 1 pet) */}
-            {pets.length === 1 && (
+            {isPetView && pets.length === 1 && (
               <TouchableOpacity style={styles.addPetBtn} onPress={handleAddPet}>
                 <Ionicons name="add-circle-outline" size={20} color={Colors.accent} />
                 <Text style={styles.addPetText}>Agregar otra mascota</Text>
@@ -683,7 +663,7 @@ export default function PerfilScreen() {
         )}
         <DatePickerField label="Fecha de nacimiento" value={birthDate} onChange={setBirthDate} maxDate={new Date()} clearable />
         <SelectField label="Género" value={gender} options={GENDER_OPTIONS} onSelect={setGender} />
-        <FormField label="Peso (kg)" value={weightKg} onChangeText={setWeightKg} placeholder="Ej: 12.5" keyboardType="decimal-pad" />
+        <Text style={{ color: Colors.muted }}>El peso se registra en Salud → Peso.</Text>
         <FormField label="Microchip ID" value={chipId} onChangeText={setChipId} placeholder="Número de chip" />
         <FormField label="Color pelaje" value={color} onChangeText={setColor} placeholder="Ej: Dorado, Negro" />
         <SelectField label="Tipo de soporte" value={supportType} options={SUPPORT_OPTIONS} onSelect={setSupportType} />
@@ -760,10 +740,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.accent + '30',
   },
   // Hero
-  heroCard: { borderRadius: Radius.xl, padding: Spacing.lg, alignItems: 'center' },
+  heroCard: { borderRadius: Radius.xl, padding: Spacing.lg, alignItems: 'center', backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder },
   heroPhoto: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: 'rgba(255,255,255,0.5)' },
   heroPlaceholder: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.sage,
     alignItems: 'center', justifyContent: 'center',
   },
   photoEditBadge: {
@@ -771,9 +751,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: Colors.white,
   },
-  heroName: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.white, marginTop: Spacing.sm },
-  heroBreed: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  heroAge: { fontSize: FontSize.sm, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  heroName: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink, marginTop: Spacing.sm },
+  heroBreed: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
+  heroAge: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
   // Completion
   completionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   completionLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },

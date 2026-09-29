@@ -3,7 +3,8 @@ import MainLayout from '../../layouts/MainLayout.astro';
 import Card from '../../components/ui/Card.astro';
 import EmptyState from '../../components/ui/EmptyState.astro';
 import MetricGrid from '../../components/ui/MetricGrid.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
+import HealthHeader from '../../components/health/HealthHeader.astro';
+import HealthLoadNotice from '../../components/health/HealthLoadNotice.astro';
 import WeightChart from '../../components/WeightChart.tsx';
 import { formatDate } from '@vivra/shared';
 import { getActivePet } from '../../lib/pet';
@@ -11,6 +12,10 @@ import { getActivePet } from '../../lib/pet';
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
 if (!pet) return Astro.redirect('/perfil?new=1');
+
+function redirectError(message: string) {
+  return Astro.redirect('/salud/peso?toast_error=' + encodeURIComponent(message));
+}
 
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
@@ -23,26 +28,30 @@ if (Astro.request.method === 'POST') {
     if (!Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 150 || !recordDate) {
       return Astro.redirect('/salud/peso?toast_error=' + encodeURIComponent('Peso inválido. Ingresa un valor entre 0.1 y 150 kg.'));
     }
-    await supabase.from('weight_records').insert({
+    const { error } = await supabase.from('weight_records').insert({
       pet_id: pet.id,
       weight_kg: weightKg,
       date: recordDate,
       notes: (formData.get('notes') as string) || null,
     });
+    if (error) return redirectError('No se pudo guardar el registro. Inténtalo de nuevo.');
     // Only update pet's current weight if this is the most recent record
-    const { data: latestRecord } = await supabase.from('weight_records').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(1);
-    if (!latestRecord?.[0] || recordDate >= latestRecord[0].date) {
-      await supabase.from('pets').update({ weight_kg: weightKg }).eq('id', pet.id);
+    const { data: latestRecord, error: latestError } = await supabase.from('weight_records').select('date').eq('pet_id', pet.id).order('date', { ascending: false }).limit(1);
+    if (latestError) return redirectError('El peso se guardó, pero no pudimos actualizar el resumen del perfil.');
+    if (latestRecord?.[0] && recordDate >= latestRecord[0].date) {
+      const { error: profileError } = await supabase.from('pets').update({ weight_kg: weightKg }).eq('id', pet.id);
+      if (profileError) return redirectError('El peso se guardó, pero no pudimos actualizar el resumen del perfil.');
     }
   }
   if (action === 'delete') {
-    await supabase.from('weight_records').delete().eq('id', formData.get('record_id') as string).eq('pet_id', pet.id);
+    const { error } = await supabase.from('weight_records').delete().eq('id', formData.get('record_id') as string).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo eliminar el registro. Inténtalo de nuevo.');
     return Astro.redirect('/salud/peso?deleted=1');
   }
   return Astro.redirect('/salud/peso?saved=1');
 }
 
-const { data: records } = await supabase
+const { data: records, error: loadError } = await supabase
   .from('weight_records')
   .select('*')
   .eq('pet_id', pet.id)
@@ -58,12 +67,10 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
 ---
 
 <MainLayout title="Control de Peso">
-  <a href="/salud" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-4">
-    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-    Salud
-  </a>
-  <SectionHeader title="Control de peso" subtitle={`Evolución de ${pet.name}`} />
+  <HealthHeader pet={pet} active="peso" title="Peso" subtitle={`Historial y evolución del peso de ${pet.name}`} />
+  {loadError && <HealthLoadNotice href="/salud/peso" subject="los registros de peso" />}
 
+  {!loadError && <>
   {/* ── ANALYTICS ── */}
   {records && records.length > 0 ? (
     <div class="mb-5 animate-fade-up">
@@ -95,11 +102,15 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     </div>
   )}
 
+  </>}
+
   {/* ── FORM (colapsable) ── */}
   <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
     <button
       type="button"
       id="toggle-peso-form"
+      aria-controls="peso-form-body"
+      aria-expanded={Astro.url.searchParams.get('new') === '1'}
       class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
@@ -111,7 +122,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
       <svg id="toggle-peso-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
-    <div id="peso-form-body" class="hidden mt-2">
+    <div id="peso-form-body" class:list={['mt-2', { hidden: Astro.url.searchParams.get('new') !== '1' }]}>
       <Card>
         <form method="POST" class="space-y-4">
           <input type="hidden" name="_action" value="add" />
@@ -137,6 +148,7 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     </div>
   </div>
 
+  {!loadError && <>
   {/* ── HISTORIAL ── */}
   {records && records.length > 0 && (
     <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Historial</p>
@@ -172,15 +184,22 @@ const maxWeight = records && records.length > 0 ? Math.max(...records.map(r => r
     </div>
   )}
 
+  </>}
+
   <script is:inline>
     document.addEventListener('astro:page-load', function() {
+      var pageControl = document.getElementById('toggle-peso-form');
+      if (!pageControl || pageControl.dataset.healthInitialized === '1') return;
+      pageControl.dataset.healthInitialized = '1';
       var toggleBtn = document.getElementById('toggle-peso-form');
       var formBody = document.getElementById('peso-form-body');
       var toggleIcon = document.getElementById('toggle-peso-icon');
+      if (toggleIcon && formBody && !formBody.classList.contains('hidden')) toggleIcon.style.transform = 'rotate(180deg)';
       if (toggleBtn) {
         toggleBtn.addEventListener('click', function() {
           var isOpen = formBody && !formBody.classList.contains('hidden');
           if (formBody) formBody.classList.toggle('hidden');
+          toggleBtn.setAttribute('aria-expanded', String(!isOpen));
           if (toggleIcon) toggleIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
         });
       }

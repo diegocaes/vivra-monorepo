@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import Icon from '../components/ui/Icon.astro';
+import PassportCard from '../components/PassportCard.astro';
 import Analytics from '@vercel/analytics/astro';
 import Track from '../components/Track.astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
@@ -34,9 +35,9 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <meta name="apple-itunes-app" content="app-id=6761087142" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="theme-color" content="#F7F4EE" />
     <meta name="color-scheme" content="light" />
-    <link rel="preload" as="image" href="/app-home.webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="/welcome-pets.jpg" fetchpriority="high" />
 
     <!-- ── PRIMARY SEO ── -->
     <title>Vivra — App para perros y gatos: vacunas, peso, veterinario y carnet digital</title>
@@ -73,7 +74,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" /></noscript>
     <link rel="manifest" href="/manifest.json" />
-    <!-- SVG favicon (modern browsers — scales perfect, brand orange) -->
+    <!-- SVG favicon (modern browsers — scales perfect, brand green) -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- PNG fallback for older browsers -->
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
@@ -173,10 +174,10 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       :root {
-        --orange: #BD4B22;
-        --orange-dark: #963817;
-        --orange-light: rgba(249,115,22,0.10);
-        --ink: #292620;
+        --brand-green: #174C3C;
+        --brand-green-dark: #103C2F;
+        --brand-green-light: #E5EDE1;
+        --ink: #14231F;
         --ink-2: #403A31;
         --muted: #716C64;
         --muted-light: #9CA3AF;
@@ -209,7 +210,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         border: 1px solid var(--card-border);
       }
       .nav-logo { display: flex; align-items: center; text-decoration: none; }
-      .nav-logo img { height: 64px; width: auto; }
+      .nav-logo img { width: 140px; height: auto; }
       .nav-links { display: flex; align-items: center; gap: 8px; }
       .nav-link-text {
         font-size: 14px; font-weight: 500; color: var(--ink);
@@ -260,25 +261,25 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .hero-pill {
         display: inline-flex; align-items: center; gap: 8px;
-        background: rgba(249,115,22,0.08);
-        border: 1px solid rgba(249,115,22,0.25);
-        color: var(--orange-dark);
+        background: rgba(23,76,60,0.08);
+        border: 1px solid rgba(23,76,60,0.25);
+        color: var(--brand-green-dark);
         padding: 6px 14px; border-radius: 999px;
         font-size: 12px; font-weight: 600; letter-spacing: 0.4px;
         margin-bottom: 28px;
       }
       .hero-pill-dot {
         width: 6px; height: 6px; border-radius: 50%;
-        background: var(--orange); box-shadow: 0 0 8px var(--orange);
+        background: var(--brand-green); box-shadow: 0 0 8px var(--brand-green);
       }
       .hero h1 {
-        font-family: Georgia, 'Times New Roman', serif;
+        font-family: 'Inter', system-ui, sans-serif;
         font-size: clamp(44px, 5.5vw, 72px);
         font-weight: 400; line-height: 1.04;
         letter-spacing: -3px;
         margin: 0 0 24px;
       }
-      .hero h1 .gradient-text { color: var(--orange); font-style: italic; }
+      .hero h1 .gradient-text { color: var(--brand-green); font-style: italic; }
       .hero p.lead {
         font-size: clamp(17px, 1.8vw, 21px);
         color: var(--muted);
@@ -288,14 +289,14 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
       .btn-primary {
-        background: var(--orange); color: white;
+        background: var(--brand-green); color: white;
         padding: 15px 30px; border-radius: 12px;
         font-size: 15px; font-weight: 700; text-decoration: none;
         display: inline-flex; align-items: center; gap: 10px;
-        box-shadow: 0 4px 0 #963817, 0 8px 24px rgb(150 56 23 / 12%);
+        box-shadow: 0 5px 18px rgb(23 76 60 / 12%);
         transition: all 0.15s ease;
       }
-      .btn-primary:hover { background: var(--orange-dark); transform: translateY(-2px); box-shadow: 0 4px 0 #792D12, 0 12px 28px rgb(150 56 23 / 18%); }
+      .btn-primary:hover { background: var(--brand-green-dark); transform: translateY(-2px); box-shadow: 0 7px 22px rgb(23 76 60 / 18%); }
       .btn-primary svg { width: 16px; height: 16px; }
       .btn-secondary-dark {
         background: white;
@@ -401,11 +402,11 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .section-inner { max-width: 1100px; margin: 0 auto; }
       .section-eyebrow {
         font-size: 11px; font-weight: 700; letter-spacing: 2px;
-        text-transform: uppercase; color: var(--orange);
+        text-transform: uppercase; color: var(--brand-green);
         display: block; margin-bottom: 16px;
       }
       .section-title {
-        font-family: Georgia, 'Times New Roman', serif;
+        font-family: 'Inter', system-ui, sans-serif;
         font-size: clamp(34px, 4.8vw, 54px);
         font-weight: 400; letter-spacing: -1.8px;
         line-height: 1.05;
@@ -418,7 +419,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         line-height: 1.6;
         margin-bottom: 40px;
       }
-      .walkthrough-link { display: inline-block; margin-top: 20px; color: #9A3412; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+      .walkthrough-link { display: inline-block; margin-top: 20px; color: #174C3C; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
       .how-screenshot { display: block; width: 100%; max-width: 240px; height: auto; box-shadow: 0 12px 32px rgb(55 42 25 / 10%); margin: 24px auto -44px; border-radius: 20px; border: 1px solid var(--card-border); }
       #how { scroll-margin-top: 96px; }
       .how-grid {
@@ -428,11 +429,15 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         counter-reset: step;
       }
       .how-card {
+        display: grid;
+        grid-template-rows: subgrid;
+        grid-row: span 4;
+        row-gap: 0;
         position: relative;
         background: var(--canvas);
         border: 1px solid var(--card-border);
         border-radius: 24px;
-        padding: 32px 28px 0;
+        padding: 32px 28px 24px;
         overflow: hidden;
         transition: all 0.2s ease;
       }
@@ -443,7 +448,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         counter-increment: step;
         content: counter(step);
         position: absolute; top: 24px; right: 28px;
-        font-family: Georgia, serif; font-size: 38px; font-weight: 400;
+        font-family: 'Inter', system-ui, sans-serif; font-size: 38px; font-weight: 400;
         color: #8A7864;
         line-height: 1;
       }
@@ -458,7 +463,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .how-card h3 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 8px; }
       .how-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
-      @media (max-width: 768px) { .how-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 768px) { .how-grid { grid-template-columns: 1fr; } .how-card { display: flex; flex-direction: column; grid-row: auto; } }
 
       /* ────────────────────────────────────────────
          FEATURES — bento grid
@@ -486,7 +491,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         grid-column: span 2;
         grid-row: span 1;
         background: #F4E7D9;
-        border-color: rgba(249,115,22,0.25);
+        border-color: rgba(23,76,60,0.25);
         color: var(--ink);
         display: flex;
         gap: 32px;
@@ -496,12 +501,12 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .bento-card.featured::before {
         content: '';
         position: absolute; inset: 0;
-        background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(249,115,22,0.10) 0%, transparent 60%);
+        background: radial-gradient(ellipse 60% 80% at 100% 0%, rgba(23,76,60,0.10) 0%, transparent 60%);
         pointer-events: none;
       }
       .bento-icon {
         width: 44px; height: 44px;
-        background: var(--orange-light);
+        background: var(--brand-green-light);
         border-radius: 12px;
         display: flex; align-items: center; justify-content: center;
         margin-bottom: 18px; font-size: 22px;
@@ -514,7 +519,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .score-visual {
         flex: 0 0 200px;
         background: white;
-        border: 1px solid rgba(249,115,22,0.20);
+        border: 1px solid rgba(23,76,60,0.20);
         border-radius: 18px;
         padding: 20px;
         display: flex; flex-direction: column; justify-content: center;
@@ -522,18 +527,18 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .score-circle {
         width: 88px; height: 88px; border-radius: 50%;
-        border: 3px solid var(--orange);
-        background: rgba(249,115,22,0.06);
+        border: 3px solid var(--brand-green);
+        background: rgba(23,76,60,0.06);
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         margin-bottom: 18px; align-self: center;
       }
-      .score-circle-n { font-size: 30px; font-weight: 900; color: var(--orange); line-height: 1; }
+      .score-circle-n { font-size: 30px; font-weight: 900; color: var(--brand-green); line-height: 1; }
       .score-circle-l { font-size: 8px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin-top: 3px; }
       .score-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
       .score-bar-row:last-child { margin-bottom: 0; }
       .score-bar-name { font-size: 10px; color: var(--muted); width: 56px; }
       .score-bar-bg { flex: 1; height: 4px; background: rgba(15,17,23,0.08); border-radius: 999px; overflow: hidden; }
-      .score-bar-fill { height: 100%; background: linear-gradient(90deg, var(--orange), #FFB74A); border-radius: 999px; }
+      .score-bar-fill { height: 100%; background: linear-gradient(90deg, var(--brand-green), #7FA88C); border-radius: 999px; }
       .score-bar-val { font-size: 10px; color: var(--muted); width: 18px; text-align: right; font-variant-numeric: tabular-nums; }
 
       @media (max-width: 768px) {
@@ -556,36 +561,22 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .passport-section::before {
         content: '';
         position: absolute; inset: 0;
-        background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(249,115,22,0.06) 0%, transparent 60%);
+        background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(23,76,60,0.06) 0%, transparent 60%);
         pointer-events: none;
       }
-      .passport-section .section-eyebrow { color: var(--orange); }
+      .passport-section .section-eyebrow { color: var(--brand-green); }
       .passport-section .section-sub {
         color: var(--muted);
         max-width: 480px;
         margin: 0 auto 56px;
       }
-      .passport-preview {
-        max-width: 320px; margin: 0 auto;
-        background: white;
-        border-radius: 24px;
-        overflow: hidden;
-        box-shadow: 0 24px 64px rgba(249,115,22,0.18), 0 0 0 1px var(--card-border);
-        text-align: left;
-        position: relative;
-      }
-      .pp-cover {
-        background: #414E3B;
-        padding: 28px 24px;
-        text-align: center;
-      }
-      .pp-cover p { color: rgba(255,255,255,0.6); font-size: 9px; letter-spacing: 3px; text-transform: uppercase; }
-      .pp-cover h3 { color: white; font-size: 20px; font-weight: 900; letter-spacing: 4px; text-transform: uppercase; margin-top: 8px; }
-      .pp-body { padding: 18px 22px; }
-      .pp-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px dashed #E5E7EB; color: var(--ink); }
-      .pp-row:last-child { border-bottom: none; }
-      .pp-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.3px; }
-      .pp-value { font-size: 13px; font-weight: 700; }
+      .passport-preview { max-width: 460px; margin: 0 auto; text-align: left; }
+      .passport-example { color: var(--muted); text-align: center; font-size: 11px; margin-top: 16px; }
+      .how-preview { display: flex; flex-direction: column; gap: 14px; min-height: 244px; padding: 24px; background: #FFFDFA; border: 1px solid var(--card-border); border-radius: 18px; margin: 26px -5px 0; box-shadow: 0 10px 30px #14231F08; }
+      .how-preview>span { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+      .how-preview>strong { font-size: 16px; font-weight: 600; }
+      .how-preview>small { font-size: 10px; color: var(--muted); line-height: 1.5; }
+      .how-preview .preview-avatar { width: 62px; height: 62px; border-radius: 50%; background: #E5EDE1; color: #174C3C; justify-content: center; }
 
       /* ────────────────────────────────────────────
          APP STORE CTA SECTION
@@ -621,7 +612,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .appstore-card h2 {
         font-size: clamp(32px, 5vw, 52px);
-        font-family: Georgia, serif; font-weight: 400; letter-spacing: -1.5px;
+        font-family: 'Inter', system-ui, sans-serif; font-weight: 400; letter-spacing: -1.5px;
         line-height: 1.05; margin-bottom: 16px;
       }
       .appstore-card p {
@@ -658,14 +649,14 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         display: flex; flex-direction: column;
       }
       .price-card.featured {
-        border: 2px solid var(--orange);
+        border: 2px solid var(--brand-green);
         background: #FFF7ED;
         box-shadow: 0 12px 32px rgb(55 42 25 / 6%);
         position: relative;
       }
       .price-badge {
         position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-        background: var(--orange); color: white;
+        background: var(--brand-green); color: white;
         font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
         padding: 4px 14px; border-radius: 999px; white-space: nowrap;
       }
@@ -673,10 +664,10 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .price-amount { font-size: 44px; font-weight: 900; letter-spacing: -2px; color: var(--ink); line-height: 1; }
       .price-amount small { font-size: 16px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
       .price-alt { font-size: 13px; color: var(--muted); margin-top: 6px; }
-      .price-alt strong { color: var(--orange-dark); }
+      .price-alt strong { color: var(--brand-green-dark); }
       .price-features { list-style: none; margin: 24px 0 28px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
       .price-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--ink); line-height: 1.45; }
-      .price-features li svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--orange); }
+      .price-features li svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--brand-green); }
       .price-features li.muted { color: var(--muted); }
       .price-cta {
         display: block; text-align: center;
@@ -684,8 +675,8 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         font-size: 14px; font-weight: 700; text-decoration: none;
         transition: all 0.15s ease;
       }
-      .price-cta.solid { background: var(--orange); color: white; box-shadow: 0 6px 20px rgba(249,115,22,0.30); }
-      .price-cta.solid:hover { background: var(--orange-dark); transform: translateY(-2px); }
+      .price-cta.solid { background: var(--brand-green); color: white; box-shadow: 0 6px 20px rgba(23,76,60,0.30); }
+      .price-cta.solid:hover { background: var(--brand-green-dark); transform: translateY(-2px); }
       .price-cta.ghost { border: 1.5px solid var(--card-border); color: var(--ink); }
       .price-cta.ghost:hover { border-color: var(--ink); }
       .pricing-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 24px; }
@@ -712,7 +703,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         content: '+'; font-size: 22px; font-weight: 300; color: var(--muted);
         transition: transform 0.2s ease;
       }
-      .faq-item[open] summary::after { transform: rotate(45deg); color: var(--orange); }
+      .faq-item[open] summary::after { transform: rotate(45deg); color: var(--brand-green); }
       .faq-item p {
         margin-top: 14px; font-size: 14px; color: var(--muted); line-height: 1.65;
       }
@@ -727,10 +718,10 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       }
       .final-cta h2 {
         font-size: clamp(36px, 5.5vw, 64px);
-        font-family: Georgia, serif; font-weight: 400; letter-spacing: -2px;
+        font-family: 'Inter', system-ui, sans-serif; font-weight: 400; letter-spacing: -2px;
         line-height: 1.02; margin-bottom: 20px;
       }
-      .final-cta h2 span { color: var(--orange); font-style: italic; }
+      .final-cta h2 span { color: var(--brand-green); font-style: italic; }
       .final-cta p {
         color: var(--muted); font-size: 18px; line-height: 1.55;
         max-width: 460px; margin: 0 auto 40px;
@@ -754,7 +745,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         background: var(--canvas);
         border-top: 1px solid var(--card-border);
         color: var(--muted);
-        padding: 32px 28px 0;
+        padding: 32px 28px 24px;
         overflow: hidden;
       }
       .footer-inner {
@@ -768,7 +759,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       .footer-col h4 { color: var(--ink); font-size: 13px; font-weight: 700; margin-bottom: 14px; letter-spacing: 0.3px; }
       .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
       .footer-col a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color 0.15s; }
-      .footer-col a:hover { color: var(--orange-dark); }
+      .footer-col a:hover { color: var(--brand-green-dark); }
       .footer-bottom {
         max-width: 1100px; margin: 32px auto 0;
         padding-top: 24px;
@@ -782,7 +773,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         .footer-brand { grid-column: span 2; }
       }
       @media (max-width: 380px) {
-        .nav-logo img { height: 48px; }
+        .nav-logo img { width: 120px; height: auto; }
         .nav-cta { padding: 9px 12px; white-space: nowrap; }
         .nav-links .nav-login { padding: 8px 6px; font-size: 13px; }
         .hero-actions a { font-size: 13px; padding-left: 16px; padding-right: 16px; }
@@ -797,6 +788,16 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
         .bento-card.featured { padding: 28px; }
         .price-card { padding: 30px 24px; }
       }
+      .hero h1 { font-weight: 600; letter-spacing: -3px; }
+      .hero h1 .gradient-text { font-style: normal; }
+      .hero-mockup-wrap { padding: 0; }
+      .hero-mockup-wrap::before { display: none; }
+      .welcome-art { overflow: hidden; border-radius: 36px; background: #F7F4EE; }
+      .welcome-art img { width: 100%; min-height: 420px; object-fit: cover; }
+      .btn-primary, .nav-cta { border-radius: 999px; background: #174C3C; }
+      .btn-primary:hover, .nav-cta:hover { background: #103C2F; }
+      .section-h2 { font-weight: 600; }
+      @media (max-width: 640px) { .welcome-art img { min-height: 300px; } .hero h1 { letter-spacing: -2px; } }
     </style>
   </head>
   <body>
@@ -804,7 +805,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <!-- ── NAV ── -->
     <nav>
       <a href="/" class="nav-logo" aria-label="Vivra inicio">
-        <img src="/Vivra.svg" alt="Vivra" />
+        <img class="brand-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" />
       </a>
       <div class="nav-links">
         <a href="#features" class="nav-link-text">Funciones</a>
@@ -825,8 +826,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
             Disponible en App Store
           </div>
           <h1>
-            Vacunas e historial de tu mascota,<br />
-            <span class="gradient-text">siempre a mano.</span>
+            Una vida más sana<br />y feliz, <span class="gradient-text">juntos.</span>
           </h1>
           <p class="lead">
             Guarda sus vacunas, sigue su peso y consulta sus cuidados cuando los necesites. En la web o en tu iPhone.
@@ -858,11 +858,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
           </div>
         </div>
         <div class="hero-mockup-wrap">
-          <div class="hero-phones">
-            <img class="phone-side left" src="/app-peso.webp" width="640" height="1387" alt="" loading="lazy" aria-hidden="true" />
-            <img class="phone-main" src="/app-home.webp" width="640" height="1387" alt="Vivra app en iPhone — dashboard con Vitality Score, comida y recordatorios" loading="eager" fetchpriority="high" />
-            <img class="phone-side right" src="/app-perfil.webp" width="640" height="1387" alt="" loading="lazy" aria-hidden="true" />
-          </div>
+          <div class="welcome-art"><img src="/welcome-pets.jpg" width="1536" height="1024" alt="Un perro y un gato juntos, rodeados de hojas verdes" loading="eager" fetchpriority="high" /></div>
         </div>
       </div>
     </section>
@@ -894,26 +890,26 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       <div class="section-inner">
         <span class="section-eyebrow">Cómo funciona</span>
         <h2 class="section-title">Así se ve cuidar con Vivra</h2>
-        <p class="section-sub">Un recorrido por tres pantallas reales de la app para iPhone. Explóralas antes de crear tu cuenta.</p>
+        <p class="section-sub">Su perfil, su evolución y sus próximos cuidados. Todo conectado, desde el primer día.</p>
 
         <div class="how-grid">
           <div class="how-card">
             <div class="how-icon"><Icon name="mascota" class="h-7 w-7" /></div>
             <h3>Crea su perfil</h3>
             <p>Reúne su nombre, raza, fecha de nacimiento y microchip en una ficha fácil de consultar.</p>
-            <img class="how-screenshot" src="/app-perfil.webp" width="640" height="1387" alt="Pantalla de perfil de Tinto con su raza, nacimiento, peso y microchip" loading="lazy" />
+            <div class="how-preview"><span class="preview-avatar"><Icon name="mascota" class="h-9 w-9" /></span><strong>Su propia ficha</strong><span>Nombre y raza</span><span>Fecha de nacimiento</span><span>Microchip e identificación</span></div>
           </div>
           <div class="how-card">
             <div class="how-icon"><Icon name="documento" class="h-7 w-7" /></div>
             <h3>Sigue su evolución</h3>
             <p>Añade sus registros de peso y consulta la gráfica y el historial para ver cómo cambia con el tiempo.</p>
-            <img class="how-screenshot" src="/app-peso.webp" width="640" height="1387" alt="Pantalla de peso con la gráfica de evolución de Tinto y sus registros por fecha" loading="lazy" />
+            <div class="how-preview"><strong>Cada pequeño cambio</strong><svg viewBox="0 0 240 110" fill="none" aria-hidden="true"><path d="M10 90H230M10 55H230M10 20H230" stroke="#E8E4DC"/><path d="m10 78 44-18 44 8 44-27 44 4 44-24" stroke="#378655" stroke-width="3" stroke-linejoin="round"/><g fill="#378655"><circle cx="10" cy="78" r="4"/><circle cx="54" cy="60" r="4"/><circle cx="98" cy="68" r="4"/><circle cx="142" cy="41" r="4"/><circle cx="186" cy="45" r="4"/><circle cx="230" cy="21" r="4"/></g></svg><small>Vista ilustrativa · tus registros cuentan su historia</small></div>
           </div>
           <div class="how-card">
             <div class="how-icon"><Icon name="descarga" class="h-7 w-7" /></div>
             <h3>Consulta sus próximos cuidados</h3>
             <p>Abre el inicio para ver los próximos preventivos y las últimas visitas al veterinario en un mismo lugar.</p>
-            <img class="how-screenshot" src="/app-home.webp" width="640" height="1387" alt="Inicio de Vivra con próximos antipulgas y desparasitante y la última visita al veterinario" loading="lazy" />
+            <div class="how-preview"><strong>Lo próximo</strong><span><Icon name="vacuna" class="h-5 w-5" /> Vacunas</span><span><Icon name="vet" class="h-5 w-5" /> Visitas al veterinario</span><span><Icon name="grooming" class="h-5 w-5" /> Sus cuidados diarios</span><small>Según las fechas que registres</small></div>
           </div>
         </div>
       </div>
@@ -930,7 +926,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
           <!-- Featured: Score -->
           <div class="bento-card featured">
             <div class="score-preview">
-              <div class="bento-icon" style="background:rgba(249,115,22,0.18);"><Icon name="score" class="h-6 w-6" /></div>
+              <div class="bento-icon" style="background:rgba(23,76,60,0.18);"><Icon name="score" class="h-6 w-6" /></div>
               <h3>Indicador de Bienestar</h3>
               <p>Un número del 0 al 100 que resume qué tan completo y al día está el cuidado de tu mascota en 4 áreas: peso, cuidado preventivo, raza y nutrición. Te muestra qué te falta por registrar. No es un diagnóstico.</p>
             </div>
@@ -965,7 +961,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
           <div class="bento-card">
             <div class="bento-icon"><Icon name="vacuna" class="h-6 w-6" /></div>
             <h3>Vacunas al día</h3>
-            <p>Cada dosis con su fecha y la próxima programada. Te avisamos cuando lleva más de un año sin vacunarse.</p>
+            <p>Cada dosis con su fecha y la próxima programada. Consulta la próxima fecha registrada y sus recordatorios.</p>
           </div>
 
           <div class="bento-card">
@@ -1000,19 +996,11 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
       <div class="section-inner">
         <span class="section-eyebrow">Para los que viajan</span>
         <h2 class="section-title">Pasaporte digital,<br/>siempre listo</h2>
-        <p class="section-sub">Un pasaporte tipo documento oficial con la info de tu mascota. Imprimes para llevar al veterinario o a aerolínea.</p>
+        <p class="section-sub">Su información y registros en una ficha que puedes guardar o imprimir. Acompaña sus documentos oficiales.</p>
 
         <div class="passport-preview">
-          <div class="pp-cover">
-            <p>Pet Passport</p>
-            <h3>Pasaporte</h3>
-          </div>
-          <div class="pp-body">
-            <div class="pp-row"><span class="pp-label">Nombre</span><span class="pp-value">Luna</span></div>
-            <div class="pp-row"><span class="pp-label">Raza</span><span class="pp-value">Golden Retriever</span></div>
-            <div class="pp-row"><span class="pp-label">Microchip</span><span class="pp-value">985112345678</span></div>
-            <div class="pp-row"><span class="pp-label">Vacunas</span><span class="pp-value">Rabia · Parvo · Moquillo</span></div>
-          </div>
+          <PassportCard pet={{ name: 'Luna', species: 'dog', breed: 'Golden Retriever', birth_date: '2022-04-03', chip_id: 'Ejemplo de identificación', photo_url: null }} />
+          <p class="passport-example">Vista de ejemplo · completa la ficha con sus datos y su foto.</p>
         </div>
       </div>
     </section>
@@ -1136,7 +1124,7 @@ const ANNUAL_SAVINGS = annualSavingsPercent();
     <footer>
       <div class="footer-inner">
         <div class="footer-brand">
-          <img src="/Vivra.svg" alt="Vivra" />
+          <img class="brand-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" />
           <p>El diario digital de tu mascota. Hecho con ❤ en Panamá.</p>
         </div>
         <div class="footer-col">

@@ -1,17 +1,19 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { BrandLogo } from '../../components/ui/BrandLogo';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useCallback, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../constants/theme';
+import { FREE_LIMITS } from '../../constants/revenueCat';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { usePetContext } from '../../contexts/PetContext';
 import { useVitality } from '../../hooks/useVitality';
 import { useDashboardStatus } from '../../hooks/useDashboardStatus';
 import { useSubscription } from '../../contexts/SubscriptionContext';
-import { PetHeroCard } from '../../components/pet/PetHeroCard';
+import { CategoryGrid } from '../../components/pet/CategoryGrid';
 import { VitalityWidget } from '../../components/pet/VitalityWidget';
 import { FoodSummaryCard } from '../../components/pet/FoodSummaryCard';
 import { ReminderCard } from '../../components/pet/ReminderCard';
@@ -218,7 +220,8 @@ export default function DashboardScreen() {
     <SafeAreaView testID="screen-home" style={styles.safe} edges={['top']}>
       {/* Header with notification bell */}
       <View style={styles.dashHeader}>
-        <Text style={styles.dashTitle}>Vivra</Text>
+        <BrandLogo width={134} style={styles.dashTitle} />
+        <View style={styles.headerActions}>
         <TouchableOpacity
           onPress={() => router.push('/notificaciones' as any)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -232,14 +235,11 @@ export default function DashboardScreen() {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity style={styles.addPet} onPress={() => petData.pets.length >= FREE_LIMITS.MAX_PETS ? Alert.alert('Límite alcanzado', `Puedes tener hasta ${FREE_LIMITS.MAX_PETS} mascotas por cuenta.`) : router.push('/onboarding')} accessibilityRole="button" accessibilityLabel="Agregar mascota">
+          <Ionicons name="add" size={26} color={Colors.white} />
+        </TouchableOpacity>
+        </View>
       </View>
-
-      {/* Pet selector (only shows if multiple pets) */}
-      <PetSelector
-        pets={petData.pets}
-        activePetId={petData.pet.id}
-        onSelect={petData.setActivePetId}
-      />
 
       <ScrollView
         style={styles.scroll}
@@ -248,8 +248,15 @@ export default function DashboardScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />
         }
       >
-        {/* Hero card */}
-        <PetHeroCard pet={petData.pet} />
+      {/* Pet selector */}
+      <PetSelector
+        pets={petData.pets}
+        activePetId={petData.pet.id}
+        onSelect={petData.setActivePetId}
+      />
+
+
+        <CategoryGrid />
 
         {/* Progressive disclosure: a brand-new profile gets one clear next
             step. The regular dashboard appears after the first real record. */}
@@ -284,7 +291,7 @@ export default function DashboardScreen() {
             onPress={() => router.navigate('/(app)/salud/preventivos' as any)}
             activeOpacity={0.8}
           >
-            <Ionicons name="information-circle-outline" size={22} color="#C2410C" />
+            <Ionicons name="information-circle-outline" size={22} color="#93652D" />
             <View style={{ flex: 1 }}>
               <Text style={styles.preventiveBannerTitle}>
                 {preventiveStatus.overdueTypes.length === 2
@@ -297,7 +304,7 @@ export default function DashboardScreen() {
                   : 'La fecha registrada ya pasó. Confírmala con tu veterinario.'}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#C2410C" />
+            <Ionicons name="chevron-forward" size={18} color="#93652D" />
           </TouchableOpacity>
         )}
 
@@ -308,6 +315,7 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         )}
 
+        {!isProfileStarting && <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Lo próximo</Text><TouchableOpacity accessibilityRole="button" onPress={() => router.navigate('/(app)/salud/vacunas')}><Text style={styles.sectionLink}>Ver todo ›</Text></TouchableOpacity></View>}
         {!isProfileStarting && (!vaccineDismissStorageKey || (
           checkedVaccineKey === vaccineDismissStorageKey
           && dismissedVaccineKey !== vaccineDismissStorageKey
@@ -328,7 +336,7 @@ export default function DashboardScreen() {
             <Ionicons
               name="medkit-outline"
               size={21}
-              color={vaccineSummary.state === 'overdue' ? '#C2410C' : vaccineSummary.state === 'scheduled' ? '#2563EB' : Colors.good}
+              color={vaccineSummary.state === 'overdue' ? '#93652D' : vaccineSummary.state === 'scheduled' ? '#567F94' : Colors.good}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -348,18 +356,18 @@ export default function DashboardScreen() {
               <Ionicons name="close" size={19} color={Colors.muted} />
             </TouchableOpacity>
           )}
-          <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? '#C2410C' : vaccineSummary.state === 'scheduled' ? '#2563EB' : Colors.good} />
+          <Ionicons name="chevron-forward" size={18} color={vaccineSummary.state === 'overdue' ? '#93652D' : vaccineSummary.state === 'scheduled' ? '#567F94' : Colors.good} />
         </TouchableOpacity>}
 
         {/* Food summary — averages and trazabilidad, no countdown */}
         {!isProfileStarting && (hasFood ? (
-          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/alimentacion' as any)}>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => router.navigate('/(app)/cuidado/alimentacion' as any)}>
             <FoodSummaryCard foods={petData.foods} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             style={styles.foodCta}
-            onPress={() => router.navigate('/(app)/alimentacion' as any)}
+            onPress={() => router.navigate('/(app)/cuidado/alimentacion' as any)}
             activeOpacity={0.8}
           >
             <Ionicons name="restaurant-outline" size={20} color={Colors.accent} />
@@ -391,10 +399,10 @@ export default function DashboardScreen() {
           <View style={styles.careCol}>
             <CareCard
               icon="cut"
-              iconColor="#3B82F6"
+              iconColor="#567F94"
               badge={
                 petData.groomings[0]?.date
-                  ? { text: shortTimeAgo(petData.groomings[0].date), color: '#3B82F6' }
+                  ? { text: shortTimeAgo(petData.groomings[0].date), color: '#567F94' }
                   : null
               }
               title="Grooming"
@@ -415,10 +423,10 @@ export default function DashboardScreen() {
           <View style={styles.careCol}>
             <CareCard
               icon="medkit"
-              iconColor="#14B8A6"
+              iconColor="#4C8876"
               badge={
                 petData.vetVisits[0]?.date
-                  ? { text: shortTimeAgo(petData.vetVisits[0].date), color: '#14B8A6' }
+                  ? { text: shortTimeAgo(petData.vetVisits[0].date), color: '#4C8876' }
                   : null
               }
               title="Veterinario"
@@ -502,24 +510,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#E5EDE1',
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: '#CDDDC7',
     padding: Spacing.md,
   },
-  vaccineCtaScheduled: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
-  vaccineCtaOverdue: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
+  vaccineCtaScheduled: { backgroundColor: '#EAF0F2', borderColor: '#C5D6DC' },
+  vaccineCtaOverdue: { backgroundColor: '#F4EBDD', borderColor: '#E1CBA8' },
   vaccineCtaIcon: {
     width: 38,
     height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#DCE8D7',
   },
-  vaccineCtaIconScheduled: { backgroundColor: '#DBEAFE' },
-  vaccineCtaIconOverdue: { backgroundColor: '#FFEDD5' },
+  vaccineCtaIconScheduled: { backgroundColor: '#DCE5E8' },
+  vaccineCtaIconOverdue: { backgroundColor: '#F0E1C8' },
   vaccineCtaTitle: { color: Colors.ink, fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
   vaccineCtaText: { color: Colors.muted, fontSize: FontSize.xs, marginTop: 2 },
   dashHeader: {
@@ -529,11 +537,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
   },
-  dashTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    color: Colors.ink,
-  },
+  dashTitle: { flexShrink: 0 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 22 },
+  addPet: { width: 39, height: 39, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.accent },
+  sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', color: Colors.ink },
+  sectionLink: { fontSize: 12, color: Colors.accent, paddingVertical: 10 },
   bellBadge: {
     position: 'absolute',
     top: -4,
@@ -556,7 +565,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    gap: Spacing.md,
+    paddingTop: 8,
+    gap: 22,
     paddingBottom: Spacing.xxl,
   },
   // 2×2 grid of care cards. flexWrap + each card 50%-minus-half-gap so they
@@ -704,11 +714,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: '#F4EBDD',
     borderRadius: Radius.lg,
     padding: Spacing.md,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#E1CBA8',
   },
   preventiveBannerTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   preventiveBannerDesc: { fontSize: FontSize.xs, lineHeight: 17, color: Colors.muted, marginTop: 2 },

@@ -8,12 +8,9 @@ tags:
 - launchApp
 - tapOn: "http://localhost:8081"
 - extendedWaitUntil:
-    visible: "Iniciar sesión"
+    visible: "Empezar"
     timeout: 15000
-- assertVisible:
-    id: "login-email"
-- assertVisible:
-    id: "login-password"
+- assertVisible: "Ya tengo una cuenta"
 - repeat:
     times: 3
     commands:
@@ -21,5 +18,5 @@ tags:
       - launchApp
       - tapOn: "http://localhost:8081"
       - extendedWaitUntil:
-          visible: "Iniciar sesión"
+          visible: "Empezar"
           timeout: 10000

@@ -20,10 +20,10 @@ const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: st
   weight_stale: { name: 'scale', color: Colors.accent },
   preventive_due: { name: 'shield-checkmark', color: Colors.warn },
   food_low: { name: 'restaurant', color: Colors.accentDark },
-  birthday: { name: 'gift', color: '#E879F9' },
+  birthday: { name: 'gift', color: '#BC665D' },
   re_engagement: { name: 'paw', color: Colors.muted },
   score_improved: { name: 'heart', color: Colors.accent },
-  vet_visit: { name: 'medical', color: '#E879F9' },
+  vet_visit: { name: 'medical', color: '#BC665D' },
   flight: { name: 'airplane', color: Colors.accent },
   general: { name: 'notifications', color: Colors.muted },
   // Tipos históricos, para que las filas viejas no salgan con campana gris.

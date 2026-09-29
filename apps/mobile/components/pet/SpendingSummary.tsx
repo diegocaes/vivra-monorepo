@@ -29,9 +29,9 @@ export function SpendingSummary({ totals, error, onRetry, isPremium }: SpendingS
 
   const categories: SpendingCategory[] = [
     { label: 'Alimento', icon: 'nutrition', iconColor: Colors.accent, total: totals.alimento },
-    { label: 'Veterinario', icon: 'medical', iconColor: '#E879F9', total: totals.vet },
+    { label: 'Veterinario', icon: 'medical', iconColor: '#BC665D', total: totals.vet },
     { label: 'Grooming', icon: 'cut', iconColor: Colors.accentDark, total: totals.grooming },
-    { label: 'Vuelos', icon: 'airplane', iconColor: '#3B82F6', total: totals.vuelos },
+    { label: 'Vuelos', icon: 'airplane', iconColor: '#567F94', total: totals.vuelos },
     { label: 'Snacks', icon: 'restaurant', iconColor: '#22C55E', total: totals.snacks },
     { label: 'Preventivos', icon: 'shield-checkmark', iconColor: Colors.warn, total: totals.preventivos },
   ];

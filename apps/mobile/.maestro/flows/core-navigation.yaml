@@ -7,9 +7,12 @@ tags:
 - launchApp
 - runFlow:
     when:
-      visible: "http://localhost:8081"
+      true: ${APP_ID == "host.exp.Exponent"}
     commands:
-      - tapOn: "http://localhost:8081"
+      - openLink: "exp://localhost:8081"
+      - extendedWaitUntil:
+          visible: "Tab Inicio"
+          timeout: 25000
 - tapOn: "Tab Inicio"
 - extendedWaitUntil:
     visible:
@@ -33,44 +36,63 @@ tags:
           selected: true
       - assertVisible:
           id: "health-vaccines"
-      - tapOn: "Tab Comida"
+      - tapOn: "Tab Cuidado"
       - assertVisible:
-          text: "Tab Comida"
+          text: "Tab Cuidado"
           selected: true
+      - assertVisible:
+          id: "screen-care"
+      - tapOn: "Alimentación"
       - assertVisible:
           id: "screen-food"
-      - tapOn: "Tab Perfil"
+      - assertVisible: "Alimentación"
+      - tapOn: "Volver a Cuidado"
+      - tapOn: "Tab Viajes"
       - assertVisible:
-          text: "Tab Perfil"
+          id: "passport-identity"
+      - assertVisible: "Pasaporte de mascota"
+      - assertVisible: "Viajes y requisitos"
+      - tapOn: "Abrir pasaporte"
+      - assertVisible: "Registro de vacunas"
+      - tapOn: "Volver"
+      - tapOn: "Tab Más"
+      - assertVisible:
+          text: "Tab Más"
           selected: true
       - assertVisible:
-          id: "screen-profile"
-      - scrollUntilVisible:
-          element:
-            text: "Gastos totales"
-          direction: DOWN
-          centerElement: true
+          id: "screen-more"
+      - tapOn: "Gastos"
       - assertVisible: "Gastos totales"
       - tapOn: "Tab Inicio"
       - assertVisible:
           text: "Tab Inicio"
           selected: true
+      - assertVisible: "Alimentación"
 - tapOn: "Tab Salud"
 - assertVisible:
-    text: "Tab Salud"
-    selected: true
-- scrollUntilVisible:
-    element:
-      id: "health-grooming"
-    direction: DOWN
-    centerElement: true
-- tapOn:
-    id: "health-grooming"
+    id: "health-weight"
+- assertNotVisible: "Grooming"
+- tapOn: "Tab Cuidado"
+- assertNotVisible: "Preventivos"
+- assertNotVisible: "Peso"
+- tapOn: "Grooming"
 - assertVisible:
     id: "screen-grooming"
 - tapOn:
     id: "grooming-back"
 - assertVisible:
-    text: "Tab Salud"
+    text: "Tab Cuidado"
     selected: true
-- assertNotVisible: "Vuelos"
+- assertVisible:
+    id: "screen-care"
+- tapOn: "Tab Más"
+- tapOn: "Mi mascota"
+- assertVisible: "Abrir sección Datos de.*"
+- assertNotVisible: "Gastos totales"
+- tapOn: "Volver a Más"
+- tapOn: "Mi cuenta"
+- assertVisible: "Cerrar sesión"
+- assertNotVisible: "Abrir sección Datos de.*"
+- tapOn: "Volver a Más"
+- assertVisible:
+    id: "screen-more"

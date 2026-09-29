@@ -1,18 +1,20 @@
 import { useEffect } from 'react';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StackActions } from '@react-navigation/native';
 import { Colors, FontSize, FontWeight } from '../../constants/theme';
 import { track } from '../../lib/analytics';
 
 export default function AppLayout() {
+  const insets = useSafeAreaInsets();
   // Screen views → app_events (se leen en /admin)
   const pathname = usePathname();
   useEffect(() => {
     track('screen_view', pathname || '/');
   }, [pathname]);
 
-  // The app has four lightweight tabs. Keeping them mounted is safer than
+  // The app has five lightweight tabs. Keeping them mounted is safer than
   // letting native-screens detach or freeze a nested stack mid-transition:
   // on some iOS devices that produced an intermittent blank content area.
   return (
@@ -25,11 +27,12 @@ export default function AppLayout() {
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.muted,
         tabBarStyle: {
-          backgroundColor: Colors.card,
+          backgroundColor: Colors.canvas,
           borderTopColor: Colors.cardBorder,
           borderTopWidth: 1,
-          paddingBottom: 4,
-          height: 88,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 10),
+          height: 60 + Math.max(insets.bottom, 10),
           elevation: 0,
           shadowOpacity: 0,
         },
@@ -72,25 +75,27 @@ export default function AppLayout() {
           },
         })}
       />
-      <Tabs.Screen
-        name="alimentacion"
-        options={{
-          title: 'Comida',
-          tabBarAccessibilityLabel: 'Tab Comida',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'restaurant' : 'restaurant-outline'} size={24} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="cuidado" options={{
+        title: 'Cuidado', tabBarAccessibilityLabel: 'Tab Cuidado',
+        tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'paw' : 'paw-outline'} size={25} color={color} />,
+        popToTopOnBlur: true,
+      }} />
+      <Tabs.Screen name="viajes" options={{
+        title: 'Viajes', tabBarAccessibilityLabel: 'Tab Viajes',
+        tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'airplane' : 'airplane-outline'} size={25} color={color} />,
+        popToTopOnBlur: true,
+      }} />
+      <Tabs.Screen name="alimentacion" options={{ href: null }} />
       {/* Legacy hidden route: Vuelos remains unavailable in the tab bar. */}
       <Tabs.Screen name="actividad" options={{ href: null }} />
       <Tabs.Screen
         name="perfil"
+        listeners={({ navigation }) => ({ tabPress: (event) => { event.preventDefault(); navigation.navigate("perfil", { view: "menu" }); } })}
         options={{
-          title: 'Perfil',
-          tabBarAccessibilityLabel: 'Tab Perfil',
+          title: 'Más',
+          tabBarAccessibilityLabel: 'Tab Más',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'ellipsis-horizontal' : 'ellipsis-horizontal-outline'} size={24} color={color} />
           ),
         }}
       />

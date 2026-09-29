@@ -2,7 +2,8 @@ import type { WeightRecord } from '@vivra/shared/lib/database';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 interface Props {
-  records: WeightRecord[];
+  records: (Pick<WeightRecord, 'weight_kg' | 'date'> & Partial<Pick<WeightRecord, 'id'>>)[];
+  compact?: boolean;
 }
 
 function formatShort(dateStr: string): string {
@@ -10,7 +11,7 @@ function formatShort(dateStr: string): string {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
-export default function WeightChart({ records }: Props) {
+export default function WeightChart({ records, compact = false }: Props) {
   if (records.length < 2) {
     return (
       <div className="text-center py-4">
@@ -57,12 +58,12 @@ export default function WeightChart({ records }: Props) {
   const diff = latest - previous;
 
   // Accent color: #F97316 (matches --color-accent)
-  const ACCENT = '#F97316';
-  const GRID = '#EAECF0';
+  const ACCENT = '#378655';
+  const GRID = '#E8E4DC';
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      {!compact && <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
           Evolución del peso
         </h3>
@@ -78,6 +79,7 @@ export default function WeightChart({ records }: Props) {
         </div>
       </div>
 
+      }
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
         <title>Evolución del peso</title>
         {/* Grid lines */}
@@ -108,7 +110,7 @@ export default function WeightChart({ records }: Props) {
 
         {/* Data points */}
         {points.map((p) => (
-          <g key={p.record.id}>
+          <g key={p.record.id ?? `${p.record.date}-${p.x}`}>
             <circle cx={p.x} cy={p.y} r="5" fill="white" stroke={ACCENT} strokeWidth="2.5" />
             <title>{`${p.record.weight_kg} kg — ${formatShort(p.record.date)}`}</title>
           </g>

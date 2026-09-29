@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   buildVaccineOverview, daysUntilDate, formatDate, friendlyError,
@@ -22,7 +22,12 @@ import { FormField } from '../../../components/ui/FormField';
 import { DatePickerField } from '../../../components/ui/DatePickerField';
 import { SelectField } from '../../../components/ui/SelectField';
 import type { Vaccine } from '@vivra/shared/lib/database';
+import { useRemoteData } from '../../../hooks/useRemoteData';
+import { DataLoadNotice } from '../../../components/shared/DataLoadNotice';
 import { track } from '../../../lib/analytics';
+import { HealthPetIdentity } from '../../../components/health/HealthPetIdentity';
+import { HealthTabs, type HealthTab } from '../../../components/health/HealthTabs';
+import { useReducedMotion } from 'react-native-reanimated';
 
 let ImagePicker: typeof import('expo-image-picker') | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
@@ -39,9 +44,9 @@ const STATUS_STYLE: Record<VaccineScheduleStatus, {
   border: string;
 }> = {
   overdue: { label: 'Fecha pendiente', icon: 'alert-circle-outline', color: '#DC2626', background: '#FEF2F2', border: '#FECACA' },
-  due_soon: { label: 'Próxima', icon: 'calendar-outline', color: '#C2410C', background: '#FFF7ED', border: '#FED7AA' },
-  scheduled: { label: 'Programada', icon: 'calendar-clear-outline', color: '#2563EB', background: '#EFF6FF', border: '#BFDBFE' },
-  recorded: { label: 'Registrada', icon: 'checkmark-circle-outline', color: '#15803D', background: '#F0FDF4', border: '#BBF7D0' },
+  due_soon: { label: 'Próxima', icon: 'calendar-outline', color: '#93652D', background: '#F4EBDD', border: '#E1CBA8' },
+  scheduled: { label: 'Programada', icon: 'calendar-clear-outline', color: '#567F94', background: '#EAF0F2', border: '#C5D6DC' },
+  recorded: { label: 'Registrada', icon: 'checkmark-circle-outline', color: '#378655', background: '#E5EDE1', border: '#CDDDC7' },
 };
 
 function scheduleDetail(vaccine: Vaccine): string {
@@ -68,10 +73,11 @@ async function removeStoredImage(url: string | null | undefined) {
 
 export default function VacunasScreen() {
   const router = useRouter();
+  const reducedMotion = useReducedMotion();
+  const [activeTab, setActiveTab] = useState<HealthTab>('summary');
   const { user } = useAuth();
   const { pet, refresh } = usePetContext();
-  const [vaccines, setVaccines] = useState<Vaccine[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { edit, add } = useLocalSearchParams<{ edit?: string; add?: string }>();
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,23 +95,16 @@ export default function VacunasScreen() {
   const [lotNumber, setLotNumber] = useState('');
   const [notes, setNotes] = useState('');
 
+  const loadVaccines = useCallback(async (signal: AbortSignal) => {
+    const { data, error } = await supabase.from('vaccines').select('*').eq('pet_id', pet!.id)
+      .order('date_given', { ascending: false }).abortSignal(signal);
+    if (error) throw error;
+    return data ?? [];
+  }, [pet?.id]);
+  const { data, loading, error: loadError, refresh: fetchData } = useRemoteData(pet?.id ? `vaccines:${user?.id}:${pet.id}` : null, loadVaccines);
+  const vaccines = data ?? [];
   const vaccineOptions = useMemo(() => vaccineOptionsForSpecies(pet?.species), [pet?.species]);
   const overview = useMemo(() => buildVaccineOverview(vaccines), [vaccines]);
-
-  const fetchData = useCallback(async () => {
-    if (!pet?.id) {
-      setVaccines([]);
-      setLoading(false);
-      return;
-    }
-    const { data, error } = await supabase
-      .from('vaccines').select('*').eq('pet_id', pet.id).order('date_given', { ascending: false });
-    if (error) console.warn('[vacunas] fetch error:', error.message);
-    setVaccines(data ?? []);
-    setLoading(false);
-  }, [pet?.id]);
-
-  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -136,6 +135,17 @@ export default function VacunasScreen() {
     setNotes(vaccine.notes ?? '');
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (edit && data) {
+      const record = data.find(vaccine => vaccine.id === edit);
+      if (record) openEdit(record);
+      router.setParams({ edit: undefined });
+    } else if (add) {
+      openNew();
+      router.setParams({ add: undefined });
+    }
+  }, [edit, add, data]);
 
   const closeForm = () => { setShowForm(false); resetForm(); };
 
@@ -255,14 +265,14 @@ export default function VacunasScreen() {
       : overview.dueSoonCount > 0
         ? { title: `${overview.dueSoonCount} próxima${overview.dueSoonCount === 1 ? '' : 's'} en 30 días`, text: 'Tu calendario tiene fechas cercanas para revisar.' }
         : overview.schedule.length > 0
-          ? { title: 'Calendario organizado', text: 'Las próximas fechas están guardadas y visibles abajo.' }
+          ? { title: 'Fechas al día', text: 'No hay fechas de refuerzo pendientes en tus registros.' }
           : { title: 'Historial organizado', text: 'Puedes añadir la próxima fecha cuando la confirme tu veterinario.' };
 
   return (
     <SafeAreaView testID="screen-vaccines" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Volver a Salud" onPress={() => router.replace('/(app)/salud' as any)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="chevron-back" size={24} color={Colors.ink} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver a Salud" onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/salud')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Vacunas</Text>
         <View style={styles.headerSpacer} />
@@ -273,25 +283,94 @@ export default function VacunasScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        <View style={styles.heroCard}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroIcon}><Ionicons name="shield-checkmark" size={26} color={Colors.accent} /></View>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>CARNÉ DIGITAL</Text>
-              <Text style={styles.heroTitle}>{summary.title}</Text>
-              <Text style={styles.heroText}>{summary.text}</Text>
+        <HealthPetIdentity />
+        <HealthTabs value={activeTab} onChange={setActiveTab} />
+        <DataLoadNotice message={loadError ? 'No pudimos cargar las vacunas. Inténtalo de nuevo.' : null} onRetry={fetchData} />
+        {loading ? (
+          <View style={styles.loading}><ActivityIndicator color={Colors.accent} /><Text style={styles.loadingText}>Cargando vacunas…</Text></View>
+        ) : loadError ? null : vaccines.length === 0 ? (
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}><Ionicons name="medkit-outline" size={30} color={Colors.accent} /></View>
+            <Text style={styles.emptyTitle}>Todavía no hay dosis registradas</Text>
+            <Text style={styles.emptyText}>Empieza con cualquier vacuna que aparezca en el carné. Podrás completar el resto después.</Text>
+          </View>
+        ) : activeTab === 'summary' ? (
+          <>
+            <Card style={styles.summaryCard}>
+              <View style={[styles.summaryRing, { borderColor: overview.overdueCount > 0 ? Colors.warn : Colors.good }]}>
+                <View style={[styles.summaryCheck, { backgroundColor: overview.overdueCount > 0 ? Colors.warn : Colors.good }]}>
+                  <Ionicons name={overview.overdueCount > 0 ? 'calendar-outline' : 'checkmark'} size={25} color={Colors.white} />
+                </View>
+              </View>
+              <View style={styles.summaryCopy}>
+                <Text style={styles.summaryTitle}>{summary.title}</Text>
+                <Text style={styles.summaryText}>{summary.text}</Text>
+              </View>
+            </Card>
+            {overview.schedule[0] && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Ver próxima fecha de ${overview.schedule[0].name}`}
+                testID={`vaccine-schedule-${overview.schedule[0].id}`}
+                onPress={() => router.push({ pathname: '/(app)/salud/vacuna', params: { id: overview.schedule[0].id } })}
+                activeOpacity={0.75}
+                style={styles.nextCard}
+              >
+                <View style={styles.nextIcon}><Ionicons name="calendar-outline" size={24} color={Colors.bad} /></View>
+                <View style={styles.historyCopy}>
+                  <Text style={styles.nextLabel}>{overview.overdueCount > 0 ? 'Fecha por revisar' : 'Próxima dosis'}</Text>
+                  <Text style={styles.historyName}>{overview.schedule[0].name}</Text>
+                  <Text style={styles.historyDate}>{scheduleDetail(overview.schedule[0])}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+              </TouchableOpacity>
+            )}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Vacunas registradas</Text>
+                <Text style={styles.sectionCount}>{overview.latestByName.length}</Text>
+              </View>
+              <Card padded={false}>
+                {overview.latestByName.map((vaccine, index) => {
+                  const meta = STATUS_STYLE[vaccineScheduleStatus(vaccine)];
+                  return (
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver vacuna ${vaccine.name}`} key={vaccine.id} style={[styles.historyRow, index < overview.latestByName.length - 1 && styles.historyRowBorder]} onPress={() => router.push({ pathname: '/(app)/salud/vacuna', params: { id: vaccine.id } })} activeOpacity={0.7}>
+                      <View style={[styles.historyIcon, { backgroundColor: meta.background }]}><Ionicons name="shield-checkmark-outline" size={21} color={meta.color} /></View>
+                      <View style={styles.historyCopy}>
+                        <Text style={styles.historyName}>{vaccine.name}</Text>
+                        <Text style={styles.historyDate}>Aplicada el {formatDate(vaccine.date_given)}</Text>
+                      </View>
+                      <View style={[styles.statusPill, { backgroundColor: meta.background }]}><Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text></View>
+                      <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </Card>
             </View>
+          </>
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Todas las aplicaciones</Text>
+              <Text style={styles.sectionCount}>{overview.history.length}</Text>
+            </View>
+            <Card padded={false}>
+              {overview.history.map((vaccine, index) => (
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver aplicación de ${vaccine.name}`} key={vaccine.id} style={[styles.historyRow, index < overview.history.length - 1 && styles.historyRowBorder]} onPress={() => router.push({ pathname: '/(app)/salud/vacuna', params: { id: vaccine.id } })} activeOpacity={0.7}>
+                  <View style={styles.historyIcon}><Ionicons name="shield-checkmark-outline" size={20} color={Colors.good} /></View>
+                  <View style={styles.historyCopy}>
+                    <Text style={styles.historyName}>{vaccine.name}</Text>
+                    <Text style={styles.historyDate}>Aplicada el {formatDate(vaccine.date_given)}</Text>
+                    {(vaccine.brand || vaccine.lot_number || vaccine.vet_name) && (
+                      <Text style={styles.historyMeta}>{[vaccine.brand, vaccine.lot_number ? `Lote ${vaccine.lot_number}` : null, vaccine.vet_name].filter(Boolean).join(' · ')}</Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={17} color={Colors.muted} />
+                </TouchableOpacity>
+              ))}
+            </Card>
           </View>
-          <View style={styles.metrics}>
-            <View style={styles.metric}><Text style={styles.metricValue}>{vaccines.length}</Text><Text style={styles.metricLabel}>dosis</Text></View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metric}><Text style={styles.metricValue}>{overview.latestByName.length}</Text><Text style={styles.metricLabel}>vacunas</Text></View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metric}><Text style={[styles.metricValue, overview.overdueCount > 0 && styles.metricValueDanger]}>{overview.schedule.length}</Text><Text style={styles.metricLabel}>con próxima fecha</Text></View>
-          </View>
-        </View>
-
-        <Button title="Registrar vacuna" onPress={openNew} icon={<Ionicons name="add" size={21} color={Colors.white} />} style={styles.primaryAction} />
+        )}
 
         <Card style={styles.cardPhoto}>
           <View style={styles.cardPhotoRow}>
@@ -300,7 +379,7 @@ export default function VacunasScreen() {
                 <Image source={{ uri: pet.vaccine_card_url }} style={styles.cardThumbnail} />
               </TouchableOpacity>
             ) : (
-              <View style={styles.cardPhotoIcon}><Ionicons name="camera-outline" size={22} color="#2563EB" /></View>
+              <View style={styles.cardPhotoIcon}><Ionicons name="camera-outline" size={22} color="#567F94" /></View>
             )}
             <View style={styles.cardPhotoCopy}>
               <Text style={styles.cardPhotoTitle}>Foto del carné físico</Text>
@@ -312,72 +391,13 @@ export default function VacunasScreen() {
           </View>
         </Card>
 
-        {loading ? (
-          <View style={styles.loading}><ActivityIndicator color={Colors.accent} /><Text style={styles.loadingText}>Cargando vacunas…</Text></View>
-        ) : vaccines.length === 0 ? (
-          <View style={styles.empty}>
-            <View style={styles.emptyIcon}><Ionicons name="medkit-outline" size={30} color={Colors.accent} /></View>
-            <Text style={styles.emptyTitle}>Todavía no hay dosis registradas</Text>
-            <Text style={styles.emptyText}>Empieza con cualquier vacuna que aparezca en el carné. Podrás completar el resto después.</Text>
-            <TouchableOpacity onPress={openNew} style={styles.emptyButton}><Text style={styles.emptyButtonText}>Registrar primera vacuna</Text></TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            {overview.schedule.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View><Text style={styles.sectionEyebrow}>CALENDARIO</Text><Text style={styles.sectionTitle}>Próximas dosis</Text></View>
-                  <Text style={styles.sectionCount}>{overview.schedule.length}</Text>
-                </View>
-                {overview.schedule.map(vaccine => {
-                  const status = vaccineScheduleStatus(vaccine);
-                  const meta = STATUS_STYLE[status];
-                  return (
-                    <TouchableOpacity key={`schedule-${vaccine.id}`} onPress={() => openEdit(vaccine)} activeOpacity={0.75}>
-                      <View style={[styles.scheduleCard, { borderColor: meta.border, backgroundColor: meta.background }]}>
-                        <View style={[styles.scheduleIcon, { backgroundColor: Colors.white }]}><Ionicons name={meta.icon} size={22} color={meta.color} /></View>
-                        <View style={styles.scheduleCopy}>
-                          <View style={styles.scheduleTitleRow}>
-                            <Text style={styles.scheduleName} numberOfLines={2}>{vaccine.name}</Text>
-                            <View style={[styles.statusPill, { backgroundColor: Colors.white }]}><Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text></View>
-                          </View>
-                          <Text style={[styles.scheduleDate, { color: meta.color }]}>{scheduleDetail(vaccine)}</Text>
-                          <Text style={styles.scheduleApplied}>Última aplicación: {formatDate(vaccine.date_given)}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={17} color={meta.color} />
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View><Text style={styles.sectionEyebrow}>APLICACIONES</Text><Text style={styles.sectionTitle}>Historial</Text></View>
-                <Text style={styles.sectionCount}>{overview.history.length}</Text>
-              </View>
-              <Card padded={false}>
-                {overview.history.map((vaccine, index) => (
-                  <TouchableOpacity key={vaccine.id} style={[styles.historyRow, index < overview.history.length - 1 && styles.historyRowBorder]} onPress={() => openEdit(vaccine)} activeOpacity={0.7}>
-                    <View style={styles.historyIcon}><Ionicons name="shield-checkmark-outline" size={20} color={Colors.good} /></View>
-                    <View style={styles.historyCopy}>
-                      <Text style={styles.historyName}>{vaccine.name}</Text>
-                      <Text style={styles.historyDate}>Aplicada el {formatDate(vaccine.date_given)}</Text>
-                      {(vaccine.brand || vaccine.lot_number || vaccine.vet_name) && (
-                        <Text style={styles.historyMeta} numberOfLines={2}>{[vaccine.brand, vaccine.lot_number ? `Lote ${vaccine.lot_number}` : null, vaccine.vet_name].filter(Boolean).join(' · ')}</Text>
-                      )}
-                    </View>
-                    <Ionicons name="pencil-outline" size={17} color={Colors.muted} />
-                  </TouchableOpacity>
-                ))}
-              </Card>
-            </View>
-          </>
-        )}
 
         <Text style={styles.medicalNote}>Las fechas y productos deben copiarse del carné o confirmarse con el veterinario. Vivra organiza el historial, no define el esquema de vacunación.</Text>
       </ScrollView>
+
+      <View style={styles.footer}>
+        <Button title="Registrar vacuna" onPress={openNew} style={styles.primaryAction} />
+      </View>
 
       <BottomSheet visible={showForm} onClose={closeForm} title={editingVaccine ? 'Editar aplicación' : 'Registrar vacuna'} footer={<Button title={editingVaccine ? 'Guardar cambios' : 'Registrar aplicación'} onPress={handleSave} loading={saving} />}>
         <View style={styles.formIntro}><Ionicons name="information-circle-outline" size={19} color={Colors.accent} /><Text style={styles.formIntroText}>Copia la información de esta dosis. Solo vacuna y fecha aplicada son obligatorias.</Text></View>
@@ -397,7 +417,7 @@ export default function VacunasScreen() {
         )}
       </BottomSheet>
 
-      <Modal visible={showCardPreview} transparent animationType="fade" onRequestClose={() => setShowCardPreview(false)}>
+      <Modal visible={showCardPreview} transparent animationType={reducedMotion ? 'none' : 'fade'} onRequestClose={() => setShowCardPreview(false)}>
         <View style={styles.previewOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCardPreview(false)} />
           <View style={styles.previewHeader}>
@@ -414,27 +434,24 @@ export default function VacunasScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.canvas },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
-  title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
+  title: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold, color: Colors.ink },
   headerSpacer: { width: 24 },
   scroll: { flex: 1 },
-  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.xxl },
-  heroCard: { padding: Spacing.md, borderRadius: Radius.xl, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.cardBorder },
-  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md },
-  heroIcon: { width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.accentLight },
-  heroCopy: { flex: 1 },
-  heroEyebrow: { fontSize: 10, fontWeight: FontWeight.bold, color: Colors.accent, letterSpacing: 1.2 },
-  heroTitle: { marginTop: 3, fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
-  heroText: { marginTop: 4, fontSize: FontSize.xs, lineHeight: 18, color: Colors.muted },
-  metrics: { flexDirection: 'row', marginTop: Spacing.md, paddingTop: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.cardBorder },
-  metric: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 46 },
-  metricDivider: { width: 1, backgroundColor: Colors.cardBorder },
-  metricValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
-  metricValueDanger: { color: Colors.bad },
-  metricLabel: { marginTop: 2, fontSize: 10, color: Colors.muted, textAlign: 'center' },
-  primaryAction: { borderRadius: Radius.lg },
+  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.md },
+  footer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder, backgroundColor: Colors.canvas },
+  summaryCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg, padding: Spacing.md },
+  summaryRing: { width: 90, height: 90, borderRadius: 45, borderWidth: 7, alignItems: 'center', justifyContent: 'center' },
+  summaryCheck: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  summaryCopy: { flex: 1 },
+  summaryTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.accent },
+  summaryText: { marginTop: 5, fontSize: FontSize.xs, color: Colors.muted, lineHeight: 18 },
+  nextCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.cardBorder, backgroundColor: Colors.card },
+  nextIcon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.coral },
+  nextLabel: { fontSize: FontSize.xs, color: Colors.ink, marginBottom: 3 },
+  primaryAction: { borderRadius: Radius.full },
   cardPhoto: { padding: Spacing.sm + 4 },
   cardPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  cardPhotoIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF' },
+  cardPhotoIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EAF0F2' },
   cardThumbnail: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.canvas },
   cardPhotoCopy: { flex: 1 },
   cardPhotoTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
@@ -447,27 +464,17 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 58, height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.accentLight },
   emptyTitle: { marginTop: Spacing.md, fontSize: FontSize.md, fontWeight: FontWeight.bold, color: Colors.ink, textAlign: 'center' },
   emptyText: { marginTop: Spacing.xs, fontSize: FontSize.sm, lineHeight: 20, color: Colors.muted, textAlign: 'center' },
-  emptyButton: { marginTop: Spacing.md, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md },
-  emptyButtonText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.accent },
   section: { gap: Spacing.sm },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: Spacing.xs },
-  sectionEyebrow: { fontSize: 10, fontWeight: FontWeight.bold, color: Colors.muted, letterSpacing: 1.2 },
   sectionTitle: { marginTop: 2, fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
   sectionCount: { overflow: 'hidden', minWidth: 27, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.full, backgroundColor: Colors.card, color: Colors.muted, fontSize: FontSize.xs, fontWeight: FontWeight.semibold, textAlign: 'center' },
-  scheduleCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.lg, borderWidth: 1 },
-  scheduleIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  scheduleCopy: { flex: 1 },
-  scheduleTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.xs },
-  scheduleName: { flex: 1, fontSize: FontSize.md, lineHeight: 20, fontWeight: FontWeight.bold, color: Colors.ink },
-  statusPill: { borderRadius: Radius.full, paddingHorizontal: 7, paddingVertical: 3 },
-  statusText: { fontSize: 9, fontWeight: FontWeight.bold },
-  scheduleDate: { marginTop: 5, fontSize: FontSize.sm, fontWeight: FontWeight.semibold },
-  scheduleApplied: { marginTop: 3, fontSize: FontSize.xs, color: Colors.muted },
+  statusPill: { maxWidth: 88, borderRadius: Radius.full, paddingHorizontal: 7, paddingVertical: 3 },
+  statusText: { fontSize: 10, fontWeight: FontWeight.bold },
   historyRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md },
   historyRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.cardBorder },
-  historyIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0FDF4' },
+  historyIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E5EDE1' },
   historyCopy: { flex: 1 },
-  historyName: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
+  historyName: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
   historyDate: { marginTop: 3, fontSize: FontSize.xs, color: Colors.muted },
   historyMeta: { marginTop: 3, fontSize: 10, lineHeight: 14, color: Colors.muted },
   medicalNote: { paddingHorizontal: Spacing.sm, marginTop: Spacing.sm, fontSize: 10, lineHeight: 15, textAlign: 'center', color: Colors.muted },

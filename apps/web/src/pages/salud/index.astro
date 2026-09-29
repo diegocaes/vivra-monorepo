@@ -1,311 +1,114 @@
 ---
 import MainLayout from '../../layouts/MainLayout.astro';
 import Icon from '../../components/ui/Icon.astro';
-
+import HealthHeader from '../../components/health/HealthHeader.astro';
 import { getActivePet } from '../../lib/pet';
-import { calculateVitalityScore } from '@vivra/shared';
-import type { ScoreInput } from '@vivra/shared';
-
-const PILLAR_SVG: Record<string, string> = {
-  peso: '<path d="M12 3v17M3 12h18"/><circle cx="12" cy="12" r="9"/>',
-  cuidado: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
-  raza: '<circle cx="11" cy="4" r="2"/><path d="M6 9a4 4 0 0 1 4-1h2a4 4 0 0 1 4 1l1 5-3-1v5H8v-5l-3 1z"/>',
-  nutricion: '<path d="M3 2l1 7a5 5 0 0 0 5 4h0a5 5 0 0 0 5-4l1-7"/><path d="M12 13v9"/><path d="M18 2a3 3 0 0 1 0 6l-3 7v7"/>',
-};
+import { buildVaccineOverview, calculateVitalityScore, daysUntilDate, formatDate, localDateKey, preventiveNextDue, type ScoreInput } from '@vivra/shared';
 
 const { supabase, user, activePetId } = Astro.locals;
 const { pet } = await getActivePet(supabase, user.id, activePetId);
-
 if (!pet) return Astro.redirect('/onboarding');
 
-const [
-  { data: weightRecords },
-  { data: vaccines },
-  { data: vetVisits },
-  { data: groomings },
-  { data: foods },
-  { data: preventives },
-] = await Promise.all([
-  supabase.from('weight_records').select('weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
-  supabase.from('vaccines').select('name, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
-  supabase.from('vet_visits').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
-  supabase.from('groomings').select('date').eq('pet_id', pet.id).order('date', { ascending: false }),
+const [weightResult, vaccineResult, visitResult, groomingResult, foodResult, preventiveResult] = await Promise.all([
+  supabase.from('weight_records').select('id, weight_kg, date').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('vaccines').select('id, name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('vet_visits').select('id, date, reason, clinic_name, vet_name').eq('pet_id', pet.id).order('date', { ascending: false }),
+  supabase.from('groomings').select('id, date, type, services, groomer_name').eq('pet_id', pet.id).order('date', { ascending: false }),
   supabase.from('foods').select('brand, daily_grams, bag_size, bag_unit, type, start_date, created_at').eq('pet_id', pet.id).order('created_at', { ascending: false }),
-  supabase.from('preventive_treatments').select('type, date_given').eq('pet_id', pet.id).order('date_given', { ascending: false }),
+  supabase.from('preventive_treatments').select('id, type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);
-
+const loadError = [weightResult, vaccineResult, visitResult, groomingResult, foodResult, preventiveResult].some(result => result.error);
+const weightRecords = weightResult.data ?? [];
+const vaccines = vaccineResult.data ?? [];
+const vetVisits = visitResult.data ?? [];
+const groomings = groomingResult.data ?? [];
+const foods = foodResult.data ?? [];
+const preventives = preventiveResult.data ?? [];
+const today = localDateKey();
+const vaccineOverview = buildVaccineOverview(vaccines, today);
 const scoreInput: ScoreInput = {
-  pet: {
-    species: pet.species ?? 'dog',
-    breed: pet.breed ?? null,
-    birth_date: pet.birth_date ?? null,
-    weight_kg: pet.weight_kg ?? null,
-    gender: pet.gender ?? null,
-    is_neutered: pet.is_neutered ?? null,
-  },
-  weightRecords: weightRecords ?? [],
-  vaccines: vaccines ?? [],
-  vetVisits: vetVisits ?? [],
-  groomings: groomings ?? [],
-  foods: foods ?? [],
-  preventives: (preventives ?? []) as { type: 'antipulgas' | 'desparasitante' | 'combinado'; date_given: string }[],
+  pet: { species: pet.species ?? 'dog', breed: pet.breed ?? null, birth_date: pet.birth_date ?? null, weight_kg: pet.weight_kg ?? null, gender: pet.gender ?? null, is_neutered: pet.is_neutered ?? null },
+  weightRecords, vaccines, vetVisits, groomings, foods,
+  preventives: preventives as ScoreInput['preventives'],
 };
-
-const score = calculateVitalityScore(scoreInput);
-
-const R = 44;
-const FULL_ARC = Math.PI * R * 270 / 180;
-const filled = (score.total / 100) * FULL_ARC;
-
-// Latest weight
-const latestWeight = weightRecords?.[0]?.weight_kg ?? pet.weight_kg;
-const vaccineCount = vaccines?.length ?? 0;
-const visitCount = vetVisits?.length ?? 0;
-
+const score = loadError ? null : calculateVitalityScore(scoreInput);
+const latestWeight = weightResult.error ? pet.weight_kg : weightRecords[0]?.weight_kg ?? pet.weight_kg;
+const visitCountThisYear = vetVisits.filter(visit => visit.date.slice(0, 4) === today.slice(0, 4)).length;
+const latestPreventives = [...new Map(['antipulgas', 'desparasitante'].flatMap(type => {
+  const treatment = preventives.find(row => row.type === type || row.type === 'combinado');
+  return treatment ? [[treatment.id, { ...treatment, next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due) }] as const] : [];
+})).values()];
+const preventiveOverdue = latestPreventives.filter(record => record.next_due && daysUntilDate(record.next_due, today) < 0).length;
+const vaccineStatus = vaccineOverview.overdueCount > 0 ? `${vaccineOverview.overdueCount} fecha${vaccineOverview.overdueCount === 1 ? '' : 's'} pendiente${vaccineOverview.overdueCount === 1 ? '' : 's'}` : vaccineOverview.dueSoonCount > 0 ? `${vaccineOverview.dueSoonCount} próxima${vaccineOverview.dueSoonCount === 1 ? '' : 's'}` : vaccines.length ? 'Registradas' : 'Sin registros';
+const preventiveStatus = preventiveOverdue > 0 ? 'Revisar fechas' : latestPreventives.length ? 'Registrados' : 'Sin registros';
+function relativeDate(date: string) {
+  const days = daysUntilDate(date, today);
+  if (days < 0) return `Fecha pendiente · hace ${Math.abs(days)} días`;
+  if (days === 0) return 'Fecha registrada para hoy';
+  if (days === 1) return 'Mañana';
+  return `En ${days} días`;
+}
+const upcoming = [
+  ...vaccineOverview.schedule.map(record => ({ id: record.id, title: record.name, date: record.next_due!, icon: 'vacuna', tone: '', href: '/salud/vacunas' })),
+  ...latestPreventives.filter(record => record.next_due).map(record => ({ id: record.id, title: record.type === 'antipulgas' ? 'Antipulgas' : record.type === 'desparasitante' ? 'Desparasitación' : 'Preventivo combinado', date: record.next_due!, icon: 'pastilla', tone: 'sand', href: '/salud/preventivos' })),
+].sort((a, b) => a.date.localeCompare(b.date));
+const history = [
+  ...vaccines.map(record => ({ id: `v-${record.id}`, date: record.date_given, title: record.name, subtitle: 'Vacuna registrada', icon: 'vacuna', tone: '', href: '/salud/vacunas' })),
+  ...vetVisits.map(record => ({ id: `h-${record.id}`, date: record.date, title: 'Visita veterinaria', subtitle: [record.reason, record.clinic_name || record.vet_name].filter(Boolean).join(' · '), icon: 'vet', tone: 'sky', href: '/salud/historial' })),
+  ...preventives.map(record => ({ id: `p-${record.id}`, date: record.date_given, title: record.type === 'antipulgas' ? 'Antipulgas' : record.type === 'desparasitante' ? 'Desparasitación' : 'Preventivo combinado', subtitle: record.product_name || 'Aplicación registrada', icon: 'pastilla', tone: 'sand', href: '/salud/preventivos' })),
+  ...weightRecords.map(record => ({ id: `w-${record.id}`, date: record.date, title: 'Control de peso', subtitle: `${record.weight_kg} kg`, icon: 'peso', tone: '', href: '/salud/peso' })),
+].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 ---
 
 <MainLayout title="Salud">
-
-  {/* ── SIN DATOS: guía para completar perfil ── */}
-  {!score.showScore && (
-    <div class="rounded-2xl bg-card border border-card-border p-5 mb-4 animate-fade-up">
-      <div class="flex flex-col items-center text-center mb-5">
-        <div class="h-16 w-16 rounded-2xl bg-canvas flex items-center justify-center mb-3 border border-card-border">
-          <span class="text-accent"><Icon name="mascota" class="h-8 w-8" /></span>
-        </div>
-        <p class="text-base font-bold text-ink">El score se activa con más datos</p>
-        <p class="text-sm text-muted mt-1 leading-relaxed max-w-xs">
-          Agrega la información de {pet.name} y verás aquí un resumen de su bienestar.
-        </p>
-      </div>
-      <div class="space-y-2">
-        {score.pendingAreas.map(area => (
-          <a
-            href={area.href}
-            class="flex items-center gap-3 rounded-xl border border-dashed border-accent/40 bg-accent/5 px-4 py-3 transition-all active:scale-95 hover:border-accent/60"
-          >
-            <div class="h-2 w-2 shrink-0 rounded-full bg-accent/50" />
-            <p class="flex-1 text-sm font-medium text-ink">{area.label}</p>
-            <svg class="h-4 w-4 text-muted/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-          </a>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* ── CON DATOS: gauge + score ── */}
-  {score.showScore && (
-    <div class="rounded-2xl bg-card border border-card-border p-5 mb-4 animate-fade-up">
-      <div class="flex flex-col items-center mb-4">
-        <svg viewBox="0 0 120 80" class="w-44 overflow-visible" aria-hidden="true">
-          <path d="M 16 74 A 44 44 0 1 1 104 74" fill="none" stroke="#EAECF0" stroke-width="10" stroke-linecap="round" />
-          <path
-            d="M 16 74 A 44 44 0 1 1 104 74"
-            fill="none"
-            stroke={score.color}
-            stroke-width="10"
-            stroke-linecap="round"
-            stroke-dasharray={`${filled.toFixed(1)} ${FULL_ARC.toFixed(1)}`}
-          />
-          <text x="60" y="62" text-anchor="middle" font-size="22" font-weight="900" fill="#0F1117" font-family="system-ui">{score.total}</text>
-          <text x="60" y="74" text-anchor="middle" font-size="7" fill="#6B7280" font-family="system-ui">de 100</text>
-        </svg>
-        <p class="text-base font-bold mt-2" style={`color: ${score.color};`}>{score.headline}</p>
-        <p class="text-xs text-muted mt-0.5 text-center max-w-xs">{score.subline}</p>
-      </div>
-
-      {/* Pillar breakdown bars */}
-      <div class="pt-3 border-t border-card-border space-y-1">
-          {score.pillars.map(pillar => (
-            <div class="pillar-row">
-              <button type="button" class="pillar-toggle w-full flex items-center gap-2.5 py-1.5 rounded-xl transition-colors hover:bg-canvas/50 -mx-1 px-1">
-                <svg class="h-4 w-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" set:html={PILLAR_SVG[pillar.id] ?? ''} />
-                <p class="text-xs shrink-0 w-20 truncate text-muted font-medium text-left">{pillar.name}</p>
-                <div class="flex-1 rounded-full h-2 overflow-hidden bg-canvas">
-                  <div
-                    class="h-2 rounded-full transition-all duration-700"
-                    style={`width: ${pillar.pct}%; background-color: ${pillar.pct >= 70 ? '#22C55E' : pillar.pct >= 40 ? '#F59E0B' : '#EF4444'};`}
-                  />
-                </div>
-                <p class="text-xs w-8 text-right font-bold text-ink shrink-0">{pillar.score}/{pillar.max}</p>
-              </button>
-              <div class="pillar-detail hidden ml-7 mr-1 mb-2 rounded-xl bg-canvas px-3 py-2.5">
-                <p class="text-[11px] text-muted leading-relaxed">{pillar.description}</p>
-                <p class="text-[11px] font-semibold text-ink mt-1.5">{pillar.status}</p>
-                {pillar.tips.length > 0 && (
-                  <ul class="mt-1.5 space-y-0.5">
-                    {pillar.tips.map(tip => (
-                      <li class="flex items-start gap-1.5">
-                        <div class="h-1 w-1 shrink-0 rounded-full bg-accent mt-1.5" />
-                        <p class="text-[11px] text-muted leading-relaxed">{tip}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-        ))}
-      </div>
-
-      {/* Quick stats row */}
-      <div class="grid grid-cols-3 gap-3 pt-3 border-t border-card-border mt-3">
-        <div class="text-center">
-          <p class="text-lg font-black text-ink">{latestWeight ? `${latestWeight}` : '—'}</p>
-          <p class="text-[10px] text-muted">kg peso</p>
-        </div>
-        <div class="text-center">
-          <p class="text-lg font-black text-ink">{vaccineCount}</p>
-          <p class="text-[10px] text-muted">vacunas</p>
-        </div>
-        <div class="text-center">
-          <p class="text-lg font-black text-ink">{visitCount}</p>
-          <p class="text-[10px] text-muted">consultas</p>
-        </div>
-      </div>
-
-      {score.pendingAreas.length > 0 && (
-        <div class="pt-3 border-t border-card-border space-y-2 mt-3">
-          {score.pendingAreas.map(area => (
-            <a
-              href={area.href}
-              class="flex items-center gap-3 rounded-xl border border-dashed border-card-border bg-canvas px-3 py-2.5 transition-all active:scale-95 hover:border-accent/40"
-            >
-              <div class="h-2 w-2 shrink-0 rounded-full bg-muted/40" />
-              <p class="flex-1 text-xs text-muted">{area.label}</p>
-              <svg class="h-3.5 w-3.5 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
-  )}
-
-  {/* ── ACCESOS PRINCIPALES ── */}
-  <div class="space-y-2 mb-4 animate-fade-up animate-fade-up-delay-1">
-    <a href="/salud/preventivos" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-green-200 active:scale-95">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-green-50">
-        <svg class="h-4 w-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      </div>
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-ink">Preventivos</p>
-        <p class="text-[11px] text-muted">Antipulgas y desparasitante</p>
-      </div>
-      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-    </a>
-
-    <a href="/salud/peso" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-sky-200 active:scale-95">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50">
-        <svg class="h-4 w-4 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 0 1 8 0"/><line x1="12" y1="12" x2="12" y2="8"/></svg>
-      </div>
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-ink">Peso</p>
-        <p class="text-[11px] text-muted">Historial y tendencia</p>
-      </div>
-      {latestWeight && <span class="text-xs font-bold text-ink">{latestWeight} kg</span>}
-      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-    </a>
-
-    <a href="/salud/historial" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-blue-200 active:scale-95">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-        <svg class="h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
-      </div>
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-ink">Historial veterinario</p>
-        <p class="text-[11px] text-muted">Citas y consultas</p>
-      </div>
-      <span class="text-xs font-bold text-blue-500">{visitCount}</span>
-      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-    </a>
-
-    <a href="/salud/vacunas" class="flex items-center gap-3 rounded-2xl bg-card border border-card-border px-4 py-3.5 transition-all hover:border-accent/30 active:scale-95">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/10">
-        <svg class="h-4 w-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.5 2-8.5 8.5v4h4l8.5-8.5a2.83 2.83 0 0 0-4-4z"/><path d="m18 2 4 4"/></svg>
-      </div>
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-ink">Vacunas</p>
-        <p class="text-[11px] text-muted">Historial y próximas dosis</p>
-      </div>
-      <span class="text-xs font-bold text-accent">{vaccineCount}</span>
-      <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-    </a>
-  </div>
-
-  {/* ── INSIGHTS / RECOMENDACIONES ── */}
-  {score.showScore && score.pillars.some(p => p.tips.length > 0) && (
-    <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
-      <div class="rounded-2xl border border-card-border bg-card overflow-hidden">
-        <div class="flex items-center gap-2.5 px-4 py-3.5 border-b border-card-border">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-green-50">
-            <svg class="h-3.5 w-3.5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><path d="M9 21h6"/></svg>
+  <HealthHeader pet={pet} active="resumen" latestWeight={latestWeight} score={score} scoreUnavailable={loadError} />
+  {loadError ? (
+    <div class="health-load-notice" role="alert"><Icon name="alerta" class="h-5 w-5 shrink-0" /><p>No pudimos cargar todos los registros de {pet.name}. Reintenta para ver un resumen completo.</p><a href="/salud">Reintentar</a></div>
+  ) : (
+    <>
+      <div class="health-grid">
+        <section class="health-panel" aria-labelledby="health-state-title">
+          <h2 id="health-state-title">Estado de salud</h2>
+          <div class="health-stats">
+            <a href="#bienestar-detalle" class="health-stat"><span class="health-icon circle"><Icon name="score" /></span><strong>General</strong><p>{score?.showScore ? score.headline : 'Completar datos'}</p></a>
+            <a href="/salud/vacunas" class="health-stat"><span class="health-icon circle"><Icon name="vacuna" /></span><strong>Vacunas</strong><p>{vaccineStatus}</p></a>
+            <a href="/salud/preventivos" class="health-stat"><span class="health-icon circle sand"><Icon name="pastilla" /></span><strong>Preventivos</strong><p>{preventiveStatus}</p></a>
+            <a href="/salud/historial" class="health-stat"><span class="health-icon circle sky"><Icon name="vet" /></span><strong>Visitas vet</strong><p>{visitCountThisYear} este año</p></a>
           </div>
-          <div>
-            <p class="text-sm font-semibold text-ink">Consejos para {pet.name}</p>
-            <p class="text-[11px] text-muted">Basados en los datos registrados</p>
-          </div>
-        </div>
-        <div class="divide-y divide-card-border">
-          {score.pillars.filter(p => p.tips.length > 0).map(pillar => (
-            <div class="px-4 py-3">
-              <p class="text-xs font-semibold text-ink mb-1.5">{pillar.name}</p>
-              <ul class="space-y-1">
-                {pillar.tips.map(tip => (
-                  <li class="flex items-start gap-2">
-                    <div class="h-1.5 w-1.5 shrink-0 rounded-full bg-green-400 mt-1.5" />
-                    <p class="text-xs text-muted leading-relaxed">{tip}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+          <div class="health-panel-head"><h2>Próximas fechas</h2><a href="/calendario">Ver calendario <span aria-hidden="true">›</span></a></div>
+          {upcoming.length ? upcoming.slice(0, 4).map(event => (
+            <a class="health-event" href={event.href}><span class:list={['health-icon', event.tone]}><Icon name={event.icon} /></span><div class="health-event-info"><strong>{event.title}</strong><p>{relativeDate(event.date)}</p></div><time datetime={event.date}>{formatDate(event.date)}</time><span class="health-chevron" aria-hidden="true">›</span></a>
+          )) : <p class="health-empty">Todavía no hay próximas fechas. Puedes añadirlas en <a href="/salud/vacunas">vacunas</a> y <a href="/salud/preventivos">preventivos</a>.</p>}
+        </section>
+        <section class="health-panel" aria-labelledby="health-history-title">
+          <div class="health-panel-head"><h2 id="health-history-title">Historial reciente</h2><a href="/calendario">Ver calendario <span aria-hidden="true">›</span></a></div>
+          {history.length ? <>
+            <div class="health-timeline">{history.slice(0, 5).map(item => <div class="health-timeline-item"><time datetime={item.date}>{formatDate(item.date)}</time><a href={item.href}><span class:list={['health-icon', item.tone]}><Icon name={item.icon} /></span><div class="health-event-info"><strong>{item.title}</strong><p>{item.subtitle}</p></div><span class="health-chevron" aria-hidden="true">›</span></a></div>)}</div>
+            {history.length > 5 && <details class="health-history-more"><summary>Ver los {history.length - 5} registros anteriores</summary><div class="health-timeline">{history.slice(5).map(item => <div class="health-timeline-item"><time datetime={item.date}>{formatDate(item.date)}</time><a href={item.href}><span class:list={['health-icon', item.tone]}><Icon name={item.icon} /></span><div class="health-event-info"><strong>{item.title}</strong><p>{item.subtitle}</p></div><span class="health-chevron" aria-hidden="true">›</span></a></div>)}</div></details>}
+          </> : <p class="health-empty">Sus vacunas, visitas, preventivos y controles de peso aparecerán aquí cuando los registres.</p>}
+        </section>
       </div>
-    </div>
+      <section class="health-reminders"><span class="health-icon"><Icon name="campana" class="h-6 w-6" /></span><div><h2>Mantén los cuidados de {pet.name} al día</h2><p>Consulta los recordatorios de vacunas y preventivos según sus fechas registradas.</p></div><a href="/notificaciones">Ver recordatorios</a></section>
+    </>
   )}
-
-  {/* ── AVISOS — solo cuando hay score ── */}
-  {score.showScore && score.flags.length > 0 && (
-    <div class="mb-4 animate-fade-up animate-fade-up-delay-2">
-      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Para tener en cuenta</p>
-      <div class="space-y-2">
-        {score.flags.slice(0, 3).map(flag => (
-          <a
-            href={flag.href}
-            class="flex items-start gap-3 rounded-2xl border border-card-border bg-card p-4 transition-all active:scale-95"
-          >
-            <div class:list={[
-              'mt-1 h-2 w-2 shrink-0 rounded-full',
-              flag.severity === 'suggestion' ? 'bg-amber-400' : flag.severity === 'reminder' ? 'bg-blue-400' : 'bg-muted/40',
-            ]} />
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-medium text-ink leading-snug">{flag.message}</p>
-              <p class="text-[11px] text-muted mt-0.5">{flag.action} →</p>
-            </div>
-          </a>
-        ))}
-      </div>
-    </div>
-  )}
-
-  <div class="mt-2 mb-4 animate-fade-up animate-fade-up-delay-2">
-    <p class="text-[11px] text-muted text-center leading-relaxed">
-      El score es orientativo, no un diagnóstico médico.
-      <a href="/faq" class="text-accent hover:text-accent-dark ml-1">¿Cómo funciona? →</a>
-    </p>
-  </div>
-
-  <script is:inline>
-    document.addEventListener('astro:page-load', function() {
-      document.querySelectorAll('.pillar-toggle').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var detail = btn.nextElementSibling;
-          if (!detail || !detail.classList.contains('pillar-detail')) return;
-          var wasOpen = !detail.classList.contains('hidden');
-          document.querySelectorAll('.pillar-detail').forEach(function(d) { d.classList.add('hidden'); });
-          if (!wasOpen) detail.classList.remove('hidden');
-        });
-      });
-
-    });
-  </script>
-
+  <details class="health-score-details" id="bienestar-detalle" open={!score?.showScore}>
+    <summary>Cómo va el bienestar de {pet.name}</summary>
+    {score ? <>
+      <p>{score.showScore ? score.subline : 'Agrega información para ver un resumen de su bienestar.'}</p>
+      {score.showScore && <div class="health-pillars">{score.pillars.map(pillar => <details class="health-pillar"><summary><span>{pillar.name}</span><span>{pillar.score}/{pillar.max}</span></summary><span class="health-progress"><span style={`width:${pillar.pct}%;background:${pillar.pct >= 70 ? '#378655' : pillar.pct >= 40 ? '#B77D35' : '#C25C50'}`}></span></span><p>{pillar.description}</p><p><strong>{pillar.status}</strong></p>{pillar.tips.length > 0 && <ul>{pillar.tips.map(tip => <li>{tip}</li>)}</ul>}</details>)}</div>}
+      {score.pendingAreas.length > 0 && <div class="health-flags">{score.pendingAreas.map(area => <a href={area.href}>{area.label}<span aria-hidden="true">›</span></a>)}</div>}
+      {score.flags.length > 0 && <div class="health-flags">{score.flags.map(flag => <a href={flag.href}>{flag.message}<span>{flag.action} →</span></a>)}</div>}
+    </> : <p>Reintenta la carga para ver el detalle del índice.</p>}
+    <p>El índice es orientativo, no un diagnóstico médico. <a href="/faq" class="text-accent">Cómo funciona →</a></p>
+  </details>
 </MainLayout>
+
+<script>
+  document.addEventListener('astro:page-load', () => {
+    const details = document.querySelector<HTMLDetailsElement>('#bienestar-detalle');
+    if (window.location.hash === '#bienestar-detalle' && details) details.open = true;
+    document.querySelectorAll<HTMLAnchorElement>('a[href="#bienestar-detalle"]').forEach(link => {
+      link.addEventListener('click', () => { if (details) details.open = true; });
+    });
+  });
+</script>

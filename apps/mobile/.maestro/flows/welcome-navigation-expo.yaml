@@ -1,0 +1,38 @@
+appId: host.exp.Exponent
+name: Bienvenida, registro y acceso con el nuevo diseño
+---
+- launchApp
+- openLink: "exp://localhost:8081/--/welcome"
+- extendedWaitUntil:
+    visible: "Empezar"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: ".*Refresh Token.*"
+    commands:
+      - tapOn:
+          text: ".*Refresh Token.*"
+          point: "94%,50%"
+- tapOn: "Empezar"
+- assertVisible: "Crea tu cuenta"
+- assertVisible: "Confirmar contraseña"
+- openLink: "exp://localhost:8081/--/welcome"
+- extendedWaitUntil:
+    visible: "Ya tengo una cuenta"
+    timeout: 15000
+- tapOn: "Ya tengo una cuenta"
+- assertVisible:
+    id: "login-email"
+- assertVisible:
+    id: "login-password"
+- tapOn: "¿Olvidaste tu contraseña?"
+- assertVisible: "Recuperar contraseña"
+- repeat:
+    times: 2
+    commands:
+      - stopApp
+      - launchApp
+      - openLink: "exp://localhost:8081"
+      - extendedWaitUntil:
+          visible: "Empezar"
+          timeout: 20000

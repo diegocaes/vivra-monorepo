@@ -1,7 +1,9 @@
 ---
+import PassportCard from '../components/PassportCard.astro';
+import WeightChart from '../components/WeightChart';
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
-import { buildVaccineOverview, isBirthday, calculateAge, computeFoodStats, formatCurrency, formatDate, isPreventiveType, preventiveNextDue } from '@vivra/shared';
+import { buildVaccineOverview, calculateAge, computeFoodStats, formatDate, isPreventiveType, preventiveNextDue } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { calculateVitalityScore } from '@vivra/shared';
 import type { ScoreInput } from '@vivra/shared';
@@ -49,7 +51,7 @@ if (incomingShareCookie) {
   Astro.cookies.delete('incoming_share', { path: '/' });
 }
 
-const { pet } = await getActivePet(supabase, user.id, activePetId);
+const { pet, pets } = await getActivePet(supabase, user.id, activePetId);
 
 if (!pet) {
   return Astro.redirect('/onboarding');
@@ -57,12 +59,12 @@ if (!pet) {
 
 const [
   premium,
-  { data: allGroomings },
-  { data: allVaccines },
-  { data: allVetVisits },
-  { data: weightRecords },
-  { data: foods },
-  { data: allPreventives },
+  { data: allGroomings, error: allGroomingsError },
+  { data: allVaccines, error: allVaccinesError },
+  { data: allVetVisits, error: allVetVisitsError },
+  { data: weightRecords, error: weightRecordsError },
+  { data: foods, error: foodsError },
+  { data: allPreventives, error: allPreventivesError },
 ] = await Promise.all([
   getPremiumStatus(supabase, user.id),
   supabase.from('groomings').select('type, date').eq('pet_id', pet.id).order('date', { ascending: false }),
@@ -74,6 +76,8 @@ const [
   // 'combinado' rows count as BOTH antipulgas and desparasitante for next-due.
   supabase.from('preventive_treatments').select('type, date_given, next_due, product_name').eq('pet_id', pet.id).order('date_given', { ascending: false }),
 ]);
+
+const dataLoadFailed = [allGroomingsError, allVaccinesError, allVetVisitsError, weightRecordsError, foodsError, allPreventivesError].some(Boolean);
 
 // Split preventives — 'combinado' counts for both
 const preventives = (allPreventives ?? []).flatMap(treatment => {
@@ -94,21 +98,6 @@ const visitCount = allVetVisits?.length ?? 0;
 // The dashboard uses the latest record of each vaccine name. Only a saved
 // next_due date can make a dose pending — never an inferred annual schedule.
 const vaccineOverview = buildVaccineOverview(allVaccines ?? []);
-const latestVaccines = vaccineOverview.latestByName;
-const todayForVaccines = new Date();
-todayForVaccines.setHours(0, 0, 0, 0);
-const datedVaccines = vaccineOverview.schedule
-  .map(vaccine => ({ vaccine, due: new Date(`${vaccine.next_due}T00:00:00`) }))
-  .sort((a, b) => a.due.getTime() - b.due.getTime());
-const nextVaccine = datedVaccines[0] ?? null;
-const vaccineSummary = !latestVaccines.length
-  ? { state: 'empty' as const, title: 'Registra la primera vacuna', detail: 'Guarda la dosis tal como aparece en el carné' }
-  : nextVaccine && nextVaccine.due < todayForVaccines
-    ? { state: 'overdue' as const, title: `${nextVaccine.vaccine.name} pendiente`, detail: 'Confirma el refuerzo con tu veterinario' }
-    : nextVaccine
-      ? { state: 'scheduled' as const, title: `Próxima: ${nextVaccine.vaccine.name}`, detail: formatDate(nextVaccine.vaccine.next_due!) }
-      : { state: 'recorded' as const, title: `${latestVaccines.length} vacuna${latestVaccines.length === 1 ? '' : 's'} registrada${latestVaccines.length === 1 ? '' : 's'}`, detail: 'Aún no hay una próxima fecha registrada' };
-
 // Food insights — averages across all logged bags. The owner already knows
 // when food runs out; we surface trazabilidad (cost, duration) instead.
 const foodStats = computeFoodStats((foods ?? []).map(f => ({
@@ -172,9 +161,6 @@ function preventiveStatus(
 const antipulgasInfo = preventiveStatus(lastAntipulgas?.[0]?.date_given, lastAntipulgas?.[0]?.next_due);
 const desparasitanteInfo = preventiveStatus(lastDesparasitante?.[0]?.date_given, lastDesparasitante?.[0]?.next_due);
 
-const birthday = pet.birth_date ? isBirthday(pet.birth_date) : false;
-const age = pet.birth_date ? calculateAge(pet.birth_date) : null;
-const photoUrl = pet.photo_url || '/icons/default-pet.svg';
 
 // "Qué hacer hoy" — priority actions
 type DashAction = { href: string; icon: string; iconBg: string; iconColor: string; label: string; detail: string; urgent: boolean };
@@ -219,6 +205,7 @@ const checklistItems = [
 // A PROPÓSITO, para que los dos sistemas compartan el enfriamiento y el
 // usuario no reciba el mismo aviso por duplicado desde la web y desde el push.
 try {
+  if (dataLoadFailed) throw new Error('Dashboard records unavailable');
   const COOLDOWNS: Record<string, number> = {
     preventive_due: 7,
     vaccine_due: 30,
@@ -414,522 +401,107 @@ if (vaccineCount === 0) {
 todoActions.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0));
 const topActions = todoActions.slice(0, 4);
 
+const scoreColor = ({ '#22c55e': '#378655', '#f59e0b': '#B77D35', '#f97316': '#B7853C', '#94a3b8': '#87958B' } as Record<string, string>)[dashScore.color.toLowerCase()] || dashScore.color;
+const displayName = (user.user_metadata?.full_name || user.user_metadata?.name || '').split(' ')[0];
+const recentActivity = [
+  ...(allVaccines ?? []).map(record => ({ title: record.name, subtitle: 'Vacuna registrada', date: record.date_given, icon: 'vacuna', href: '/salud/vacunas', tone: 'sage' })),
+  ...(allVetVisits ?? []).map(record => ({ title: record.reason, subtitle: 'Visita veterinaria', date: record.date, icon: 'vet', href: '/salud/historial', tone: 'coral' })),
+  ...(allGroomings ?? []).map(record => ({ title: 'Grooming', subtitle: 'Cuidado registrado', date: record.date, icon: 'grooming', href: '/salud/grooming', tone: 'coral' })),
+  ...(foods ?? []).map(record => ({ title: record.brand, subtitle: 'Alimentación', date: record.start_date || record.created_at || '', icon: 'comida', href: '/alimentacion', tone: 'sand' })),
+].filter(record => record.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4);
+const upcoming = [
+  ...vaccineOverview.schedule.map(record => ({ title: record.name, date: record.next_due!, href: '/salud/vacunas', icon: 'vacuna', tone: 'coral' })),
+  ...[lastAntipulgas[0], lastDesparasitante[0]].filter((record, index, all) => record?.next_due && all.indexOf(record) === index).map(record => ({ title: record.product_name || 'Preventivo', date: record.next_due!, href: '/salud/preventivos', icon: 'preventivo', tone: 'sage' })),
+].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+const quickActions = [
+  { label: 'Visita vet', icon: 'vet', href: '/salud/historial?new=1', tone: 'sage' },
+  { label: 'Vacuna', icon: 'vacuna', href: '/salud/vacunas?new=1', tone: 'coral' },
+  { label: 'Alimento', icon: 'comida', href: '/alimentacion', tone: 'sand' },
+  { label: 'Viaje', icon: 'vuelo', href: '/viajes', tone: 'sky' },
+  { label: 'Peso', icon: 'peso', href: '/salud/peso?new=1', tone: 'lavender' },
+  { label: 'Grooming', icon: 'grooming', href: '/salud/grooming', tone: 'sand' },
+];
 ---
 
 <MainLayout title="Inicio">
-
-  {incomingShare && (
-    <div class="mb-5 rounded-2xl border border-accent/30 bg-accent/8 px-5 py-4 animate-fade-up">
-      <div class="flex items-start gap-4">
-        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent"><Icon name="mascota" class="h-6 w-6" /></div>
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-bold text-ink">
-            ¡Ahora compartes a {incomingShare.petName} con {incomingShare.ownerName}!
-          </p>
-          <p class="text-xs text-muted mt-1 leading-relaxed">
-            Ambos van a poder ver y registrar todo lo de {incomingShare.petName}: vacunas, peso, comida, visitas al vet y más. Para la mejor experiencia, descarga la app en tu iPhone — todos los datos se sincronizan automáticamente.
-          </p>
-        </div>
+  {incomingShare && <div class="dashboard-notice">Ahora compartes a {incomingShare.petName} con {incomingShare.ownerName}. Su información está disponible en este panel.</div>}
+  {isNewlyOnboarded && <div class="dashboard-notice">El perfil de {pet.name} está listo. Puedes completar su historial poco a poco.</div>}
+  <div class="dashboard-heading"><div><h1>Hola{displayName ? `, ${displayName}` : ''} <span class="sun" aria-hidden="true">☀</span></h1><p>Así va el día de {pet.name}. Todo su cuidado, en un solo lugar.</p></div><time datetime={new Date().toISOString().slice(0,10)}>{new Date().toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</time></div>
+  {dataLoadFailed ? <div class="dashboard-notice" role="alert"><h2>No pudimos cargar su historial</h2><p>Revisa tu conexión y vuelve a intentar. Tus registros siguen guardados.</p><a href="/dashboard">Volver a cargar →</a></div> : <div class="dashboard-columns">
+    <div class="dashboard-main">
+      <section class="pets-grid" aria-label="Tus mascotas">
+        {pets.map(profile => <article class:list={['dashboard-card', 'pet-overview', { 'selected-pet': profile.id === pet.id }]}>
+          <form method="POST" action="/api/pets/switch"><input type="hidden" name="pet_id" value={profile.id} /><button type="submit" class="pet-select" aria-label={`Ver a ${profile.name}`}>
+            <img src={profile.photo_url || '/icons/default-pet.svg'} alt="" width="82" height="82" />
+            <div><h2>{profile.name} <span aria-hidden="true">›</span></h2><p>{[profile.birth_date ? calculateAge(profile.birth_date) : '', profile.breed || (profile.species === 'cat' ? 'Gato' : 'Perro')].filter(Boolean).join(' · ')}</p></div>
+          </button></form>
+          <div class="pet-metrics">
+            <span><Icon name="score" class="h-4 w-4"/><strong>{profile.id === pet.id && dashScore.showScore ? dashScore.total : '—'}</strong><small>{profile.id === pet.id ? 'Bienestar' : 'Selecciona'}</small></span>
+            <span><Icon name="peso" class="h-4 w-4"/><strong>{(profile.id === pet.id ? latestWeight : profile.weight_kg) ?? '—'} kg</strong><small>{profile.id === pet.id ? 'Último peso' : 'Peso del perfil'}</small></span>
+            <span><Icon name="documento" class="h-4 w-4"/><strong>{profile.chip_id ? 'Microchip' : 'Perfil'}</strong><small>{profile.chip_id ? 'Registrado' : 'Ver datos'}</small></span>
+          </div>
+        </article>)}
+        {pets.length === 1 && <a href="/onboarding?add=1" class="dashboard-card add-pet-card"><span>＋</span><h2>Su familia puede crecer</h2><p>Agrega otra mascota y cuídalas juntas.</p><b>Agregar mascota →</b></a>}
+      </section>
+      <div class="metrics-grid">
+        <section class="dashboard-card wellbeing"><div class="card-heading"><h2>Bienestar</h2><a href="/salud">Ver detalles ›</a></div><div class="wellbeing-body">
+          <a href="/salud" class="score-ring" aria-label={dashScore.showScore ? `Bienestar: ${dashScore.total} de 100` : 'Completa los registros de bienestar'}><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="51" fill="none" stroke="#DDE3D9" stroke-width="8"/><circle cx="60" cy="60" r="51" fill="none" stroke={dashScore.showScore ? scoreColor : '#BFCBBC'} stroke-width="8" stroke-linecap="round" stroke-dasharray="320.44" stroke-dashoffset={320.44 * (1 - (dashScore.showScore ? dashScore.total : 0) / 100)} transform="rotate(-90 60 60)"/></svg><div><strong>{dashScore.showScore ? dashScore.total : '—'}</strong><small>{dashScore.showScore ? 'Vitality Score' : 'Completando'}</small></div></a>
+          <div class="pillar-list">{dashScore.pillars.map(pillar => <div><span>{SHORT_PILLAR[pillar.name] || pillar.name}</span><i><b style={`width:${pillar.isEstimated ? 0 : pillar.pct}%;background:${scoreColor}`} /></i><small>{pillar.isEstimated ? '—' : Math.round(pillar.pct)}</small></div>)}</div>
+        </div><p class="wellbeing-caption">{dashScore.headline}</p></section>
+        <section class="dashboard-card weight-card"><div class="card-heading"><h2>Evolución del peso</h2><a href="/salud/peso">{pet.name} ›</a></div><div class="weight-summary"><strong>{latestWeight ?? '—'} <small>kg</small></strong>{weightDiff !== null && <span>{weightDiff > 0 ? '+' : ''}{weightDiff} kg desde el anterior</span>}</div><WeightChart records={[...(weightRecords ?? [])].reverse().slice(-12)} compact /></section>
       </div>
-      <div class="mt-3 flex justify-end">
-        <a
-          href="https://apps.apple.com/app/vivra/id6761087142"
-          target="_blank"
-          rel="noopener"
-          class="inline-flex items-center gap-2 rounded-xl bg-ink text-white px-4 py-2.5 text-xs font-semibold transition-all hover:opacity-90 active:scale-95"
-        >
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          Descargar app
-        </a>
+      <div class="bottom-grid">
+        <section class="dashboard-card"><div class="card-heading"><h2>Actividad reciente</h2><a href="/salud">Ver todo ›</a></div>{recentActivity.length ? recentActivity.map(record => <a href={record.href} class="activity-row"><span class:list={['category-icon', record.tone]}><Icon name={record.icon} class="h-5 w-5" /></span><div><h3>{record.title}</h3><p>{record.subtitle}</p></div><time>{formatDate(record.date)}</time><span aria-hidden="true">›</span></a>) : <div class="dashboard-empty"><Icon name="documento" class="h-8 w-8" /><p>Su historia empieza contigo.</p><a href="/salud/vacunas?new=1">Agregar su primer registro →</a></div>}</section>
+        <section class="travel-feature"><div><h2>Planea y disfruta<br />cada aventura,<br />juntos.</h2><p>Su salud y documentos,<br />siempre a mano.</p><a href="/viajes">Explorar viajes <span aria-hidden="true">→</span></a></div><img src="/welcome-pets.jpg" alt="" width="1536" height="1024" loading="lazy" /></section>
       </div>
+      {checklistItems.length > 0 && <details class="dashboard-card first-steps"><summary>Primeros pasos con {pet.name} <span>{checklistItems.length} por completar</span></summary><div>{checklistItems.map(item => <a href={item.href}>{item.label} <span>›</span></a>)}</div></details>}
+      {topActions.length > 0 && <details class="dashboard-card first-steps"><summary>Cuidados por revisar <span>{topActions.length}</span></summary><div>{topActions.map(item => <a href={item.href}>{item.label} <span>›</span></a>)}</div></details>}
+      {dailyFact && <p class="daily-fact">{dailyFact.fact}</p>}
     </div>
-  )}
-
-  {/* ── QUICK START CHECKLIST (new users) ── */}
-  {checklistItems.length > 0 && (
-    <div class="mb-5 animate-fade-up" id="onboarding-checklist">
-      <div class="rounded-t-2xl border border-b-0 border-accent/30 bg-accent/10 px-5 py-4">
-        <div class="flex items-center gap-3">
-          <span class="text-accent"><Icon name="cohete" class="h-5 w-5" /></span>
-          <div>
-            <p class="text-sm font-bold text-accent-dark">Primeros pasos con {pet.name}</p>
-            <p class="text-xs text-muted mt-0.5">{checklistItems.length} {checklistItems.length === 1 ? 'paso pendiente' : 'pasos pendientes'}</p>
-          </div>
-        </div>
-      </div>
-      {isNewlyOnboarded && age && !age.includes('mes') && !age.startsWith('0') && (
-        <div class="border-x border-accent/30 bg-amber/5 px-5 py-3">
-          <div class="flex items-start gap-2">
-            <span class="shrink-0 mt-0.5 text-amber-600"><Icon name="idea" class="h-4 w-4" /></span>
-            <p class="text-xs text-amber-dark leading-relaxed">
-              No importa si {pet.name} es mayor — Vivra te ayuda a llevar su historial desde hoy.
-            </p>
-          </div>
-        </div>
-      )}
-      <div class="rounded-b-2xl border border-t-0 border-accent/30 bg-white divide-y divide-card-border">
-        {checklistItems.map(item => (
-          <a href={item.href} class="flex items-center gap-3 px-5 py-3.5 hover:bg-canvas transition-colors active:scale-95">
-            <div class:list={['flex h-8 w-8 shrink-0 items-center justify-center rounded-full', item.iconColor]}>
-              <svg class:list={['h-4 w-4', item.iconStroke]} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" set:html={item.icon} />
-            </div>
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-ink">{item.label}</p>
-              <p class="text-xs text-muted">{item.sub}</p>
-            </div>
-            <svg class="h-4 w-4 text-muted/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-          </a>
-        ))}
-      </div>
-      <button type="button" id="btn-dismiss-checklist" class="mt-2 w-full text-xs text-muted hover:text-ink transition-colors py-1">
-        Ya lo sé, no mostrar de nuevo →
-      </button>
-    </div>
-  )}
-
-  <script is:inline>
-    (function() {
-      if (localStorage.getItem('vivra_checklist_hidden') === '1') {
-        var el = document.getElementById('onboarding-checklist');
-        if (el) el.style.display = 'none';
-      }
-    })();
-  </script>
-  <script is:inline>
-    document.addEventListener('astro:page-load', function() {
-      var btn = document.getElementById('btn-dismiss-checklist');
-      if (btn) {
-        btn.addEventListener('click', function() {
-          localStorage.setItem('vivra_checklist_hidden', '1');
-          var el = document.getElementById('onboarding-checklist');
-          if (el) el.style.display = 'none';
-        });
-      }
-    });
-  </script>
-
-  {/* ── CONFETTI ── */}
-  {isNewlyOnboarded && (
-    <script is:inline>
-      (function() {
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
-        script.onload = function() {
-          setTimeout(function() {
-            window.confetti({ particleCount: 140, spread: 90, origin: { y: 0.55 },
-              colors: ['#F97316','#EA580C','#ffffff','#F59E0B','#FFF7ED'] });
-          }, 300);
-        };
-        document.head.appendChild(script);
-      })();
-    </script>
-  )}
-
-  {/* ── PREMIUM TRIAL BANNER ── */}
-  {premium.isPremium && premium.isTrial && premium.daysLeft <= 1 && (
-    <div class="mb-5 rounded-2xl border border-red-200 overflow-hidden animate-fade-up" id="premium-trial-banner">
-      <div class="bg-linear-to-r from-red-50 to-amber-50 px-5 py-4">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
-            <svg class="h-5 w-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-bold text-red-700">Tu Premium gratis vence {premium.daysLeft === 0 ? 'hoy' : 'manana'}</p>
-            <p class="text-xs text-muted mt-0.5">Sin Premium perderás el co-dueño y el desglose de gastos por categoría.</p>
-          </div>
-          <a href="/premium" class="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-dark transition-colors">
-            Mantener Premium
-          </a>
-        </div>
-      </div>
-    </div>
-  )}
-  {premium.isPremium && premium.isTrial && premium.daysLeft > 1 && (
-    <div class="mb-5 rounded-2xl border border-accent/25 overflow-hidden animate-fade-up" id="premium-trial-banner">
-      <div class="bg-linear-to-r from-accent/10 to-amber/10 px-5 py-4">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15">
-            <svg class="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-bold text-accent-dark">¡Tienes Premium gratis por {premium.daysLeft} dias!</p>
-            <p class="text-xs text-muted mt-0.5">Gracias a tu referido. Agrega un co-dueño y ve el desglose de tus gastos.</p>
-          </div>
-          <a href="/premium" class="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-dark transition-colors">
-            Ver beneficios
-          </a>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* ── PREMIUM UPSELL (free users): descartable, se recuerda en localStorage ── */}
-  {!premium.isPremium && (
-    <>
-    <div class="mb-5 rounded-2xl border border-accent/25 overflow-hidden animate-fade-up hidden" id="premium-upsell-banner">
-      <div class="bg-linear-to-r from-accent/10 to-amber/10 px-5 py-4">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent/15">
-            <svg class="h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-bold text-accent-dark">Comparte con tu pareja y controla tus gastos</p>
-            <p class="text-xs text-muted mt-0.5">Premium: co-dueño + desglose de gastos por categoría. Desde $2.99/mes.</p>
-          </div>
-          <a href="/premium" class="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-dark transition-colors">
-            Ver Premium
-          </a>
-          <button type="button" id="premium-upsell-dismiss" aria-label="Cerrar" class="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-black/5 hover:text-ink transition-colors">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <script is:inline data-astro-rerun>
-      (function () {
-        var banner = document.getElementById('premium-upsell-banner');
-        if (!banner) return;
-        var KEY = 'vivra-premium-upsell-dismissed';
-        if (!localStorage.getItem(KEY)) banner.classList.remove('hidden');
-        var btn = document.getElementById('premium-upsell-dismiss');
-        if (btn && !btn.dataset.wired) {
-          btn.dataset.wired = '1';
-          btn.addEventListener('click', function () {
-            localStorage.setItem(KEY, '1');
-            banner.remove();
-          });
-        }
-      })();
-    </script>
-    </>
-  )}
-
-  {/* ── APP BANNER (post-onboarding): informar que existe la app iOS ── */}
-  {isNewlyOnboarded && (
-    <div class="mb-5 rounded-2xl border border-card-border bg-white overflow-hidden animate-fade-up" id="app-banner">
-      <div class="px-5 py-4">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ink">
-            <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          </div>
-          <div class="flex-1">
-            <p class="text-sm font-bold text-ink">Vivra también está en tu iPhone</p>
-            <p class="text-xs text-muted mt-0.5">Misma cuenta, recordatorios push de vacunas, comida y más — siempre a la mano.</p>
-          </div>
-          <a href="https://apps.apple.com/app/vivra/id6761087142" target="_blank" rel="noopener" data-track="download_app_dashboard" class="shrink-0 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink/80 transition-colors">
-            Descargar
-          </a>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* ── BIRTHDAY BANNER ── */}
-  {birthday && (
-    <div class="mb-5 rounded-2xl border border-amber/30 bg-amber/10 px-4 py-3 text-center animate-fade-up">
-      <p class="flex items-center justify-center gap-2 text-sm font-semibold text-amber-dark"><Icon name="cumpleanos" class="h-4 w-4" />¡Hoy es el cumpleaños de {pet.name}!</p>
-    </div>
-  )}
-
-  {/* ── HERO: Pet + Score ── */}
-  <div class="mb-6 animate-fade-up">
-    <div class="relative rounded-3xl overflow-hidden" style="background-color: var(--color-accent);">
-      <div class="absolute inset-0 bg-linear-to-br from-white/5 to-transparent pointer-events-none"></div>
-      <div class="relative flex items-center gap-4 p-5">
-        <a href="/perfil" class="relative shrink-0 h-16 w-16">
-          <img
-            src={photoUrl}
-            alt={pet.name}
-            class:list={[
-              'h-16 w-16 rounded-2xl object-cover',
-              birthday ? 'ring-2 ring-amber ring-offset-1 ring-offset-transparent' : 'ring-1 ring-white/10',
-            ]}
-          />
-          {birthday && (
-            <span class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-amber-400 text-white animate-bounce">
-              <Icon name="cumpleanos" class="h-3 w-3" />
-            </span>
-          )}
-        </a>
-        <div class="flex-1 min-w-0">
-          <h1 class="text-xl font-bold text-white tracking-tight truncate">{pet.name}</h1>
-          <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-            {pet.breed && <span class="text-xs text-white/60">{pet.breed}</span>}
-            {age && <Fragment><span class="text-white/30 text-xs">·</span><span class="text-xs text-white/60">{age}</span></Fragment>}
-          </div>
-        </div>
-        {/* Inline Score circle */}
-        <a href="/salud" class="shrink-0">
-          {dashScore.showScore ? (
-            <div class="relative h-14 w-14" aria-label={`Score: ${dashScore.total}`}>
-              <svg viewBox="0 0 36 36" class="h-14 w-14 -rotate-90" aria-hidden="true">
-                <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="3"/>
-                <circle
-                  cx="18" cy="18" r="15.5"
-                  fill="none"
-                  stroke="white"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                  stroke-dasharray={`${(dashScore.total / 100) * 97.4} 97.4`}
-                />
-              </svg>
-              <div class="absolute inset-0 flex flex-col items-center justify-center">
-                <span class="text-lg font-black text-white leading-none">{dashScore.total}</span>
-                <span class="text-[7px] font-semibold text-white/60 uppercase tracking-widest">Score</span>
-              </div>
-            </div>
-          ) : (
-            <div class="h-14 w-14 rounded-full flex items-center justify-center border-2 border-dashed border-white/20">
-              <span class="text-accent"><Icon name="mascota" class="h-5 w-5" /></span>
-            </div>
-          )}
-        </a>
-      </div>
-      {/* Score headline */}
-      <div class="relative px-5 pb-4 flex items-center justify-between">
-        <p class="text-xs font-medium text-white/60">{dashScore.headline}</p>
-        {latestWeight && (
-          <span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/70">
-            {latestWeight} kg
-            {weightDiff !== null && (
-              <span class={weightDiff > 0 ? 'text-amber-200' : 'text-green-200'}>
-                {weightDiff > 0 ? '+' : ''}{weightDiff}
-              </span>
-            )}
-          </span>
-        )}
-      </div>
-    </div>
-  </div>
-
-  {/* ── QUE HACER HOY ── */}
-  {topActions.length > 0 && (
-    <div class="mb-6 animate-fade-up animate-fade-up-delay-1">
-      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Que hacer hoy</p>
-      <div class="rounded-2xl bg-card border border-card-border overflow-hidden divide-y divide-card-border">
-        {topActions.map(action => (
-          <a href={action.href} class="flex items-center gap-3 px-4 py-3.5 hover:bg-canvas transition-colors active:scale-95">
-            <div class:list={['flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', action.iconBg]}>
-              <svg class:list={['h-4 w-4', action.iconColor]} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" set:html={action.icon} />
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class:list={['text-sm font-semibold truncate', action.urgent ? 'text-red-600' : 'text-ink']}>{action.label}</p>
-              <p class="text-[11px] text-muted truncate">{action.detail}</p>
-            </div>
-            <svg class="h-4 w-4 text-muted/30 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-          </a>
-        ))}
-      </div>
-    </div>
-  )}
-
-  {/* ── SCORE BREAKDOWN (pillar bars) ── */}
-  <a href="/salud" class="block mb-6 animate-fade-up animate-fade-up-delay-1">
-    <div class="rounded-2xl border border-card-border bg-card p-4 transition-all hover:shadow-sm active:scale-95">
-      <div class="flex items-center justify-between mb-3">
-        <p class="text-xs font-semibold text-ink">Score de Bienestar</p>
-        <svg class="h-4 w-4 text-muted/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-      </div>
-      <div class="flex flex-col gap-2">
-        {dashScore.pillars.map(pillar => (
-          <div class="flex items-center gap-2">
-            <p class="text-[10px] shrink-0 w-14 truncate text-muted">
-              {SHORT_PILLAR[pillar.name] ?? pillar.name}
-            </p>
-            <div class="flex-1 rounded-full h-1.5 overflow-hidden bg-canvas">
-              <div
-                class="h-1.5 rounded-full"
-                style={`width: ${dashScore.showScore ? pillar.pct : 0}%; background-color: var(--color-accent); transition: width 0.6s ease;`}
-              />
-            </div>
-            <p class={`text-[10px] w-4 text-right font-semibold shrink-0 ${dashScore.showScore ? 'text-ink' : 'text-muted/30'}`}>
-              {pillar.score}
-            </p>
-          </div>
-        ))}
-      </div>
-      <p class="text-[11px] font-medium mt-3" style={`color: ${dashScore.color};`}>
-        {dashScore.headline} →
-      </p>
-    </div>
-  </a>
-
-  {/* ── VACUNAS: acceso prioritario ── */}
-  <a
-    href="/salud/vacunas"
-    class:list={[
-      'mb-6 flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all hover:shadow-sm active:scale-[0.98] animate-fade-up animate-fade-up-delay-2',
-      vaccineSummary.state === 'overdue'
-        ? 'border-red-200 bg-red-50'
-        : vaccineSummary.state === 'scheduled'
-          ? 'border-amber-200 bg-amber-50'
-          : 'border-emerald-200 bg-emerald-50',
-    ]}
-  >
-    <div class:list={[
-      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-      vaccineSummary.state === 'overdue' ? 'bg-red-100 text-red-500' : 'bg-emerald-100 text-emerald-600',
-    ]}>
-      <Icon name="vacuna" class="h-5 w-5" />
-    </div>
-    <div class="min-w-0 flex-1">
-      <p class:list={['text-sm font-semibold truncate', vaccineSummary.state === 'overdue' ? 'text-red-700' : 'text-ink']}>
-        {vaccineSummary.title}
-      </p>
-      <p class="mt-0.5 text-xs text-muted truncate">{vaccineSummary.detail}</p>
-    </div>
-    <svg class:list={['h-4 w-4 shrink-0', vaccineSummary.state === 'overdue' ? 'text-red-400' : 'text-emerald-600']} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-  </a>
-
-  {/* ── RESUMEN RAPIDO: Peso + Comida ── */}
-  <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
-    <a href="/salud/peso" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
-      <p class="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Peso</p>
-      {latestWeight ? (
-        <div class="flex items-baseline gap-1.5">
-          <span class="text-2xl font-black text-ink leading-none">{latestWeight}</span>
-          <span class="text-xs text-muted">kg</span>
-        </div>
-      ) : (
-        <p class="text-sm font-semibold text-muted">—</p>
-      )}
-      {weightDiff !== null && (
-        <p class={`text-xs mt-1 ${weightDiff > 0 ? 'text-amber-600' : 'text-accent'}`}>
-          {weightDiff > 0 ? '+' : ''}{weightDiff} kg
-        </p>
-      )}
-    </a>
-    <a href="/alimentacion" class="rounded-2xl border border-card-border bg-card px-4 py-4 active:scale-95 transition-transform hover:shadow-sm">
-      <p class="text-[10px] font-semibold text-muted uppercase tracking-widest mb-1">Comida</p>
-      {foodStats.latestFood ? (
-        <>
-          <p class="text-sm font-bold text-ink truncate">{foodStats.latestFood.brand}</p>
-          <div class="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
-            {foodStats.avgPricePerDay !== null && (
-              <p class="text-[11px] text-muted">
-                <span class="font-semibold text-ink">${formatCurrency(foodStats.avgPricePerDay)}</span>/día
-              </p>
-            )}
-            {foodStats.avgDaysPerBag !== null && (
-              <p class="text-[11px] text-muted">
-                <span class="font-semibold text-ink">{foodStats.avgDaysPerBag}d</span>/bolsa
-              </p>
-            )}
-            {foodStats.avgDailyGrams !== null && (
-              <p class="text-[11px] text-muted">
-                <span class="font-semibold text-ink">{foodStats.avgDailyGrams}g</span>/día
-              </p>
-            )}
-            <p class="text-[11px] text-muted">
-              <span class="font-semibold text-ink">{foodStats.totalBags}</span> {foodStats.totalBags === 1 ? 'bolsa' : 'bolsas'}
-            </p>
-          </div>
-        </>
-      ) : (
-        <p class="text-sm text-muted">—</p>
-      )}
-    </a>
-  </div>
-
-  {/* ── PREVENTIVOS: Antipulgas + Desparasitante ── */}
-  <div class="grid grid-cols-2 gap-3 mb-6 animate-fade-up animate-fade-up-delay-2">
-    <a href="/salud/preventivos" class:list={[
-      'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
-      !antipulgasInfo.hasRecord || (antipulgasInfo.hasDue && antipulgasInfo.overdue)
-        ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
-        : antipulgasInfo.hasDue && antipulgasInfo.daysLeft <= 5
-          ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
-          : 'border border-card-border bg-card'
-    ]}>
-      <div class="flex items-center gap-2 mb-2">
-        <span class="text-accent-dark"><Icon name="preventivo" class="h-4 w-4" /></span>
-        <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Antipulgas</p>
-      </div>
-      {!antipulgasInfo.hasRecord ? (
-        <>
-          <p class="text-base font-black text-red-600">Sin registro</p>
-          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
-        </>
-      ) : !antipulgasInfo.hasDue ? (
-        <>
-          <p class="text-base font-black text-ink">Registrado</p>
-          <p class="text-[11px] text-muted mt-1">Sin próxima fecha</p>
-        </>
-      ) : (
-        <>
-          <div class="flex items-baseline gap-1.5">
-            <span class:list={[
-              'text-2xl font-black leading-none',
-              antipulgasInfo.overdue ? 'text-red-600' : antipulgasInfo.daysLeft <= 5 ? 'text-amber-600' : 'text-ink'
-            ]}>
-              {antipulgasInfo.overdue ? `-${Math.abs(antipulgasInfo.daysLeft)}d` : `${antipulgasInfo.daysLeft}d`}
-            </span>
-            {!antipulgasInfo.overdue && <span class="text-xs text-muted">restantes</span>}
-          </div>
-          <p class:list={[
-            'text-[11px] mt-1',
-            antipulgasInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
-          ]}>
-            {antipulgasInfo.overdue ? 'Vencido — aplicar ya' : 'Próxima aplicación registrada'}
-          </p>
-        </>
-      )}
-    </a>
-    <a href="/salud/preventivos" class:list={[
-      'rounded-2xl px-4 py-4 active:scale-95 transition-transform hover:shadow-sm',
-      !desparasitanteInfo.hasRecord || (desparasitanteInfo.hasDue && desparasitanteInfo.overdue)
-        ? 'border-2 border-red-300 bg-red-50 ring-2 ring-red-200/50'
-        : desparasitanteInfo.hasDue && desparasitanteInfo.daysLeft <= 5
-          ? 'border-2 border-amber-300 bg-amber-50 ring-2 ring-amber-200/50'
-          : 'border border-card-border bg-card'
-    ]}>
-      <div class="flex items-center gap-2 mb-2">
-        <span class="text-blue-500"><Icon name="pastilla" class="h-4 w-4" /></span>
-        <p class="text-[10px] font-semibold text-muted uppercase tracking-widest">Desparasitante</p>
-      </div>
-      {!desparasitanteInfo.hasRecord ? (
-        <>
-          <p class="text-base font-black text-red-600">Sin registro</p>
-          <p class="text-[11px] text-red-600/80 font-semibold mt-1">Registrar primera dosis</p>
-        </>
-      ) : !desparasitanteInfo.hasDue ? (
-        <>
-          <p class="text-base font-black text-ink">Registrado</p>
-          <p class="text-[11px] text-muted mt-1">Sin próxima fecha</p>
-        </>
-      ) : (
-        <>
-          <div class="flex items-baseline gap-1.5">
-            <span class:list={[
-              'text-2xl font-black leading-none',
-              desparasitanteInfo.overdue ? 'text-red-600' : desparasitanteInfo.daysLeft <= 5 ? 'text-amber-600' : 'text-ink'
-            ]}>
-              {desparasitanteInfo.overdue ? `-${Math.abs(desparasitanteInfo.daysLeft)}d` : `${desparasitanteInfo.daysLeft}d`}
-            </span>
-            {!desparasitanteInfo.overdue && <span class="text-xs text-muted">restantes</span>}
-          </div>
-          <p class:list={[
-            'text-[11px] mt-1',
-            desparasitanteInfo.overdue ? 'text-red-600 font-bold' : 'text-muted'
-          ]}>
-            {desparasitanteInfo.overdue ? 'Vencido — aplicar ya' : 'Próxima aplicación registrada'}
-          </p>
-        </>
-      )}
-    </a>
-  </div>
-
-  {/* ── BREED FACT ── */}
-  {dailyFact && (
-    <div class="mb-5 animate-fade-up animate-fade-up-delay-2">
-      <div class="flex items-start gap-3 rounded-2xl border border-accent/15 bg-accent/5 px-4 py-3">
-        <svg class="h-5 w-5 shrink-0 mt-0.5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="4" r="2"/><path d="M6 9a4 4 0 0 1 4-1h2a4 4 0 0 1 4 1l1 5-3-1v5H8v-5l-3 1z"/></svg>
-        <div>
-          <p class="text-xs font-bold text-accent-dark mb-0.5">¿Sabías que...?</p>
-          <p class="text-xs text-ink/70 leading-relaxed">{dailyFact.fact}</p>
-        </div>
-      </div>
-    </div>
-  )}
-
+    <aside class="dashboard-aside">
+      <section class="dashboard-card"><div class="card-heading"><h2>Lo próximo</h2><a href="/calendario">Ver todo ›</a></div>{upcoming.length ? upcoming.map(event => <a href={event.href} class="upcoming-row"><span class:list={['category-icon', event.tone]}><Icon name={event.icon} class="h-5 w-5" /></span><div><h3>{event.title}</h3><p>{pet.name} · {formatDate(event.date)}</p></div><span aria-hidden="true">›</span></a>) : <div class="dashboard-empty"><Icon name="calendario" class="h-7 w-7"/><p>No hay próximas fechas registradas.</p><a href="/calendario">Abrir calendario →</a></div>}</section>
+      <section class="dashboard-card"><div class="card-heading"><h2>Acciones rápidas</h2></div><div class="quick-grid">{quickActions.map(action => <a href={action.href} class={action.tone}><Icon name={action.icon} class="h-7 w-7"/><span>{action.label}</span></a>)}</div></section>
+      <section class="dashboard-card passport-summary"><div class="card-heading"><h2>Pasaporte de viaje</h2><a href="/pasaporte">Ver ›</a></div><PassportCard pet={pet} compact /><a href="/pasaporte" class="document-link"><Icon name="documento" class="h-5 w-5"/><span>Documentos de {pet.name}</span><span aria-hidden="true">›</span></a></section>
+      {foodStats.latestFood && <section class="dashboard-card"><div class="card-heading"><h2>Alimentación</h2><a href="/alimentacion">Ver ›</a></div><p class="nutrition-brand">{foodStats.latestFood.brand}</p><p class="daily-fact">Lleva sus compras, porciones y cambios de alimento.</p></section>}
+      {premium.isTrial && <a href="/premium" class="dashboard-notice">Estás probando Vivra Premium. Ver mi plan →</a>}
+    </aside>
+  </div>}
 </MainLayout>
+
+<style>
+  .dashboard-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:26px; }
+  .dashboard-heading h1 { font-size:clamp(26px,2.5vw,36px); font-weight:600; letter-spacing:-1.4px; line-height:1.2; }
+  .sun { font-size:31px; font-weight:400; color:#D5A14D; margin-left:8px; }
+  .dashboard-heading p { margin-top:7px; color:#6E7872; font-size:14px; line-height:1.5; }
+  .dashboard-heading time { font-size:11px; color:#6E7872; white-space:nowrap; padding-top:10px; }
+  .dashboard-columns { display:grid; grid-template-columns:minmax(0,2.55fr) minmax(275px,1fr); gap:18px; align-items:start; }
+  .dashboard-main,.dashboard-aside { min-width:0; display:grid; gap:18px; }
+  .pets-grid,.metrics-grid,.bottom-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .dashboard-card { min-width:0; background:#FFFDFABF; border:1px solid #EBE7DF; border-radius:18px; padding:20px; box-shadow:0 4px 20px #244B3603; }
+  .card-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:20px; }
+  h2 { font-size:15px; font-weight:600; letter-spacing:-.3px; }
+  .card-heading a { font-size:10px; white-space:nowrap; color:#174C3C; padding-block:4px; }
+  .pet-select { display:flex; align-items:center; gap:16px; width:100%; text-align:left; cursor:pointer; }
+  .pet-select img { width:76px; height:76px; object-fit:cover; border-radius:50%; background:#E5DFD4; }
+  .pet-select h2 { font-size:20px; }
+  .pet-select h2 span { font-weight:400; margin-left:6px; }
+  .pet-select p { margin-top:6px; font-size:11px; color:#6E7872; line-height:1.5; }
+  .selected-pet { border-color:#D9E1D5; }
+  .pet-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:20px; }
+  .pet-metrics>span { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:5px; padding:11px 4px; border-radius:9px; background:#EBF1E7; color:#174C3C; font-size:10px; }
+  .pet-metrics>span:nth-child(3) { background:#F6EDDC; color:#84632F; }
+  .pet-metrics strong { font-weight:600; }.pet-metrics small { width:100%; text-align:center; font-size:9px; color:#61746B; }
+  .add-pet-card { display:flex; flex-direction:column; justify-content:center; align-items:flex-start; background:#F1F1E8; gap:10px; }
+  .add-pet-card>span { font-size:24px; color:#174C3C; }.add-pet-card p { color:#6E7872; font-size:12px; }.add-pet-card b { font-size:12px; color:#174C3C; font-weight:500; }
+  .wellbeing-body { display:flex; align-items:center; gap:18px; }.score-ring { position:relative; width:120px; height:120px; flex-shrink:0; }.score-ring>div { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; }.score-ring strong { font-size:40px; font-weight:600; letter-spacing:-2px; }.score-ring small { font-size:9px; color:#61746B; }
+  .pillar-list { flex:1; min-width:0; }.pillar-list>div { display:flex; gap:8px; align-items:center; padding:10px 0; font-size:10px; }.pillar-list span { width:54px; }.pillar-list i { height:5px; flex:1; border-radius:10px; background:#E8E8DF; overflow:hidden; }.pillar-list b { display:block; height:100%; border-radius:10px; }.pillar-list small { color:#6E7872; min-width:16px; text-align:right; }.wellbeing-caption { font-size:10px; color:#6E7872; margin-top:12px; line-height:1.5; }
+  .weight-summary { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:13px; }.weight-summary strong { font-size:23px; font-weight:600; }.weight-summary small { font-size:12px; font-weight:400; }.weight-summary span { font-size:9px; color:#6E7872; }
+  .category-icon { width:36px; height:36px; display:grid; place-items:center; border-radius:10px; flex-shrink:0; }.sage { background:#E7EFE5; color:#28714D; }.coral { background:#FAE8E3; color:#C76E5D; }.sand { background:#F6EAD8; color:#AE7939; }.sky { background:#E5EDF0; color:#557F96; }.lavender { background:#ECE8F1; color:#7B789D; }
+  .activity-row,.upcoming-row { display:flex; align-items:center; gap:11px; padding:13px 0; border-bottom:1px solid #EDE9E2; }.activity-row:last-child,.upcoming-row:last-child { border:0; padding-bottom:0; }.activity-row>div,.upcoming-row>div { flex:1; min-width:0; }h3 { font-size:11px; font-weight:500; line-height:1.5; }.activity-row p,.upcoming-row p { color:#6E7872; font-size:10px; margin-top:3px; line-height:1.5; }.activity-row time { font-size:9px; white-space:nowrap; color:#6E7872; }.activity-row>span:last-child,.upcoming-row>span:last-child { color:#7F8A82; }
+  .quick-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }.quick-grid a { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; padding:14px 4px; border-radius:11px; }.quick-grid span { font-size:10px; text-align:center; color:#14231F; }.quick-grid a:hover { filter:brightness(.97); }
+  .travel-feature { position:relative; isolation:isolate; overflow:hidden; border-radius:18px; min-height:250px; background:#E3E9DE; padding:28px; }.travel-feature>div { position:relative; z-index:1; }.travel-feature h2 { font-size:23px; line-height:1.2; color:#174C3C; letter-spacing:-.7px; }.travel-feature p { font-size:11px; line-height:1.6; margin-top:14px; }.travel-feature a { display:inline-flex; gap:12px; background:#174C3C; color:white; border-radius:30px; padding:11px 15px; font-size:11px; margin-top:18px; }.travel-feature img { position:absolute; right:-74px; bottom:0; width:280px; height:220px; object-fit:cover; object-position:62%; mix-blend-mode:multiply; mask-image:linear-gradient(to bottom,transparent,#000 22%); opacity:.9; z-index:0; }
+  .document-link { display:flex; align-items:center; gap:10px; margin-top:15px; font-size:11px; }.document-link>span:first-of-type { flex:1; }.dashboard-empty { min-height:130px; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:13px; color:#738271; font-size:12px; text-align:center; }.dashboard-empty a { color:#174C3C; font-size:11px; }
+  .first-steps { padding:16px 20px; }.first-steps summary { cursor:pointer; font-size:13px; font-weight:500; }.first-steps summary>span { float:right; color:#6E7872; font-size:11px; }.first-steps>div { margin-top:14px; }.first-steps a { display:flex; justify-content:space-between; padding:10px 0; border-top:1px solid #E8E4DC; font-size:12px; }.daily-fact { font-size:11px; color:#6E7872; line-height:1.6; }.nutrition-brand { font-size:16px; font-weight:500; margin-bottom:8px; }.dashboard-notice { padding:18px; border:1px solid #D5DFCC; background:#E5EDE1; border-radius:16px; margin-bottom:18px; font-size:13px; line-height:1.6; }
+  @media(max-width:1270px) { .dashboard-columns { grid-template-columns:minmax(0,1fr) 270px; }.pets-grid,.metrics-grid,.bottom-grid { grid-template-columns:1fr; }.travel-feature { min-height:240px; }.travel-feature img { right:0; } }
+  @media(max-width:760px) { .dashboard-columns { grid-template-columns:1fr; }.dashboard-heading time { display:none; }.dashboard-heading h1 { font-size:29px; }.dashboard-heading p { font-size:12px; }.dashboard-aside { grid-template-columns:1fr; }.dashboard-card { padding:20px; }.first-steps summary>span { float:none; display:block; margin-top:6px; } }
+</style>

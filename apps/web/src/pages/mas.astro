@@ -1,0 +1,17 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import Icon from '../components/ui/Icon.astro';
+import '../components/health/health.css';
+const items = [
+  { title: 'Mi mascota', text: 'Identidad, foto y acceso compartido', href: '/perfil', icon: 'mascota' },
+  { title: 'Gastos', text: 'Resumen de los costos registrados en cada sección', href: '/perfil?view=gastos', icon: 'gastos' },
+  { title: 'Mi cuenta', text: 'Datos personales y acceso a Vivra', href: '/perfil?view=cuenta', icon: 'codueno' },
+  { title: 'Premium', text: 'Tu plan y suscripción', href: '/premium', icon: 'pago' },
+  { title: 'Invitar amigos', text: 'Referidos y recompensas', href: '/referidos', icon: 'regalo' },
+  { title: 'Ayuda y sugerencias', text: 'Preguntas frecuentes y soporte', href: '/faq', icon: 'idea' },
+];
+---
+<MainLayout title="Más">
+  <header class="health-heading"><div><h1>Más</h1><p>Tu mascota, tu cuenta y las herramientas de Vivra.</p></div></header>
+  <div class="health-subpage-columns">{items.map(item => <a href={item.href} class="health-panel flex gap-4 items-center hover:border-accent transition-colors"><span class="health-icon"><Icon name={item.icon} /></span><div><h2>{item.title}</h2><p class="text-sm text-muted mt-1">{item.text}</p></div><span class="ml-auto" aria-hidden="true">›</span></a>)}</div>
+</MainLayout>

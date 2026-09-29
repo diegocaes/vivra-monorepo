@@ -153,7 +153,7 @@ export default function GroomingScreen() {
         <TouchableOpacity
           testID="grooming-back"
           accessibilityRole="button"
-          accessibilityLabel={from === 'inicio' ? 'Volver a Inicio' : 'Volver a Salud'}
+          accessibilityLabel={from === 'inicio' ? 'Volver a Inicio' : 'Volver a Cuidado'}
           onPress={handleBack}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >

@@ -1,0 +1,44 @@
+---
+import type { Pet } from '@vivra/shared/lib/database';
+import { formatDate } from '@vivra/shared';
+interface Props { pet: Pick<Pet, 'name' | 'photo_url' | 'species' | 'breed' | 'birth_date' | 'chip_id'>; compact?: boolean; }
+const { pet, compact = false } = Astro.props;
+---
+<article class:list={['pet-passport', { compact }]}>
+  <svg class="passport-watermark" viewBox="0 0 240 140" fill="currentColor" aria-hidden="true"><path d="m13 30 17-17 21 2 12 9 20 1 9 15-12 12-15-2-8 17-13-3-5-14-18-5Zm58 42 18 4 9 23-9 27-11 9-7-29-12-20Zm14-65 24-3 9 11-15 11-12-5Zm41 26 12-16 16 4 8-10 19 8 20-3 29 19-7 17-32-4-17 13-10-9-12 6-16-10-12 5-8-11Zm5 24 26 1 12 19-9 21-18 19-11-21-8-26Zm69 40 21-6 13 16-7 12-27-4-6-9Z"/></svg>
+  <div class="passport-brand"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="4" ry="10"/><path d="M2 12h20M4 6.5h16M4 17.5h16"/></svg><img class="passport-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" /></div>
+  <h3>Pasaporte de mascota</h3>
+  <div class="passport-identity">
+    <img src={pet.photo_url || '/icons/default-pet.svg'} alt={pet.name} width="116" height="146" />
+    <div class="passport-fields"><h4>{pet.name}</h4><dl>
+      <div><dt>Especie</dt><dd>{pet.species === 'cat' ? 'Gato' : 'Perro'}</dd></div>
+      <div><dt>Raza</dt><dd>{pet.breed || 'Sin registrar'}</dd></div>
+      <div><dt>Nacimiento</dt><dd>{pet.birth_date ? formatDate(pet.birth_date) : 'Sin registrar'}</dd></div>
+      <div><dt>Microchip</dt><dd>{pet.chip_id || 'Sin registrar'}</dd></div>
+    </dl></div>
+  </div>
+</article>
+<style>
+  .pet-passport { position: relative; overflow: hidden; isolation: isolate; border: 1px solid #E1E5E1; border-radius: 20px; background: #F2F5F4; padding: 24px; color: #14231F; }
+  .passport-watermark { position: absolute; width: 230px; top: 18px; right: -16px; color: #E0E9E9; z-index: -1; }
+  .passport-brand { display: flex; align-items: center; justify-content: space-between; color: #174C3C; }
+  .passport-brand .passport-logo { width: 96px; height: auto; border-radius: 0; background: transparent; object-fit: contain; }
+  h3 { font-size: 22px; font-weight: 600; margin: 18px 0 24px; }
+  .passport-identity { display: flex; gap: 20px; }
+  img { width: 116px; height: 146px; object-fit: cover; border-radius: 13px; background: #E5DFD4; }
+  .passport-fields { flex: 1; min-width: 0; }
+  h4 { font-size: 21px; font-weight: 600; margin: 3px 0 12px; }
+  dl { font-size: 11px; }
+  dl>div { display: grid; grid-template-columns: 80px 1fr; gap: 10px; margin-top: 7px; }
+  dt { color: #61746B; }
+  dd { overflow-wrap: anywhere; }
+  .compact { padding: 13px; border-radius: 12px; }
+  .compact .passport-brand { display: none; }
+  .compact h3 { margin: 0 0 14px; font-size: 14px; }
+  .compact img { width: 74px; height: 102px; border-radius: 10px; }
+  .compact .passport-identity { gap: 13px; }
+  .compact h4 { font-size: 15px; margin: 0 0 8px; }
+  .compact dl { font-size: 9px; }
+  .compact dl>div { grid-template-columns: 60px 1fr; gap: 5px; margin-top: 4px; }
+  @media(max-width:400px) { .pet-passport { padding: 17px; } img { width: 90px; } .passport-identity { gap: 13px; } dl>div { grid-template-columns: 65px 1fr; gap: 5px; } }
+</style>

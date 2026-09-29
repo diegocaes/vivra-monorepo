@@ -1,0 +1,60 @@
+appId: host.exp.Exponent
+name: Detalle de vacuna y pasaporte con registros existentes
+tags:
+  - smoke
+  - expo-go
+---
+# Supply a vaccine already present in the signed-in pet's record.
+# This flow opens edit/add forms and cancels; it never saves.
+- launchApp
+- openLink: "exp://localhost:8081"
+- extendedWaitUntil:
+    visible: "Tab Inicio"
+    timeout: 25000
+- tapOn: "Tab Inicio"
+- tapOn: "Vacunas"
+- assertVisible:
+    id: "screen-vaccines"
+- scrollUntilVisible:
+    element:
+      text: "Ver vacuna ${VACCINE_NAME}"
+    direction: DOWN
+- tapOn: "Ver vacuna ${VACCINE_NAME}"
+- extendedWaitUntil:
+    visible: "Dosis registrada"
+    timeout: 15000
+- assertVisible: "${VACCINE_NAME}"
+- assertVisible: "Próxima dosis"
+- takeScreenshot: vivra-vaccine-redesign
+- tapOn: "Editar aplicación"
+- assertVisible: "Guardar cambios"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Guardar cambios"
+- scrollUntilVisible:
+    element:
+      text: "Ver vacuna ${VACCINE_NAME}"
+    direction: UP
+- tapOn: "Ver vacuna ${VACCINE_NAME}"
+- extendedWaitUntil:
+    visible: "Agregar nuevo registro"
+    timeout: 15000
+- tapOn: "Agregar nuevo registro"
+- assertVisible: "Registrar vacuna"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Registrar aplicación"
+- tapOn: "Tab Viajes"
+- tapOn: "Abrir pasaporte"
+- assertVisible:
+    id: "passport-identity"
+- assertVisible: "Pasaporte de mascota"
+- takeScreenshot: vivra-passport-redesign
+- tapOn: "Volver"
+- tapOn: "Viajes y requisitos"
+- assertVisible: "Vuelos"
+- tapOn: "Tab Inicio"
+- assertVisible:
+    id: "screen-home"
+- assertVisible: "Alimentación"
+- takeScreenshot: vivra-home-redesign

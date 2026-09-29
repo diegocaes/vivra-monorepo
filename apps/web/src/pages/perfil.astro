@@ -16,6 +16,9 @@ const { supabase, user, activePetId } = Astro.locals;
 const isNew = Astro.url.searchParams.get('new') === '1';
 const savedParam = Astro.url.searchParams.get('saved');
 const errorParam = Astro.url.searchParams.get('error');
+const view = Astro.url.searchParams.get('view') === 'gastos' ? 'gastos'
+  : Astro.url.searchParams.get('view') === 'cuenta' || ['owner', 'password'].includes(savedParam ?? '') || errorParam?.startsWith('password_') ? 'cuenta' : 'pet';
+
 // Google/OAuth users don't have a password — check identities
 const hasPasswordLogin = user.identities?.some((i: { provider: string }) => i.provider === 'email') ?? true;
 
@@ -236,7 +239,7 @@ if (Astro.request.method === 'POST') {
   const breedOther = formData.get('breed_other') as string;
   const breed = breedSelect === 'Other' && breedOther ? breedOther : breedSelect || null;
 
-  const newWeight = parseNumericField(formData.get('weight_kg'), { min: 0.1, max: 150 });
+  const newWeight = pet ? pet.weight_kg : parseNumericField(formData.get('weight_kg'), { min: 0.1, max: 150 });
 
   const rawName = (formData.get('name') as string)?.trim().slice(0, 100);
   if (!rawName) {
@@ -257,7 +260,7 @@ if (Astro.request.method === 'POST') {
     breed: pet?.species === 'cat' ? null : (breed?.slice(0, 100) || null),
     birth_date: (formData.get('birth_date') as string) || null,
     gender: (formData.get('gender') as string) || null,
-    weight_kg: newWeight,
+    ...(!pet ? { weight_kg: newWeight } : {}),
     chip_id: ((formData.get('chip_id') as string)?.trim().slice(0, 50)) || null,
     color: ((formData.get('color') as string)?.trim().slice(0, 50)) || null,
     theme_color: themeColor,
@@ -415,7 +418,8 @@ try {
 const origin = new URL(Astro.request.url).origin;
 ---
 
-<MainLayout title={isNew ? 'Registra a tu mascota' : 'Perfil'}>
+<MainLayout title={isNew ? 'Registra a tu mascota' : view === 'pet' ? 'Mi mascota' : view === 'cuenta' ? 'Mi cuenta' : 'Gastos'}>
+  {!isNew && <a href="/mas" class="inline-flex mb-5 text-sm text-accent">← Volver a Más</a>}
   {errorParam === 'delete_failed' && (
     <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
       No se pudo completar la eliminación. Tu cuenta sigue activa y puedes intentarlo nuevamente.
@@ -460,9 +464,10 @@ const origin = new URL(Astro.request.url).origin;
       </div>
     </div>
   ) : (
-    <SectionHeader title="Perfil" subtitle="Datos de tu mascota" />
+    <SectionHeader title={view === "pet" ? "Mi mascota" : view === "cuenta" ? "Mi cuenta" : "Gastos"} subtitle={view === "pet" ? "Identidad y acceso compartido" : view === "cuenta" ? "Tus datos y acceso a Vivra" : "Los costos registrados en cada sección"} />
   )}
 
+  <section hidden={view !== "pet"}>
   <!-- Profile completion badge (top) -->
   {pet && (
     <div class="mb-4 animate-fade-up">
@@ -602,7 +607,7 @@ const origin = new URL(Astro.request.url).origin;
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Input label="Peso (kg)" name="weight_kg" type="number" step="0.1" value={pet?.weight_kg?.toString() || ''} placeholder="Ej: 12.5" />
+          {pet ? <div><p class="text-sm text-muted">Peso actual: {pet.weight_kg ? `${pet.weight_kg} kg` : "Sin registrar"}</p><a href="/salud/peso" class="text-sm text-accent">Ver y registrar peso en Salud →</a></div> : <Input label="Peso (kg)" name="weight_kg" type="number" step="0.1" placeholder="Ej: 12.5" />}
           <Input label="Nº Microchip" name="chip_id" value={pet?.chip_id || ''} placeholder="Ej: 123456789" />
         </div>
         <p class="text-xs text-gray-400 -mt-2">Al cambiar el peso se guarda automáticamente en el historial</p>
@@ -672,9 +677,11 @@ const origin = new URL(Astro.request.url).origin;
     </details>
   </Card>
 
+  </section>
+  <section hidden={view !== "cuenta"}>
   <!-- Owner Profile (collapsible) -->
   <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-    <details class="group" open={savedParam === 'owner'}>
+    <details class="group" open={view === 'cuenta'}>
       <summary class="flex items-center justify-between cursor-pointer list-none select-none">
         <div class="flex items-center gap-3">
           <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -724,6 +731,8 @@ const origin = new URL(Astro.request.url).origin;
     </details>
   </Card>
 
+  </section>
+  <section hidden={view !== "pet"}>
   <!-- Co-owner section (collapsible) -->
   {pet && isOwner && (
     <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
@@ -844,10 +853,12 @@ const origin = new URL(Astro.request.url).origin;
     </Card>
   )}
 
+  </section>
+  <section hidden={view !== "gastos"}>
   <!-- Spending summary (collapsible) -->
   {pet && (
     <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
-      <details class="group">
+      <details class="group" open>
         <summary class="flex items-center justify-between cursor-pointer list-none select-none">
           <div class="flex items-center gap-3">
             <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -932,6 +943,8 @@ const origin = new URL(Astro.request.url).origin;
     </Card>
   )}
 
+  </section>
+  <section hidden={view !== "cuenta"}>
   <!-- Logout & Account Info -->
   <Card variant="elevated" class="mt-4 animate-fade-up animate-fade-up-delay-2">
     <div class="flex items-center justify-between">
@@ -1060,6 +1073,7 @@ const origin = new URL(Astro.request.url).origin;
     )}
   </Card>
 
+  </section>
   <!-- Delete account confirmation modal -->
   <div id="delete-modal" class="fixed inset-0 z-50 items-end justify-center p-4 bg-black/40 backdrop-blur-sm hidden">
     <div class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-in">

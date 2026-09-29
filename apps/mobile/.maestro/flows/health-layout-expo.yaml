@@ -1,0 +1,88 @@
+appId: host.exp.Exponent
+name: Salud resumen e historial sin modificar registros
+tags:
+  - smoke
+  - expo-go
+---
+- launchApp
+- openLink: "exp://localhost:8081"
+- extendedWaitUntil:
+    visible: "Tab Inicio"
+    timeout: 25000
+- tapOn: "Tab Inicio"
+- tapOn: "Tab Salud"
+- assertVisible:
+    id: "screen-health"
+- assertVisible:
+    id: "health-pet-identity"
+- takeScreenshot: vivra-health-overview
+- tapOn:
+    id: "health-vaccines"
+- extendedWaitUntil:
+    visible: "Vacunas registradas"
+    timeout: 15000
+- takeScreenshot: vivra-health-vaccines
+- tapOn:
+    id: "health-tab-history"
+- assertVisible: "Todas las aplicaciones"
+- tapOn:
+    id: "health-tab-summary"
+- assertVisible: "Vacunas registradas"
+- tapOn: "Registrar vacuna"
+- assertVisible: "Registrar aplicación"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Registrar aplicación"
+- tapOn: "Volver a Salud"
+- assertVisible:
+    id: "screen-health"
+- tapOn:
+    id: "health-history"
+- extendedWaitUntil:
+    visible: "Visitas este año"
+    timeout: 15000
+- takeScreenshot: vivra-health-vet-visits
+- tapOn:
+    id: "health-tab-history"
+- assertVisible: "Historial veterinario"
+- tapOn:
+    id: "health-tab-summary"
+- assertVisible: "Visitas este año"
+- tapOn: "Agregar visita"
+- assertVisible: "Guardar"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Guardar"
+- tapOn: "Volver a Salud"
+- tapOn:
+    id: "health-preventives"
+- extendedWaitUntil:
+    visible: "Antipulgas:.*"
+    timeout: 15000
+- takeScreenshot: vivra-health-preventives
+- tapOn:
+    id: "health-tab-history"
+- assertVisible: "Todas las aplicaciones"
+- tapOn:
+    id: "health-tab-summary"
+- assertVisible: "Antipulgas:.*"
+- tapOn: "Agregar preventivo"
+- assertVisible: "Guardar"
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Guardar"
+- tapOn: "Volver a Salud"
+- tapOn:
+    id: "health-add"
+- tapOn:
+    id: "health-add-visit"
+- extendedWaitUntil:
+    visible: "Guardar"
+    timeout: 15000
+- tapOn:
+    id: "form-cancel"
+- assertNotVisible: "Guardar"
+- assertVisible: "Visitas este año"
+- tapOn: "Volver a Salud"
+- assertVisible:
+    id: "screen-health"

@@ -1,0 +1,41 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import PassportCard from '../components/PassportCard.astro';
+import Icon from '../components/ui/Icon.astro';
+import { getActivePet } from '../lib/pet';
+import { buildVaccineOverview } from '@vivra/shared';
+const { supabase, user, activePetId } = Astro.locals;
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+if (!pet) return Astro.redirect('/onboarding');
+const { data: vaccines, error } = await supabase.from('vaccines').select('id, name, date_given, next_due').eq('pet_id', pet.id).order('date_given', { ascending: false });
+const overview = buildVaccineOverview(vaccines ?? []);
+const rows = [
+  { title: 'Viajes y requisitos', detail: 'Destinos, vuelos y lista de documentos', icon: 'vuelo', href: '/viajes' },
+  { title: 'Registro de vacunas', detail: error ? 'No pudimos cargar el registro' : `${vaccines?.length ?? 0} dosis registradas${overview.overdueCount ? ` · ${overview.overdueCount} fechas por revisar` : ''}`, icon: 'preventivo', href: '/salud/vacunas' },
+  { title: 'Exportar pasaporte', detail: 'PDF · compartir o imprimir', icon: 'descarga', href: '/print' },
+];
+---
+<MainLayout title="Pasaporte">
+  <a href="/viajes" class="mb-5 inline-flex text-sm text-accent">← Volver a Viajes</a>
+  <header class="section-header mb-7 flex items-center justify-between"><div><h1 class="text-3xl font-semibold">Pasaporte de viaje</h1><p class="text-sm text-muted">Toda la información de {pet.name}, siempre contigo.</p></div><a href="/perfil" class="text-sm text-accent">Editar perfil</a></header>
+  <div class="passport-layout">
+    <div><PassportCard pet={pet} /><p class="mt-4 text-xs text-muted leading-relaxed">Resumen personal de Vivra. No sustituye los documentos oficiales de viaje o sanitarios.</p></div>
+    <section class="travel-docs"><h2>Prepara su próximo viaje</h2><div class="travel-status"><span><Icon name="documento" class="h-7 w-7" /></span><div><h3>Su información, contigo</h3><p>Revisa los requisitos y documentos de cada destino antes de viajar.</p></div></div>
+      {error && <p role="alert">No pudimos cargar las vacunas. <a href="/pasaporte">Volver a intentar</a></p>}
+      {rows.map(row => <a href={row.href} class="travel-row"><Icon name={row.icon} class="h-6 w-6"/><div><h3>{row.title}</h3><p>{row.detail}</p></div><span aria-hidden="true">›</span></a>)}
+    </section>
+  </div>
+</MainLayout>
+<style>
+  .passport-layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+  .travel-docs { background: #FFFDFA; border: 1px solid #EBE7DF; border-radius: 20px; padding: 24px; }
+  h2 { font-size: 18px; font-weight: 600; }
+  h3 { font-size: 14px; font-weight: 600; }
+  p { color: #6E7872; font-size: 12px; line-height: 1.6; }
+  .travel-status { display: flex; gap: 14px; align-items: center; margin: 22px 0; }
+  .travel-status>span { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #E5EDE1; color: #174C3C; flex-shrink: 0; }
+  .travel-row { display: flex; gap: 14px; align-items: center; padding: 19px 0; border-top: 1px solid #ECE8E0; }
+  .travel-row div { flex: 1; }
+  .travel-row:hover h3 { color: #378655; }
+  @media(max-width:800px) { .passport-layout { grid-template-columns: 1fr; } }
+</style>

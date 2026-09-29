@@ -1,11 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, friendlyError, formatCurrency, sumAmounts } from '@vivra/shared';
+import { formatDate, friendlyError, formatCurrency, sumAmounts, localDateKey } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
 import { Card } from '../../../components/ui/Card';
@@ -15,22 +15,27 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { FormField } from '../../../components/ui/FormField';
 import type { VetVisit } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
-import { AddButton } from '../../../components/ui/AddButton';
+import { HealthPetIdentity } from '../../../components/health/HealthPetIdentity';
+import { HealthTabs, type HealthTab } from '../../../components/health/HealthTabs';
+import { DataLoadNotice } from '../../../components/shared/DataLoadNotice';
+import { useRemoteData } from '../../../hooks/useRemoteData';
+import { useAuth } from '../../../hooks/useAuth';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
 
 export default function HistorialScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [activeTab, setActiveTab] = useState<HealthTab>('summary');
   const { isPremium } = useSubscription();
-  const { pet } = usePetContext();
-  const [visits, setVisits] = useState<VetVisit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { pet, refresh: refreshPetData } = usePetContext();
   const [refreshing, setRefreshing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingVisit, setEditingVisit] = useState<VetVisit | null>(null);
 
   // Form
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateKey());
   const [reason, setReason] = useState('');
   const [vetName, setVetName] = useState('');
   const [location, setLocation] = useState('');
@@ -39,29 +44,36 @@ export default function HistorialScreen() {
   const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
 
-  const fetchData = useCallback(async () => {
-    if (!pet?.id) return;
-
-    const { data } = await supabase
-      .from('vet_visits').select('*').eq('pet_id', pet.id).order('date', { ascending: false });
-    setVisits(data ?? []);
-    setLoading(false);
+  const loadVisits = useCallback(async (signal: AbortSignal) => {
+    const { data, error } = await supabase
+      .from('vet_visits').select('*').eq('pet_id', pet!.id).order('date', { ascending: false }).abortSignal(signal);
+    if (error) throw error;
+    return data ?? [];
   }, [pet?.id]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const { data, loading, error: loadError, refresh: fetchData } = useRemoteData(pet?.id ? `vet-visits:${user?.id}:${pet.id}` : null, loadVisits);
+  const visits = data ?? [];
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([fetchData(), refreshPetData()]);
     setRefreshing(false);
-  }, [fetchData]);
+  }, [fetchData, refreshPetData]);
 
   const resetForm = () => {
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(localDateKey());
     setReason(''); setVetName(''); setLocation('');
     setDiagnosis(''); setTreatment(''); setCost(''); setNotes('');
     setEditingVisit(null);
   };
+
+  const openNew = () => { resetForm(); setShowForm(true); };
+
+  useEffect(() => {
+    if (add) {
+      openNew();
+      router.setParams({ add: undefined });
+    }
+  }, [add]);
 
   const openEdit = (v: VetVisit) => {
     setEditingVisit(v);
@@ -93,7 +105,7 @@ export default function HistorialScreen() {
       notes: notes || null,
     };
     const { error } = editingVisit
-      ? await supabase.from('vet_visits').update(payload).eq('id', editingVisit.id)
+      ? await supabase.from('vet_visits').update(payload).eq('id', editingVisit.id).eq('pet_id', pet.id)
       : await supabase.from('vet_visits').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
@@ -108,7 +120,7 @@ export default function HistorialScreen() {
     track('crud', `vet_visit_${editingVisit ? 'editar' : 'crear'}`);
     resetForm();
     setShowForm(false);
-    fetchData();
+    await Promise.all([fetchData(), refreshPetData()]);
   };
 
   const handleDelete = (id: string) => {
@@ -116,8 +128,9 @@ export default function HistorialScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('vet_visits').delete().eq('id', id).eq('pet_id', pet!.id);
-          fetchData();
+          const { error } = await supabase.from('vet_visits').delete().eq('id', id).eq('pet_id', pet!.id);
+          if (error) { Alert.alert('No se pudo eliminar', friendlyError(error)); return; }
+          await Promise.all([fetchData(), refreshPetData()]);
         },
       },
     ]);
@@ -128,18 +141,17 @@ export default function HistorialScreen() {
   // del idioma del teléfono: en español salía "427,99" y en el perfil "427.99".
   const totalCost = sumAmounts(visits, 'cost');
   const lastVisit = visits[0];
-  const daysSinceLast = lastVisit
-    ? Math.floor((Date.now() - new Date(lastVisit.date).getTime()) / (1000 * 60 * 60 * 24))
-    : null;
+  const visitsThisYear = visits.filter(visit => visit.date.slice(0, 4) === String(new Date().getFullYear())).length;
+  const visibleVisits = activeTab === 'summary' ? visits.slice(0, 3) : visits;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-vet-visits" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="chevron-back" size={24} color={Colors.ink} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver a Salud" onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/salud')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
-        <Text style={styles.title}>Historial veterinario</Text>
-        <AddButton label="Visita" onPress={() => { resetForm(); setShowForm(true); }} />
+        <Text style={styles.title}>Visitas veterinarias</Text>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
@@ -147,79 +159,103 @@ export default function HistorialScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{visits.length}</Text>
-            <Text style={styles.statLabel}>Visitas</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{daysSinceLast !== null ? `${daysSinceLast}d` : '—'}</Text>
-            <Text style={styles.statLabel}>Desde última</Text>
-          </View>
-          {isPremium ? (
-            <View style={styles.statBox}>
-              <Text style={styles.statValue}>${formatCurrency(totalCost)}</Text>
-              <Text style={styles.statLabel}>Total gastado</Text>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.statBox} onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
-              <Ionicons name="lock-closed" size={16} color={Colors.muted} style={{ marginBottom: 2 }} />
-              <Text style={styles.statLabel}>Total gastado</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <HistoryChart
-          items={visits.map(v => ({ date: v.date, amount: v.cost }))}
-          noun="visitas"
-          showMoney={isPremium}
-        />
-
-        {visits.length === 0 && !loading ? (
-          <View style={styles.empty}>
-            <Ionicons name="medical-outline" size={48} color={Colors.cardBorder} />
-            <Text style={styles.emptyText}>No hay visitas registradas</Text>
-          </View>
-        ) : (
-          visits.map(v => (
-            <TouchableOpacity key={v.id} activeOpacity={0.7} onPress={() => openEdit(v)}>
-              <Card>
-                <View style={styles.visitRow}>
-                  <View style={styles.visitInfo}>
-                    <Text style={styles.visitReason}>{v.reason}</Text>
-                    <Text style={styles.visitDate}>{formatDate(v.date)}</Text>
-                    {v.vet_name && <Text style={styles.visitDetail}>Dr. {v.vet_name}</Text>}
-                    {v.location && <Text style={styles.visitDetail}>{v.location}</Text>}
-                    {v.diagnosis && (
-                      <Text style={styles.visitDiagnosis}>Diagnóstico: {v.diagnosis}</Text>
-                    )}
-                    {v.treatment && (
-                      <Text style={styles.visitDetail}>Tratamiento: {v.treatment}</Text>
-                    )}
-                    {v.notes && <Text style={styles.visitNotes}>{v.notes}</Text>}
+        <HealthPetIdentity />
+        <HealthTabs value={activeTab} onChange={setActiveTab} />
+        <DataLoadNotice message={loadError ? 'No pudimos cargar las visitas. Inténtalo de nuevo.' : null} onRetry={fetchData} />
+        {loading ? (
+          <View style={styles.empty}><ActivityIndicator color={Colors.accent} /><Text style={styles.emptyText}>Cargando visitas…</Text></View>
+        ) : loadError ? null : (
+          <>
+            {activeTab === 'summary' ? (
+              <>
+                <Card style={styles.statsRow}>
+                  <View style={styles.statBox}>
+                    <Ionicons name="medical-outline" size={22} color={Colors.blue} />
+                    <Text style={styles.statValue}>{visitsThisYear}</Text>
+                    <Text style={styles.statLabel}>Visitas este año</Text>
                   </View>
-                  <View style={styles.visitRight}>
-                    {v.cost !== null && v.cost > 0 && (
-                      <View style={styles.costBadge}>
-                        <Text style={styles.costText}>${v.cost}</Text>
+                  <View style={[styles.statBox, styles.statDivider]}>
+                    <Ionicons name="calendar-outline" size={22} color={Colors.blue} />
+                    <Text style={styles.statLabel}>Última visita</Text>
+                    <Text style={styles.statDetail}>{lastVisit ? formatDate(lastVisit.date) : 'Sin registro'}</Text>
+                  </View>
+                  <View style={styles.statBox}>
+                    <Ionicons name="person-outline" size={22} color={Colors.blue} />
+                    <Text style={styles.statLabel}>Último veterinario</Text>
+                    <Text style={styles.statDetail}>{lastVisit?.vet_name || 'Sin registrar'}</Text>
+                  </View>
+                </Card>
+                {lastVisit && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Última visita</Text>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver última visita: ${lastVisit.reason}`} style={styles.latestCard} onPress={() => openEdit(lastVisit)} activeOpacity={0.75}>
+                      <View style={styles.latestIcon}><Ionicons name="medkit-outline" size={25} color={Colors.accent} /></View>
+                      <View style={styles.visitInfo}>
+                        <Text style={styles.latestTitle}>{lastVisit.reason}</Text>
+                        <Text style={styles.visitDetail}>{formatDate(lastVisit.date)}{lastVisit.location ? ` · ${lastVisit.location}` : ''}</Text>
                       </View>
-                    )}
-                    <View style={styles.rowActions}>
-                      <TouchableOpacity onPress={() => openEdit(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDelete(v.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                      </TouchableOpacity>
-                    </View>
+                      <Ionicons name="chevron-forward" size={18} color={Colors.accent} />
+                    </TouchableOpacity>
                   </View>
-                </View>
-              </Card>
-            </TouchableOpacity>
-          ))
+                )}
+              </>
+            ) : (
+              <>
+                <Card style={styles.expenseRow}>
+                  <View><Text style={styles.sectionTitle}>Historial veterinario</Text><Text style={styles.visitDetail}>{visits.length} visita{visits.length === 1 ? '' : 's'} registrada{visits.length === 1 ? '' : 's'}</Text></View>
+                  {isPremium ? <View style={styles.expenseTotal}><Text style={styles.statValue}>${formatCurrency(totalCost)}</Text><Text style={styles.statLabel}>Total gastado</Text></View> : (
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ver total gastado con Vivra Premium" style={styles.expenseTotal} onPress={() => router.push('/paywall' as any)} activeOpacity={0.8}>
+                      <Ionicons name="lock-closed" size={17} color={Colors.muted} /><Text style={styles.statLabel}>Total gastado</Text>
+                    </TouchableOpacity>
+                  )}
+                </Card>
+                <HistoryChart items={visits.map(v => ({ date: v.date, amount: v.cost }))} noun="visitas" showMoney={isPremium} />
+              </>
+            )}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{activeTab === 'summary' ? 'Últimas visitas' : 'Todas las visitas'}</Text>
+                {activeTab === 'summary' && visits.length > 0 && (
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setActiveTab('history')} style={styles.viewAll}><Text style={styles.viewAllText}>Ver todas</Text><Ionicons name="chevron-forward" size={15} color={Colors.accent} /></TouchableOpacity>
+                )}
+              </View>
+              {visits.length === 0 ? (
+                <Card style={styles.empty}>
+                  <Ionicons name="medical-outline" size={38} color={Colors.blue} />
+                  <Text style={styles.emptyTitle}>Sin visitas registradas</Text>
+                  <Text style={styles.emptyText}>Guarda el motivo, las indicaciones y el costo de cada consulta.</Text>
+                </Card>
+              ) : (
+                <Card padded={false}>
+                  {visibleVisits.map((v, index) => (
+                    <View key={v.id} style={[styles.visitRow, index < visibleVisits.length - 1 && styles.rowBorder]}>
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver visita ${v.reason}, ${formatDate(v.date)}`} activeOpacity={0.7} onPress={() => openEdit(v)} style={styles.visitMain}>
+                        <View style={styles.visitIcon}><Ionicons name="calendar-outline" size={19} color={Colors.blue} /></View>
+                        <View style={styles.visitInfo}>
+                          <Text style={styles.visitReason}>{v.reason}</Text>
+                          <Text style={styles.visitDate}>{formatDate(v.date)}</Text>
+                          {(v.location || v.vet_name) && <Text style={styles.visitDetail}>{v.location || v.vet_name}</Text>}
+                          {activeTab === 'history' && <>
+                            {v.location && v.vet_name && <Text style={styles.visitDetail}>{v.vet_name}</Text>}
+                            {v.diagnosis && <Text style={styles.visitDiagnosis}>Diagnóstico: {v.diagnosis}</Text>}
+                            {v.treatment && <Text style={styles.visitDetail}>Tratamiento: {v.treatment}</Text>}
+                            {v.notes && <Text style={styles.visitNotes}>{v.notes}</Text>}
+                            {v.cost !== null && v.cost > 0 && <View style={styles.costBadge}><Text style={styles.costText}>${formatCurrency(v.cost)}</Text></View>}
+                          </>}
+                        </View>
+                        <Ionicons name="chevron-forward" size={17} color={Colors.muted} />
+                      </TouchableOpacity>
+                      {activeTab === 'history' && <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Eliminar visita ${v.reason}`} onPress={() => handleDelete(v.id)} style={styles.deleteAction}><Ionicons name="trash-outline" size={19} color={Colors.muted} /></TouchableOpacity>}
+                    </View>
+                  ))}
+                </Card>
+              )}
+            </View>
+          </>
         )}
       </ScrollView>
+
+      <View style={styles.footer}><Button title="Agregar visita" onPress={openNew} /></View>
 
       <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingVisit ? 'Editar visita' : 'Agregar visita'} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
         <FormField label="Motivo" value={reason} onChangeText={setReason} placeholder="Ej: Revisión anual, Urgencia..." />
@@ -237,34 +273,41 @@ export default function HistorialScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.canvas },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
-  },
-  title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
+  title: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold, color: Colors.ink },
   scroll: { flex: 1 },
-  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.sm, paddingBottom: Spacing.xxl },
-  statsRow: { flexDirection: 'row', gap: Spacing.sm },
-  statBox: {
-    flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.cardBorder, padding: Spacing.md, alignItems: 'center',
-  },
-  statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.ink },
-  statLabel: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
-  visitRow: { flexDirection: 'row', gap: Spacing.sm },
+  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.md },
+  footer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder, backgroundColor: Colors.canvas },
+  statsRow: { flexDirection: 'row', paddingHorizontal: Spacing.sm, paddingVertical: Spacing.lg },
+  statBox: { flex: 1, gap: 5, alignItems: 'center', paddingHorizontal: Spacing.xs },
+  statDivider: { borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth, borderColor: Colors.cardBorder },
+  statValue: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
+  statLabel: { fontSize: 10, color: Colors.muted, textAlign: 'center' },
+  statDetail: { fontSize: FontSize.xs, color: Colors.ink, textAlign: 'center', lineHeight: 18 },
+  section: { gap: Spacing.sm },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
+  viewAll: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm },
+  viewAllText: { fontSize: FontSize.xs, color: Colors.accent },
+  latestCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.lg, backgroundColor: Colors.accentLight },
+  latestIcon: { width: 45, height: 48, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF5EA' },
+  latestTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.accent },
+  expenseRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  expenseTotal: { alignItems: 'center', gap: 3 },
+  visitRow: { flexDirection: 'row', alignItems: 'center' },
+  visitMain: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', padding: Spacing.md, flex: 1 },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.cardBorder },
+  visitIcon: { width: 36, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EAF0F2' },
   visitInfo: { flex: 1 },
-  visitRight: { alignItems: 'flex-end', gap: Spacing.sm },
-  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  visitReason: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
-  visitDate: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-  visitDetail: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
-  visitDiagnosis: { fontSize: FontSize.xs, color: Colors.ink, marginTop: 4, fontWeight: FontWeight.medium },
-  visitNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 4 },
-  costBadge: {
-    backgroundColor: Colors.accentLight, paddingHorizontal: Spacing.sm,
-    paddingVertical: 2, borderRadius: Radius.full,
-  },
+  visitReason: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  visitDate: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3 },
+  visitDetail: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 18 },
+  visitDiagnosis: { fontSize: FontSize.xs, color: Colors.ink, marginTop: 5, fontWeight: FontWeight.medium, lineHeight: 18 },
+  visitNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 4, lineHeight: 18 },
+  deleteAction: { width: 36, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  costBadge: { alignSelf: 'flex-start', backgroundColor: Colors.accentLight, paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full, marginTop: 6 },
   costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
-  empty: { alignItems: 'center', paddingVertical: Spacing.xxl },
-  emptyText: { fontSize: FontSize.md, color: Colors.muted },
+  empty: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
+  emptyTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, textAlign: 'center' },
+  emptyText: { fontSize: FontSize.sm, lineHeight: 21, color: Colors.muted, textAlign: 'center' },
 });

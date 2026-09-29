@@ -1,0 +1,14 @@
+---
+interface Props { active: string; section?: 'health' | 'care' }
+const { active, section = 'health' } = Astro.props;
+const tabs = section === 'care' ? [['resumen', '/cuidado', 'Resumen'], ['alimentacion', '/alimentacion', 'Alimentación'], ['grooming', '/salud/grooming', 'Higiene y grooming']] : [
+  ['resumen', '/salud', 'Resumen'],
+  ['vacunas', '/salud/vacunas', 'Vacunas'],
+  ['historial', '/salud/historial', 'Visitas veterinarias'],
+  ['preventivos', '/salud/preventivos', 'Preventivos'],
+  ['peso', '/salud/peso', 'Peso'],
+];
+---
+<nav class="health-tabs" aria-label={section === 'care' ? 'Secciones de cuidado' : 'Secciones de salud'}>
+  {tabs.map(([key, href, label]) => <a href={href} aria-current={active === key ? 'page' : undefined}>{label}</a>)}
+</nav>

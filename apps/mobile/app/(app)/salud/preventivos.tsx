@@ -1,11 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, FontWeight, Radius } from '../../../constants/theme';
 import { supabase } from '../../../lib/supabase';
-import { formatDate, friendlyError, preventiveNextDue } from '@vivra/shared';
+import { formatDate, friendlyError, preventiveNextDue, localDateKey, daysUntilDate, formatCurrency } from '@vivra/shared';
 import { usePetContext } from '../../../contexts/PetContext';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -17,65 +17,39 @@ import type { PreventiveTreatment } from '@vivra/shared/lib/database';
 import { track } from '../../../lib/analytics';
 import { HistoryChart } from '../../../components/pet/HistoryChart';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
+import { HealthPetIdentity } from '../../../components/health/HealthPetIdentity';
+import { HealthTabs, type HealthTab } from '../../../components/health/HealthTabs';
+import { DataLoadNotice } from '../../../components/shared/DataLoadNotice';
+import { SelectField } from '../../../components/ui/SelectField';
+import { useRemoteData } from '../../../hooks/useRemoteData';
+import { useAuth } from '../../../hooks/useAuth';
 
 type TreatmentType = 'antipulgas' | 'desparasitante' | 'combinado';
 
 interface StatusCardProps {
   type: 'antipulgas' | 'desparasitante';
   last: PreventiveTreatment | null;
-  onAdd: () => void;
+  onPress: () => void;
 }
 
-function StatusCard({ type, last, onAdd }: StatusCardProps) {
+function StatusCard({ type, last, onPress }: StatusCardProps) {
   const config = {
-    antipulgas: { icon: 'shield-checkmark' as const, iconColor: Colors.warn, label: 'Antipulgas' },
-    desparasitante: { icon: 'medical' as const, iconColor: '#E879F9', label: 'Desparasitante' },
+    antipulgas: { icon: 'bug-outline' as const, color: Colors.accent, background: Colors.accentLight, label: 'Antipulgas' },
+    desparasitante: { icon: 'medical-outline' as const, color: Colors.rose, background: Colors.coral, label: 'Desparasitación interna' },
   }[type];
-
-  let statusColor = Colors.muted;
-  let statusText = 'Sin registro';
-  let isUrgent = false;
-
-  if (last) {
-    if (!last.next_due) {
-      statusText = 'Sin próxima fecha';
-    } else {
-    const nextDate = new Date(`${last.next_due}T00:00:00`);
-    const daysLeft = Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-    if (daysLeft < 0) {
-      statusColor = Colors.bad;
-      statusText = `Vencido hace ${Math.abs(daysLeft)}d`;
-      isUrgent = true;
-    } else if (daysLeft <= 5) {
-      statusColor = Colors.warn;
-      statusText = `En ${daysLeft}d`;
-      isUrgent = true;
-    } else {
-      statusColor = Colors.good;
-      statusText = `En ${daysLeft}d`;
-    }
-    }
-  } else {
-    isUrgent = true;
-  }
-
+  const days = last?.next_due ? daysUntilDate(last.next_due) : null;
+  const statusColor = days === null ? Colors.muted : days < 0 ? Colors.bad : days <= 5 ? Colors.warn : Colors.good;
+  const statusText = !last ? 'Sin registro' : days === null ? 'Sin fecha' : days < 0 ? 'Revisar' : days === 0 ? 'Hoy' : `En ${days}d`;
   return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={onAdd}
-      style={[
-        styles.statusCard,
-        isUrgent && { borderColor: statusColor, borderWidth: 2, backgroundColor: `${statusColor}12` },
-      ]}
-    >
-      <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-      <Ionicons name={config.icon} size={22} color={config.iconColor} />
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${config.label}: ${statusText}`} activeOpacity={0.7} onPress={onPress} style={styles.statusCard}>
+      <View style={[styles.statusIcon, { backgroundColor: config.background }]}><Ionicons name={config.icon} size={25} color={config.color} /></View>
       <View style={styles.statusInfo}>
-        <Text style={styles.statusLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{config.label}</Text>
-        <Text style={[styles.statusText, { color: statusColor, fontWeight: isUrgent ? FontWeight.bold : FontWeight.medium }]}>{statusText}</Text>
+        <Text style={styles.statusLabel}>{config.label}</Text>
+        <Text style={styles.statusDetail}>{last?.product_name || 'Producto sin registrar'}</Text>
+        <Text style={styles.statusDetail}>{last ? `Última: ${formatDate(last.date_given)}` : 'Agrega la primera aplicación'}</Text>
       </View>
-      <Ionicons name="add-circle" size={26} color={Colors.accent} />
+      <View style={[styles.statusPill, { backgroundColor: `${statusColor}12` }]}><Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text></View>
+      <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
     </TouchableOpacity>
   );
 }
@@ -88,10 +62,11 @@ function dedupePorId<T extends { id: string }>(items: T[]): T[] {
 
 export default function PreventivosScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [activeTab, setActiveTab] = useState<HealthTab>('summary');
   const { pet, refresh: refreshPetData } = usePetContext();
   const { isPremium } = useSubscription();
-  const [antipulgas, setAntipulgas] = useState<PreventiveTreatment[]>([]);
-  const [desparasitante, setDesparasitante] = useState<PreventiveTreatment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
@@ -100,47 +75,37 @@ export default function PreventivosScreen() {
   const [editingTreatment, setEditingTreatment] = useState<PreventiveTreatment | null>(null);
 
   // Form
-  const [dateApplied, setDateApplied] = useState(new Date().toISOString().slice(0, 10));
+  const [dateApplied, setDateApplied] = useState(localDateKey());
   const [nextDue, setNextDue] = useState('');
   const [productName, setProductName] = useState('');
   const [cost, setCost] = useState('');
   const [notes, setNotes] = useState('');
 
-  const fetchData = useCallback(async () => {
-    if (!pet?.id) return;
-
-    // Fetch all treatments in one roundtrip. A 'combinado' row counts as BOTH
-    // antipulgas and desparasitante, so we merge it into both lists below.
+  const loadTreatments = useCallback(async (signal: AbortSignal) => {
     const { data, error } = await supabase
-      .from('preventive_treatments')
-      .select('*')
-      .eq('pet_id', pet.id)
-      .order('date_given', { ascending: false });
-
-    if (error) console.warn('[Preventivos] fetch error:', error.message);
-
-    const all = (data ?? []).map(treatment => ({
+      .from('preventive_treatments').select('*').eq('pet_id', pet!.id)
+      .order('date_given', { ascending: false }).abortSignal(signal);
+    if (error) throw error;
+    return (data ?? []).map(treatment => ({
       ...treatment,
-      next_due: preventiveNextDue(pet.species, treatment.date_given, treatment.next_due),
+      next_due: preventiveNextDue(pet?.species, treatment.date_given, treatment.next_due),
     }));
-    const anti = all.filter(t => t.type === 'antipulgas' || t.type === 'combinado');
-    const des = all.filter(t => t.type === 'desparasitante' || t.type === 'combinado');
-
-    setAntipulgas(anti);
-    setDesparasitante(des);
-  }, [pet?.id]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+  }, [pet?.id, pet?.species]);
+  const { data, loading, error: loadError, refresh: fetchData } = useRemoteData(pet?.id ? `preventives:${user?.id}:${pet.id}:${pet.species}` : null, loadTreatments);
+  // Combined doses appear in both category summaries, once in the full history.
+  const antipulgas = (data ?? []).filter(t => t.type === 'antipulgas' || t.type === 'combinado');
+  const desparasitante = (data ?? []).filter(t => t.type === 'desparasitante' || t.type === 'combinado');
+  const history = dedupePorId([...antipulgas, ...desparasitante]).sort((a, b) => b.date_given.localeCompare(a.date_given));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([fetchData(), refreshPetData()]);
     setRefreshing(false);
-  }, [fetchData]);
+  }, [fetchData, refreshPetData]);
 
   const resetForm = () => {
-    setDateApplied(new Date().toISOString().slice(0, 10));
-    setNextDue(pet?.species === 'dog' ? preventiveNextDue('dog', new Date().toISOString().slice(0, 10), null) ?? '' : '');
+    setDateApplied(localDateKey());
+    setNextDue(pet?.species === 'dog' ? preventiveNextDue('dog', localDateKey(), null) ?? '' : '');
     setProductName('');
     setCost('');
     setNotes('');
@@ -152,6 +117,13 @@ export default function PreventivosScreen() {
     setFormType(type);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    if (add) {
+      openForm('antipulgas');
+      router.setParams({ add: undefined });
+    }
+  }, [add]);
 
   const openEdit = (item: PreventiveTreatment) => {
     setEditingTreatment(item);
@@ -179,7 +151,7 @@ export default function PreventivosScreen() {
       notes: notes || null,
     };
     const { error } = editingTreatment
-      ? await supabase.from('preventive_treatments').update(payload).eq('id', editingTreatment.id)
+      ? await supabase.from('preventive_treatments').update(payload).eq('id', editingTreatment.id).eq('pet_id', pet.id)
       : await supabase.from('preventive_treatments').insert({ ...payload, pet_id: pet.id });
     setSaving(false);
 
@@ -219,52 +191,19 @@ export default function PreventivosScreen() {
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Eliminar', style: 'destructive', onPress: async () => {
-          await supabase.from('preventive_treatments').delete().eq('id', id).eq('pet_id', pet!.id);
-          fetchData();
-          refreshPetData().catch(() => {});
+          const { error } = await supabase.from('preventive_treatments').delete().eq('id', id).eq('pet_id', pet!.id);
+          if (error) { Alert.alert('No se pudo eliminar', friendlyError(error)); return; }
+          await Promise.all([fetchData(), refreshPetData()]);
         },
       },
     ]);
   };
 
-  const renderList = (items: PreventiveTreatment[], label: string) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{label}</Text>
-      {items.length === 0 ? (
-        <Text style={styles.noRecords}>
-          Aún no hay registros de {label.toLowerCase()}. Toca el botón
-          {' '}+ arriba para agregar el primero.
-        </Text>
-      ) : (
-        items.map(item => (
-          <TouchableOpacity key={item.id} activeOpacity={0.7} onPress={() => openEdit(item)}>
-            <Card>
-              <View style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemDate}>{formatDate(item.date_given)}</Text>
-                  {item.product_name && <Text style={styles.itemProduct}>{item.product_name}</Text>}
-                  {item.cost != null && item.cost > 0 && (
-                    <View style={styles.costBadge}>
-                      <Text style={styles.costText}>${item.cost}</Text>
-                    </View>
-                  )}
-                  {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
-                </View>
-                <View style={styles.rowActions}>
-                  <TouchableOpacity onPress={() => openEdit(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="pencil-outline" size={20} color={Colors.muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="trash-outline" size={20} color={Colors.muted} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Card>
-          </TouchableOpacity>
-        ))
-      )}
-    </View>
-  );
+  const latest = [antipulgas[0], desparasitante[0]];
+  const missingCount = latest.filter(item => !item?.next_due).length;
+  const overdueCount = latest.filter(item => item?.next_due && daysUntilDate(item.next_due) < 0).length;
+  const statusTitle = history.length === 0 ? 'Empieza su registro' : overdueCount > 0 ? 'Hay fechas por revisar' : missingCount > 0 ? 'Completa las próximas fechas' : 'Fechas al día';
+  const statusText = history.length === 0 ? 'Guarda los productos y fechas de sus cuidados preventivos.' : overdueCount > 0 ? 'Revisa las próximas aplicaciones con tu veterinario.' : missingCount > 0 ? 'Faltan fechas o registros para completar este resumen.' : 'No hay fechas pendientes en los dos cuidados registrados.';
 
   const formLabel =
     formType === 'antipulgas' ? 'Antipulgas'
@@ -272,10 +211,10 @@ export default function PreventivosScreen() {
     : 'Combinado (antipulgas + desparasitante)';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView testID="screen-preventives" style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="chevron-back" size={24} color={Colors.ink} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver a Salud" onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/salud')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={Colors.ink} />
         </TouchableOpacity>
         <Text style={styles.title}>Preventivos</Text>
         <View style={{ width: 28 }} />
@@ -286,36 +225,68 @@ export default function PreventivosScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
       >
-        {/* Status cards */}
-        <View style={styles.statusRow}>
-          <StatusCard type="antipulgas" last={antipulgas[0] ?? null} onAdd={() => openForm('antipulgas')} />
-          <StatusCard type="desparasitante" last={desparasitante[0] ?? null} onAdd={() => openForm('desparasitante')} />
-        </View>
-
-        {/* Combinado CTA — a single product covering both */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => openForm('combinado')} style={styles.combinedCta}>
-          <Ionicons name="sparkles" size={18} color={Colors.accent} />
+        <HealthPetIdentity />
+        <HealthTabs value={activeTab} onChange={setActiveTab} />
+        <DataLoadNotice message={loadError ? 'No pudimos cargar los preventivos. Inténtalo de nuevo.' : null} onRetry={fetchData} />
+        {loading ? (
+          <View style={styles.loading}><ActivityIndicator color={Colors.accent} /><Text style={styles.noRecords}>Cargando preventivos…</Text></View>
+        ) : loadError ? null : activeTab === 'summary' ? (
+          <>
+            <View style={[styles.summary, overdueCount > 0 && { backgroundColor: Colors.sand }]}>
+              <View style={[styles.summaryIcon, { backgroundColor: overdueCount > 0 ? Colors.warn : missingCount > 0 ? Colors.muted : Colors.good }]}>
+                <Ionicons name={overdueCount > 0 || missingCount > 0 ? 'calendar-outline' : 'checkmark'} size={29} color={Colors.white} />
+              </View>
+              <View style={styles.statusInfo}>
+                <Text style={styles.summaryTitle}>{statusTitle}</Text>
+                <Text style={styles.summaryText}>{statusText}</Text>
+              </View>
+            </View>
+            <Card padded={false}>
+              <StatusCard type="antipulgas" last={antipulgas[0] ?? null} onPress={() => antipulgas[0] ? openEdit(antipulgas[0]) : openForm('antipulgas')} />
+              <View style={styles.rowDivider} />
+              <StatusCard type="desparasitante" last={desparasitante[0] ?? null} onPress={() => desparasitante[0] ? openEdit(desparasitante[0]) : openForm('desparasitante')} />
+            </Card>
+          </>
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Todas las aplicaciones</Text><Text style={styles.historyCount}>{history.length}</Text></View>
+            {history.length === 0 ? <Card><Text style={styles.noRecords}>Todavía no hay aplicaciones registradas.</Text></Card> : (
+              <Card padded={false}>
+                {history.map((item, index) => (
+                  <View key={item.id} style={[styles.itemRow, index < history.length - 1 && styles.itemBorder]}>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Editar preventivo ${item.product_name || item.type}, ${formatDate(item.date_given)}`} activeOpacity={0.7} onPress={() => openEdit(item)} style={styles.itemMain}>
+                      <View style={styles.historyIcon}><Ionicons name={item.type === 'antipulgas' ? 'bug-outline' : item.type === 'combinado' ? 'sparkles-outline' : 'medical-outline'} size={21} color={Colors.accent} /></View>
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemProduct}>{item.product_name || (item.type === 'combinado' ? 'Combinado' : item.type === 'antipulgas' ? 'Antipulgas' : 'Desparasitante')}</Text>
+                        <Text style={styles.itemDate}>{formatDate(item.date_given)} · {item.type === 'combinado' ? 'Combinado' : item.type === 'antipulgas' ? 'Antipulgas' : 'Desparasitante'}</Text>
+                        {item.next_due && <Text style={styles.itemDate}>Próxima: {formatDate(item.next_due)}</Text>}
+                        {item.cost != null && item.cost > 0 && <View style={styles.costBadge}><Text style={styles.costText}>${formatCurrency(item.cost)}</Text></View>}
+                        {item.notes && <Text style={styles.itemNotes}>{item.notes}</Text>}
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Eliminar preventivo ${item.product_name || item.type}`} onPress={() => handleDelete(item.id)} style={styles.deleteAction}><Ionicons name="trash-outline" size={19} color={Colors.muted} /></TouchableOpacity>
+                  </View>
+                ))}
+              </Card>
+            )}
+            <HistoryChart items={history.map(t => ({ date: t.date_given, amount: t.cost }))} noun="dosis" showMoney={isPremium} />
+          </View>
+        )}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Registrar combinado" activeOpacity={0.7} onPress={() => openForm('combinado')} style={styles.combinedCta}>
+          <Ionicons name="sparkles-outline" size={20} color={Colors.accent} />
           <View style={{ flex: 1 }}>
             <Text style={styles.combinedCtaLabel}>Registrar combinado</Text>
-            <Text style={styles.combinedCtaSub}>Un solo producto que cubre antipulgas + desparasitante</Text>
+            <Text style={styles.combinedCtaSub}>Un producto para ambos cuidados</Text>
           </View>
-          <Ionicons name="add-circle" size={22} color={Colors.accent} />
+          <Ionicons name="add-circle-outline" size={22} color={Colors.accent} />
         </TouchableOpacity>
-
-        {/* Una sola gráfica con todas las dosis: lo que importa aquí es la
-            constancia, y separarla por tipo la haría ilegible. */}
-        <HistoryChart
-          items={dedupePorId([...antipulgas, ...desparasitante]).map(t => ({ date: t.date_given, amount: t.cost }))}
-          noun="dosis"
-          showMoney={isPremium}
-        />
-
-        {/* History lists */}
-        {renderList(antipulgas, 'Historial Antipulgas')}
-        {renderList(desparasitante, 'Historial Desparasitante')}
       </ScrollView>
 
+      <View style={styles.footer}><Button title="Agregar preventivo" onPress={() => openForm('antipulgas')} /></View>
+
       <BottomSheet visible={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editingTreatment ? `Editar ${formLabel}` : `Agregar ${formLabel}`} footer={<Button title="Guardar" onPress={handleSave} loading={saving} />}>
+        {!editingTreatment && <SelectField label="Tipo de preventivo" value={formType} options={[{ key: 'antipulgas', label: 'Antipulgas' }, { key: 'desparasitante', label: 'Desparasitante' }, { key: 'combinado', label: 'Combinado' }]} onSelect={value => setFormType(value as TreatmentType)} />}
         <DatePickerField
           label="Fecha de aplicación"
           value={dateApplied}
@@ -366,49 +337,42 @@ export default function PreventivosScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.canvas },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm,
-  },
-  title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.ink },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
+  title: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold, color: Colors.ink },
   scroll: { flex: 1 },
-  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.xxl },
-  statusRow: { flexDirection: 'row', gap: Spacing.sm },
-  statusCard: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs,
-    backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1,
-    borderColor: Colors.cardBorder, padding: Spacing.md, overflow: 'hidden',
-  },
-  statusIndicator: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
-  },
+  content: { padding: Spacing.lg, paddingTop: Spacing.sm, gap: Spacing.md, paddingBottom: Spacing.md },
+  footer: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.cardBorder, backgroundColor: Colors.canvas },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.lg, backgroundColor: Colors.accentLight },
+  summaryIcon: { width: 53, height: 53, borderRadius: 27, alignItems: 'center', justifyContent: 'center', borderWidth: 5, borderColor: '#FFFFFF70' },
+  summaryTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
+  summaryText: { fontSize: FontSize.xs, lineHeight: 19, color: Colors.muted, marginTop: 4 },
+  statusCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, minHeight: 106 },
+  statusIcon: { width: 45, height: 50, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   statusInfo: { flex: 1 },
   statusLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
-  statusText: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, marginTop: 2 },
+  statusDetail: { fontSize: FontSize.xs, lineHeight: 18, color: Colors.muted, marginTop: 3 },
+  statusPill: { borderRadius: Radius.full, paddingVertical: 5, paddingHorizontal: 7, maxWidth: 75 },
+  statusText: { fontSize: 10, fontWeight: FontWeight.medium, textAlign: 'center' },
+  rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.cardBorder, marginLeft: Spacing.md },
   section: { gap: Spacing.sm },
-  sectionTitle: {
-    fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink, marginTop: Spacing.sm,
-  },
-  noRecords: { fontSize: FontSize.sm, color: Colors.muted, fontStyle: 'italic' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold, color: Colors.ink },
+  historyCount: { fontSize: FontSize.xs, color: Colors.muted },
+  loading: { padding: Spacing.xl, alignItems: 'center', gap: Spacing.sm },
+  noRecords: { fontSize: FontSize.sm, color: Colors.muted, lineHeight: 21 },
   nextDueHint: { fontSize: FontSize.xs, color: Colors.muted, marginTop: -Spacing.sm, marginBottom: Spacing.sm, lineHeight: 17 },
-  itemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  itemRow: { flexDirection: 'row', alignItems: 'center' },
+  itemMain: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, flex: 1 },
+  itemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.cardBorder },
+  historyIcon: { width: 35, height: 38, borderRadius: 12, backgroundColor: Colors.accentLight, alignItems: 'center', justifyContent: 'center' },
   itemInfo: { flex: 1 },
-  rowActions: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  itemDate: { fontSize: FontSize.md, fontWeight: FontWeight.medium, color: Colors.ink },
-  itemProduct: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-  itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 2 },
-  costBadge: {
-    backgroundColor: Colors.accentLight, borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm, paddingVertical: 1, alignSelf: 'flex-start', marginTop: 2,
-  },
+  itemDate: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3, lineHeight: 18 },
+  itemProduct: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
+  itemNotes: { fontSize: FontSize.xs, color: Colors.muted, fontStyle: 'italic', marginTop: 4, lineHeight: 18 },
+  deleteAction: { width: 36, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  costBadge: { backgroundColor: Colors.accentLight, borderRadius: Radius.full, paddingHorizontal: Spacing.sm, paddingVertical: 2, alignSelf: 'flex-start', marginTop: 5 },
   costText: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.accent },
-  combinedCta: {
-    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
-    backgroundColor: Colors.accentLight,
-    borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: `${Colors.accent}33`,
-    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-  },
+  combinedCta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.card, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.cardBorder, paddingHorizontal: Spacing.md, paddingVertical: 13 },
   combinedCtaLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.ink },
-  combinedCtaSub: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 1 },
+  combinedCtaSub: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 3 },
 });

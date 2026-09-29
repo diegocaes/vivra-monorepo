@@ -1,0 +1,19 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import HealthHeader from '../components/health/HealthHeader.astro';
+import Icon from '../components/ui/Icon.astro';
+import { getActivePet } from '../lib/pet';
+const { supabase, user, activePetId } = Astro.locals;
+const { pet } = await getActivePet(supabase, user.id, activePetId);
+if (!pet) return Astro.redirect('/onboarding');
+const sections = [
+  { title: 'Alimentación', text: 'Su comida, snacks, porciones y compras en un solo lugar.', href: '/alimentacion', icon: 'comida', tone: 'sand' },
+  { title: 'Higiene y grooming', text: 'Baños, cortes, uñas, oídos y limpieza dental. Todo su historial de cuidado.', href: '/salud/grooming', icon: 'grooming', tone: 'coral' },
+];
+---
+<MainLayout title="Cuidado">
+  <HealthHeader pet={pet} section="care" active="resumen" title="Cuidado" subtitle={`Las rutinas cotidianas de ${pet.name}.`} />
+  <div class="health-subpage-columns">
+    {sections.map(item => <a href={item.href} class="health-panel block hover:border-accent transition-colors"><span class:list={['health-icon', item.tone]}><Icon name={item.icon} /></span><h2 class="mt-5 mb-2">{item.title} <span aria-hidden="true">›</span></h2><p class="text-sm text-muted leading-relaxed">{item.text}</p></a>)}
+  </div>
+</MainLayout>

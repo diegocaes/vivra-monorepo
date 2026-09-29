@@ -19,7 +19,7 @@ interface ReminderCardProps {
 
 const CONFIG = {
   antipulgas:    { icon: 'shield-checkmark' as const, iconColor: Colors.warn, label: 'Antipulgas' },
-  desparasitante: { icon: 'medical' as const,         iconColor: '#E879F9',   label: 'Desparasitante' },
+  desparasitante: { icon: 'medical' as const,         iconColor: '#BC665D',   label: 'Desparasitante' },
 };
 
 export function ReminderCard({ type, lastDate, nextDue, productName, onPress }: ReminderCardProps) {
@@ -51,7 +51,7 @@ export function ReminderCard({ type, lastDate, nextDue, productName, onPress }: 
   const overdue = daysLeft < 0;
   const urgent = daysLeft <= 7 && daysLeft >= 0;
 
-  const statusColor = overdue ? '#C2410C' : urgent ? Colors.warn : Colors.good;
+  const statusColor = overdue ? '#93652D' : urgent ? Colors.warn : Colors.good;
   const statusText = overdue
     ? 'Revisar'
     : daysLeft === 0 ? 'Hoy'

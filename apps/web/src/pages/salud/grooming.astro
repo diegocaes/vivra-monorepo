@@ -4,7 +4,8 @@ import HistoryChart from '../../components/HistoryChart.astro';
 import Icon from '../../components/ui/Icon.astro';
 import Card from '../../components/ui/Card.astro';
 import MetricGrid from '../../components/ui/MetricGrid.astro';
-import SectionHeader from '../../components/ui/SectionHeader.astro';
+import HealthHeader from '../../components/health/HealthHeader.astro';
+import HealthLoadNotice from '../../components/health/HealthLoadNotice.astro';
 
 import EmptyState from '../../components/ui/EmptyState.astro';
 import {
@@ -23,6 +24,10 @@ if (!pet) return Astro.redirect('/perfil?new=1');
 
 const premium = await getPremiumStatus(supabase, user.id);
 
+function redirectError(message: string) {
+  return Astro.redirect('/salud/grooming?toast_error=' + encodeURIComponent(message));
+}
+
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const action = formData.get('_action') as string;
@@ -30,7 +35,7 @@ if (Astro.request.method === 'POST') {
     .filter(service => service in GROOMING_TYPES);
   if (action === 'add') {
     if (services.length === 0) return Astro.redirect('/salud/grooming?error=service_required');
-    await supabase.from('groomings').insert({
+    const { error } = await supabase.from('groomings').insert({
       pet_id: pet.id,
       date: formData.get('date') as string,
       type: services[0],
@@ -40,11 +45,12 @@ if (Astro.request.method === 'POST') {
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     });
+    if (error) return redirectError('No se pudo guardar el registro. Inténtalo de nuevo.');
   }
   if (action === 'edit') {
     const groomingId = formData.get('grooming_id') as string;
     if (services.length === 0) return Astro.redirect('/salud/grooming?error=service_required');
-    await supabase.from('groomings').update({
+    const { error } = await supabase.from('groomings').update({
       date: formData.get('date') as string,
       type: services[0],
       services,
@@ -53,16 +59,18 @@ if (Astro.request.method === 'POST') {
       cost: parseNumericField(formData.get('cost'), { max: 100_000 }),
       notes: (formData.get('notes') as string) || null,
     }).eq('id', groomingId).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo guardar el registro. Inténtalo de nuevo.');
   }
   if (action === 'delete') {
     const groomingId = formData.get('grooming_id') as string;
-    await supabase.from('groomings').delete().eq('id', groomingId).eq('pet_id', pet.id);
+    const { error } = await supabase.from('groomings').delete().eq('id', groomingId).eq('pet_id', pet.id);
+    if (error) return redirectError('No se pudo eliminar el registro. Inténtalo de nuevo.');
     return Astro.redirect('/salud/grooming?deleted=1');
   }
   return Astro.redirect('/salud/grooming?saved=1');
 }
 
-const { data: groomings } = await supabase
+const { data: groomings, error: loadError } = await supabase
   .from('groomings')
   .select('*')
   .eq('pet_id', pet.id)
@@ -78,11 +86,8 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
 ---
 
 <MainLayout title="Grooming">
-  <a href="/salud" class="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors mb-4">
-    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-    Salud
-  </a>
-  <SectionHeader title="Grooming" subtitle={`Baños, cortes y cuidado de ${pet.name}`} />
+  <HealthHeader pet={pet} section="care" active="grooming" title="Grooming" subtitle={`Baños, cortes y cuidado de ${pet.name}`} />
+  {loadError && <HealthLoadNotice href="/salud/grooming" subject="los registros de grooming" />}
 
   {Astro.url.searchParams.get('error') === 'service_required' && (
     <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -90,6 +95,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     </div>
   )}
 
+  {!loadError && <>
   {/* ── ANALYTICS ── */}
   {groomings && groomings.length > 0 ? (
     <div class="mb-5 animate-fade-up">
@@ -106,11 +112,15 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     </div>
   )}
 
+  </>}
+
   {/* ── FORM (colapsable) ── */}
   <div class="mb-5 animate-fade-up animate-fade-up-delay-1">
     <button
       type="button"
       id="toggle-grooming-form"
+      aria-controls="grooming-form-body"
+      aria-expanded={Astro.url.searchParams.get('new') === '1'}
       class="w-full action-primary"
     >
       <div class="flex items-center gap-2.5">
@@ -122,7 +132,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
       <svg id="toggle-grooming-icon" class="h-4 w-4 text-white/80 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
     </button>
 
-    <div id="grooming-form-body" class="hidden mt-2">
+    <div id="grooming-form-body" class:list={['mt-2', { hidden: Astro.url.searchParams.get('new') !== '1' }]}>
       <Card>
         <form method="POST" class="space-y-4">
           <input type="hidden" name="_action" value="add" />
@@ -132,7 +142,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
             <div class="flex flex-wrap gap-2">
               {Object.entries(GROOMING_TYPES).map(([value, label], index) => (
                 <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-card-border bg-card px-3 py-2 text-xs font-medium text-ink has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:checked]:text-accent-dark">
-                  <input type="checkbox" name="services" value={value} checked={index === 0} class="accent-orange-500" />
+                  <input type="checkbox" name="services" value={value} checked={index === 0} class="accent-accent" />
                   {label}
                 </label>
               ))}
@@ -172,6 +182,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     </div>
   </div>
 
+  {!loadError && <>
   {/* ── GRÁFICO HISTÓRICO ── */}
   <HistoryChart
     items={(groomings ?? []).map(g => ({ date: g.date, amount: g.cost }))}
@@ -238,7 +249,7 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
                       name="services"
                       value={value}
                       checked={normalizeGroomingServices(g.services, g.type).includes(value)}
-                      class="accent-orange-500"
+                      class="accent-accent"
                     />
                     {label}
                   </label>
@@ -263,15 +274,22 @@ const avgCost = groomings && groomings.filter(g => g.cost).length > 0
     </div>
   )}
 
+  </>}
+
   <script is:inline>
     document.addEventListener('astro:page-load', function() {
+      var pageControl = document.getElementById('toggle-grooming-form');
+      if (!pageControl || pageControl.dataset.healthInitialized === '1') return;
+      pageControl.dataset.healthInitialized = '1';
       var toggleBtn = document.getElementById('toggle-grooming-form');
       var formBody = document.getElementById('grooming-form-body');
       var toggleIcon = document.getElementById('toggle-grooming-icon');
+      if (toggleIcon && formBody && !formBody.classList.contains('hidden')) toggleIcon.style.transform = 'rotate(180deg)';
       if (toggleBtn) {
         toggleBtn.addEventListener('click', function() {
           var isOpen = formBody && !formBody.classList.contains('hidden');
           if (formBody) formBody.classList.toggle('hidden');
+          toggleBtn.setAttribute('aria-expanded', String(!isOpen));
           if (toggleIcon) toggleIcon.style.transform = isOpen ? '' : 'rotate(180deg)';
         });
       }

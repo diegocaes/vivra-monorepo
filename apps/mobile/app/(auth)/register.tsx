@@ -1,3 +1,4 @@
+import { BrandLogo } from '../../components/ui/BrandLogo';
 import { useEffect, useState } from 'react';
 import {
   View,
@@ -221,7 +222,7 @@ export default function RegisterScreen() {
       >
         <View style={styles.inner}>
           <View style={styles.header}>
-            <Text style={styles.logo}>Vivra</Text>
+            <BrandLogo width={170} style={styles.logo} />
             <Text style={styles.subtitle}>Crea tu cuenta</Text>
           </View>
 
@@ -344,12 +345,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xl,
   },
-  logo: {
-    fontSize: FontSize.hero,
-    fontWeight: FontWeight.bold,
-    color: Colors.ink,
-    marginBottom: Spacing.xs,
-  },
+  logo: { marginBottom: Spacing.xs },
   subtitle: {
     fontSize: FontSize.lg,
     color: Colors.muted,

@@ -1,0 +1,42 @@
+---
+import { calculateAge, calculateVitalityScore } from '@vivra/shared';
+import type { Pet } from '@vivra/shared/lib/database';
+import Icon from '../ui/Icon.astro';
+import HealthTabs from './HealthTabs.astro';
+import './health.css';
+interface Props {
+  pet: Pet;
+  section?: 'health' | 'care';
+  active: string;
+  title?: string;
+  subtitle?: string;
+  latestWeight?: number | null;
+  score?: ReturnType<typeof calculateVitalityScore> | null;
+  scoreUnavailable?: boolean;
+}
+const { pet, active, section = 'health', title = 'Salud', subtitle = `Todo el historial de salud de ${pet.name}, en un solo lugar.`, latestWeight = pet.weight_kg, score, scoreUnavailable = false } = Astro.props;
+const description = [pet.birth_date ? calculateAge(pet.birth_date) : '', pet.breed || (pet.species === 'cat' ? 'Gato' : 'Perro'), latestWeight ? `${latestWeight} kg` : ''].filter(Boolean).join(' · ');
+---
+<header class="health-heading">
+  <div><h1>{title}</h1><p>{subtitle}</p></div>
+  <details class="health-options">
+    <summary><span aria-hidden="true">•••</span> Más opciones</summary>
+    <div><a href="/perfil">Perfil de {pet.name}</a><a href="/notificaciones">Ver recordatorios</a></div>
+  </details>
+</header>
+<section class:list={['health-pet-card', { 'health-pet-card-compact': active !== 'resumen' || section === 'care' }]} aria-label={`Perfil de ${pet.name}`}>
+  <a href="/perfil" class="health-pet-identity">
+    {pet.photo_url ? <img src={pet.photo_url} alt={pet.name} /> : <span class="health-pet-placeholder"><Icon name="mascota" class="h-10 w-10" /></span>}
+    <div><h2>{pet.name} <span aria-hidden="true">›</span></h2><p>{description || 'Completa su perfil'}</p></div>
+  </a>
+  {active === 'resumen' && section === 'health' && (
+    <a class="health-score-preview" href="#bienestar-detalle">
+      <span>Índice de bienestar <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg></span>
+      {score?.showScore && !scoreUnavailable ? <>
+        <div class="health-score-line"><p><strong>{score.total}</strong><span>/100</span></p><span class="health-progress"><span style={`width:${score.total}%`}></span></span></div>
+        <p class="health-score-caption">{score.headline}</p>
+      </> : <p class="health-score-pending">{scoreUnavailable ? 'Resumen no disponible' : 'Completa sus registros para ver el índice'}</p>}
+    </a>
+  )}
+</section>
+<HealthTabs active={active} section={section} />

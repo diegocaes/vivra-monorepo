@@ -18,8 +18,8 @@ const PILLAR_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 const PILLAR_ROUTES: Record<PillarId, { route: string; label: string }> = {
   peso: { route: '/(app)/salud/peso', label: 'Registrar peso' },
   cuidado: { route: '/(app)/salud/preventivos', label: 'Ver preventivos' },
-  raza: { route: '/(app)/perfil', label: 'Completar perfil' },
-  nutricion: { route: '/(app)/alimentacion', label: 'Ver alimentación' },
+  raza: { route: '/(app)/perfil?view=pet', label: 'Completar perfil' },
+  nutricion: { route: '/(app)/cuidado/alimentacion', label: 'Ver alimentación' },
 };
 
 interface VitalityWidgetProps {
@@ -119,6 +119,7 @@ function PillarRow({
 }
 
 export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidgetProps) {
+  const scoreColor = ({ '#22c55e': Colors.good, '#f59e0b': Colors.warn, '#f97316': Colors.gold, '#94a3b8': Colors.muted } as Record<string, string>)[vitality.color.toLowerCase()] ?? vitality.color;
   // Auto-expand the weakest non-estimated pillar so the user lands with the
   // most relevant insight already open.
   const weakest = [...vitality.pillars]
@@ -129,32 +130,29 @@ export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidget
   );
 
   if (compact) {
-    // Surface the weakest pillar in the dashboard card without turning
-    // incomplete information into an alarming health message.
-    const attention = weakest && weakest.pct < 40 ? weakest : null;
     return (
       <Card>
-        <View style={styles.compactRow}>
-          <ScoreCircle
-            score={vitality.total}
-            color={vitality.color}
-            showScore={vitality.showScore}
-            label={vitality.category === 'building' ? 'Completando' : undefined}
-          />
-          <View style={styles.compactInfo}>
-            <Text style={styles.title}>Vitality Score</Text>
-            <Text style={styles.headline}>{vitality.headline}</Text>
-            {attention ? (
-              <View style={styles.attentionChip}>
-                <Ionicons name="information-circle-outline" size={13} color={Colors.accent} />
-                <Text style={styles.attentionText}>{attention.name}: información por completar</Text>
-              </View>
-            ) : vitality.subline ? (
-              <Text style={styles.compactSubline}>{vitality.subline}</Text>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+        <View style={styles.compactHeader}>
+          <Text style={styles.title}>Bienestar</Text>
+          <Text style={styles.detailsLink}>Ver detalles ›</Text>
         </View>
+        <View style={styles.compactRow}>
+          <ScoreCircle score={vitality.total} color={vitality.showScore ? scoreColor : Colors.good}
+            showScore={vitality.showScore} size={116} strokeWidth={8}
+            label={vitality.category === 'building' ? 'Completando' : 'Vitality Score'} />
+          <View style={styles.compactInfo}>
+            {vitality.pillars.map(pillar => (
+              <View key={pillar.id} style={styles.summaryRow}>
+                <Ionicons name={PILLAR_ICONS[pillar.name] ?? 'ellipse-outline'} size={16} color={pillar.id === 'nutricion' ? Colors.gold : Colors.good} />
+                <Text style={styles.summaryName}>{pillar.id === 'cuidado' ? 'Prevención' : pillar.name}</Text>
+                <Text style={[styles.summaryValue, { color: pillar.isEstimated ? Colors.muted : barColorFor(pillar.pct, false) }]}>
+                  {pillar.isEstimated ? '—' : `${Math.round(pillar.pct)}%`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+        <Text style={styles.compactSubline}>{vitality.headline}</Text>
       </Card>
     );
   }
@@ -169,7 +167,7 @@ export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidget
       <View style={styles.body}>
         <ScoreCircle
           score={vitality.total}
-          color={vitality.color}
+          color={scoreColor}
           showScore={vitality.showScore}
           label={vitality.category === 'building' ? 'Completando' : undefined}
         />
@@ -193,6 +191,11 @@ export function VitalityWidget({ vitality, compact, onNavigate }: VitalityWidget
 }
 
 const styles = StyleSheet.create({
+  compactHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  detailsLink: { fontSize: 12, color: Colors.accent },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9 },
+  summaryName: { flex: 1, fontSize: 12, color: Colors.ink },
+  summaryValue: { fontSize: 12, fontWeight: '500' },
   header: {
     marginBottom: Spacing.md,
   },
@@ -305,8 +308,8 @@ const styles = StyleSheet.create({
   compactSubline: {
     fontSize: FontSize.xs,
     color: Colors.muted,
-    marginTop: 2,
-    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: 14,
   },
   attentionChip: {
     flexDirection: 'row',

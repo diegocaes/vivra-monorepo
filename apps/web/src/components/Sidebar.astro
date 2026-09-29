@@ -11,20 +11,18 @@ const { activePet, pets, unreadCount = 0 } = Astro.props;
 const currentPath = Astro.url.pathname;
 
 const navItems = [
-  { href: '/dashboard',      match: '/dashboard',      label: 'Inicio',     icon: 'home' },
-  { href: '/salud',          match: '/salud',          label: 'Salud',      icon: 'heart' },
-  { href: '/alimentacion',   match: '/alimentacion',   label: 'Comida',     icon: 'food' },
-  { href: '/salud/grooming', match: '/salud/grooming', label: 'Grooming',   icon: 'scissors' },
-  { href: '/calendario',     match: '/calendario',     label: 'Calendario', icon: 'calendar' },
-  { href: '/print',          match: '/print',          label: 'Pasaporte',  icon: 'passport' },
+  { href: '/dashboard', match: '/dashboard', label: 'Inicio', icon: 'home' },
+  { href: '/salud', match: '/salud', label: 'Salud', icon: 'heart' },
+  { href: '/cuidado', match: '/cuidado', label: 'Cuidado', icon: 'scissors' },
+  { href: '/viajes', match: '/viajes', label: 'Viajes', icon: 'plane' },
+  { href: '/mas', match: '/mas', label: 'Más', icon: 'more' },
+  { href: '/calendario', match: '/calendario', label: 'Calendario', icon: 'calendar' },
 ];
-
 function isActive(match: string): boolean {
-  if (match === '/dashboard') return currentPath === '/dashboard';
-  // Grooming es tab top-level — al estar en /salud/grooming NO debe activar también "Salud"
-  if (match === '/salud') {
-    return currentPath.startsWith('/salud') && !currentPath.startsWith('/salud/grooming');
-  }
+  if (match === '/salud') return currentPath.startsWith('/salud') && !currentPath.startsWith('/salud/grooming');
+  if (match === '/cuidado') return ['/cuidado', '/alimentacion', '/salud/grooming'].some(path => currentPath === path || currentPath.startsWith(path + '/'));
+  if (match === '/viajes') return currentPath === '/viajes' || currentPath === '/pasaporte';
+  if (match === '/mas') return ['/mas', '/perfil', '/premium', '/referidos', '/faq'].includes(currentPath);
   return currentPath.startsWith(match);
 }
 
@@ -40,8 +38,8 @@ function petInitial(name: string) {
 <!-- ─── DESKTOP SIDEBAR ─────────────────────────────── -->
 <aside class="app-sidebar no-print hidden lg:flex flex-col fixed top-0 left-0 h-full w-55 bg-sidebar z-40">
   <!-- Logo -->
-  <a href="/" class="flex items-center px-5 py-4 border-b border-white/5 hover:opacity-80 transition-opacity">
-    <img src="/Vivra-white.svg" alt="Vivra" style="height:80px;width:auto;" />
+  <a href="/" class="flex items-center px-6 py-8 border-b border-card-border hover:opacity-80 transition-opacity">
+    <img class="brand-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" />
   </a>
 
   <!-- Pet switcher -->
@@ -52,7 +50,7 @@ function petInitial(name: string) {
         <button
           type="button"
           id="pet-trigger-desktop"
-          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+          class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-canvas hover:bg-accent-light transition-colors text-left"
           aria-expanded="false"
         >
           {activePet.photo_url ? (
@@ -62,16 +60,16 @@ function petInitial(name: string) {
               <span class="text-xs font-bold text-accent">{petInitial(activePet.name)}</span>
             </div>
           )}
-          <span class="flex-1 text-sm font-semibold text-white truncate">{activePet.name}</span>
-          <svg class="h-3.5 w-3.5 text-white/40 shrink-0 transition-transform" id="pet-chevron-desktop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="flex-1 text-sm font-semibold text-ink truncate">{activePet.name}</span>
+          <svg class="h-3.5 w-3.5 text-muted shrink-0 transition-transform" id="pet-chevron-desktop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
         </button>
 
         <!-- Dropdown -->
-        <div id="pet-dropdown-desktop" class="hidden absolute top-full left-0 right-0 mt-1 rounded-xl bg-sidebar border border-white/10 shadow-xl overflow-hidden z-50">
+        <div id="pet-dropdown-desktop" class="hidden absolute top-full left-0 right-0 mt-1 rounded-xl bg-sidebar border border-card-border shadow-xl overflow-hidden z-50">
           {pets.map(p => (
             <form method="POST" action="/api/pets/switch">
               <input type="hidden" name="pet_id" value={p.id} />
-              <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors text-left">
+              <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-accent-light transition-colors text-left">
                 {p.photo_url ? (
                   <img src={p.photo_url} alt={p.name} class="h-6 w-6 rounded-full object-cover shrink-0" />
                 ) : (
@@ -79,19 +77,19 @@ function petInitial(name: string) {
                     <span class="text-xs font-bold text-accent">{petInitial(p.name)}</span>
                   </div>
                 )}
-                <span class="flex-1 text-sm text-white/80 truncate">{p.name}</span>
+                <span class="flex-1 text-sm text-ink truncate">{p.name}</span>
                 {p.id === activePet.id && (
                   <svg class="h-3.5 w-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
                 )}
               </button>
             </form>
           ))}
-          <div class="border-t border-white/5">
-            <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors">
-              <div class="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                <svg class="h-3.5 w-3.5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          <div class="border-t border-card-border">
+            <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-accent-light transition-colors">
+              <div class="h-6 w-6 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+                <svg class="h-3.5 w-3.5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
               </div>
-              <span class="text-sm text-white/50">Agregar mascota</span>
+              <span class="text-sm text-muted">Agregar mascota</span>
             </a>
           </div>
         </div>
@@ -126,44 +124,17 @@ function petInitial(name: string) {
     </a>
   </div>
 
-  <!-- Bottom: profile + referidos + help -->
-  <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
-    <a href="/perfil" class:list={['sidebar-link', isActive('/perfil') && 'active']}>
-      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-      </svg>
-      <span>Perfil</span>
-    </a>
-    <a href="/premium" class:list={['sidebar-link', (isActive('/premium') || isActive('/referidos')) && 'active']}>
-      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-      <span>Premium</span>
-    </a>
-    <a href="/faq" class:list={['sidebar-link', isActive('/faq') && 'active']}>
-      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
-      </svg>
-      <span>Ayuda</span>
-    </a>
-    <a href="/perfil#feedback" class="sidebar-link go-feedback">
-      <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-      <span>Sugerencias</span>
-    </a>
-  </div>
 </aside>
 
 <!-- ─── MOBILE TOP BAR ─────────────────────────────── -->
-<header class="no-print lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-sidebar border-b border-white/5">
+<header class="no-print lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-sidebar border-b border-card-border">
   <a href="/" class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-    <img src="/Vivra-white.svg" alt="Vivra" class="h-8 w-auto" />
+    <img class="brand-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" />
   </a>
   <div class="flex items-center gap-1">
     <a
       href="/notificaciones"
-      class="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+      class="relative flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-accent-light hover:text-accent transition-colors"
       aria-label="Notificaciones"
     >
       <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -176,7 +147,7 @@ function petInitial(name: string) {
   <button
     id="mobile-menu-btn"
     type="button"
-    class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-sidebar-hover hover:text-white transition-colors"
+    class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-sidebar-hover hover:text-accent transition-colors"
     aria-label="Menú"
   >
     <svg id="menu-icon-open" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -193,9 +164,9 @@ function petInitial(name: string) {
   <!-- Drawer -->
   <aside class="absolute top-0 left-0 h-full w-64 bg-sidebar flex flex-col transition-transform duration-300 ease-out" id="mobile-drawer" style="transform:translateX(-100%)">
     <!-- Logo -->
-    <div class="flex items-center justify-between px-5 py-5 border-b border-white/5">
+    <div class="flex items-center justify-between px-5 py-5 border-b border-card-border">
       <div class="flex items-center">
-        <img src="/Vivra-white.svg" alt="Vivra" style="height:80px;width:auto;" />
+        <img class="brand-logo" src="/vivra-logo-transparent.png" alt="Vivra" width="800" height="234" />
       </div>
     </div>
 
@@ -206,7 +177,7 @@ function petInitial(name: string) {
           <button
             type="button"
             id="pet-trigger-mobile"
-            class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+            class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-canvas hover:bg-accent-light transition-colors text-left"
             aria-expanded="false"
           >
             {activePet.photo_url ? (
@@ -216,15 +187,15 @@ function petInitial(name: string) {
                 <span class="text-xs font-bold text-accent">{petInitial(activePet.name)}</span>
               </div>
             )}
-            <span class="flex-1 text-sm font-semibold text-white truncate">{activePet.name}</span>
-            <svg class="h-3.5 w-3.5 text-white/40 shrink-0 transition-transform" id="pet-chevron-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+            <span class="flex-1 text-sm font-semibold text-ink truncate">{activePet.name}</span>
+            <svg class="h-3.5 w-3.5 text-muted shrink-0 transition-transform" id="pet-chevron-mobile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
           </button>
 
-          <div id="pet-dropdown-mobile" class="hidden mt-1 rounded-xl bg-sidebar border border-white/10 overflow-hidden">
+          <div id="pet-dropdown-mobile" class="hidden mt-1 rounded-xl bg-sidebar border border-card-border overflow-hidden">
             {pets.map(p => (
               <form method="POST" action="/api/pets/switch">
                 <input type="hidden" name="pet_id" value={p.id} />
-                <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors text-left">
+                <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-accent-light transition-colors text-left">
                   {p.photo_url ? (
                     <img src={p.photo_url} alt={p.name} class="h-6 w-6 rounded-full object-cover shrink-0" />
                   ) : (
@@ -232,19 +203,19 @@ function petInitial(name: string) {
                       <span class="text-xs font-bold text-accent">{petInitial(p.name)}</span>
                     </div>
                   )}
-                  <span class="flex-1 text-sm text-white/80 truncate">{p.name}</span>
+                  <span class="flex-1 text-sm text-ink truncate">{p.name}</span>
                   {p.id === activePet.id && (
                     <svg class="h-3.5 w-3.5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
                   )}
                 </button>
               </form>
             ))}
-            <div class="border-t border-white/5">
-              <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/8 transition-colors">
-                <div class="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                  <svg class="h-3.5 w-3.5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            <div class="border-t border-card-border">
+              <a href="/onboarding?add=1" class="flex items-center gap-2.5 px-3 py-2.5 hover:bg-accent-light transition-colors">
+                <div class="h-6 w-6 rounded-full bg-accent-light flex items-center justify-center shrink-0">
+                  <svg class="h-3.5 w-3.5 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
                 </div>
-                <span class="text-sm text-white/50">Agregar mascota</span>
+                <span class="text-sm text-muted">Agregar mascota</span>
               </a>
             </div>
           </div>
@@ -264,37 +235,12 @@ function petInitial(name: string) {
       ))}
     </nav>
 
-    <div class="px-3 py-4 border-t border-white/5 space-y-0.5">
-      <a href="/perfil" class:list={['sidebar-link', isActive('/perfil') && 'active']}>
-        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-        </svg>
-        <span>Perfil</span>
-      </a>
-      <a href="/premium" class:list={['sidebar-link', (isActive('/premium') || isActive('/referidos')) && 'active']}>
-        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-        <span>Premium</span>
-      </a>
-      <a href="/faq" class:list={['sidebar-link', isActive('/faq') && 'active']}>
-        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>
-        </svg>
-        <span>Ayuda</span>
-      </a>
-      <a href="/perfil#feedback" class="sidebar-link go-feedback">
-        <svg class="h-4.5 w-4.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>Sugerencias</span>
-      </a>
-    </div>
   </aside>
 </div>
 
 <!-- ─── SVG ICON SPRITES ─────────────────────────────── -->
 <svg class="hidden" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="sbi-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
   <symbol id="sbi-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
     <polyline points="9 22 9 12 15 12 15 22"/>

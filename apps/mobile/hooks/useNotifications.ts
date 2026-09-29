@@ -18,8 +18,8 @@ function hrefToMobileRoute(href: string | undefined): string {
   if (href.includes('vacunas')) return '/(app)/salud/vacunas';
   if (href.includes('peso')) return '/(app)/salud/peso';
   if (href.includes('alimentacion')) return '/(app)/alimentacion';
-  if (href.includes('grooming')) return '/grooming?from=salud';
-  if (href.includes('perfil')) return '/(app)/perfil';
+  if (href.includes('grooming')) return '/grooming?from=cuidado';
+  if (href.includes('perfil')) return '/(app)/perfil?view=pet';
   if (href.includes('salud')) return '/(app)/salud';
   return '/(app)';
 }

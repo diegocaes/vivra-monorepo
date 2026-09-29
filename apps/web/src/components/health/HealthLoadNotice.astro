@@ -1,0 +1,6 @@
+---
+import Icon from '../ui/Icon.astro';
+interface Props { href: string; subject?: string }
+const { href, subject = 'los registros' } = Astro.props;
+---
+<div class="health-load-notice" role="alert"><Icon name="alerta" class="h-5 w-5 shrink-0" /><p>No pudimos cargar {subject}. Reintenta para ver la información guardada.</p><a href={href}>Reintentar</a></div>

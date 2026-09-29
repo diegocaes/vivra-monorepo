@@ -53,3 +53,6 @@ apps/mobile/.maestro/artifacts/
 # Claude Code project guides — local only, not shipped with the repo
 CLAUDE.md
 **/CLAUDE.md
+
+# Local generated media, excluded from release archives
+/output/

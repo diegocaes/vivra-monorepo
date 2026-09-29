@@ -2,7 +2,7 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import Icon from '../components/ui/Icon.astro';
 import Card from '../components/ui/Card.astro';
-import SectionHeader from '../components/ui/SectionHeader.astro';
+import HealthHeader from '../components/health/HealthHeader.astro';
 import { formatDate, formatDateShort, computeFoodStats, formatCurrency, parseNumericField, sumAmounts } from '@vivra/shared';
 import { getActivePet } from '../lib/pet';
 import { getPremiumStatus } from '../lib/premium';
@@ -189,7 +189,7 @@ const hayGastoMensual = monthlySpend.some(m => m.total > 0);
 ---
 
 <MainLayout title="Alimentación">
-  <SectionHeader title="Alimentación" subtitle={`Dieta y control de comida de ${pet.name}`} />
+  <HealthHeader pet={pet} section="care" active="alimentacion" title="Alimentación" subtitle={`Comida, snacks y compras de ${pet.name}`} />
 
   {/* ── STATS CARD: averages + total spent. No countdown, no alarm. ── */}
   {stats.totalBags > 0 ? (

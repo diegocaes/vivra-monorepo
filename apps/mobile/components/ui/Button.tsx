@@ -33,6 +33,8 @@ export function Button({
 
   return (
     <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.7}
@@ -73,9 +75,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
+    borderRadius: Radius.full,
     gap: Spacing.sm,
-    minHeight: 50,
+    minHeight: 52,
   },
   primary: {
     backgroundColor: Colors.accent,

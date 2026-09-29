@@ -21,6 +21,7 @@ export default function PaywallScreen() {
     purchase,
     restore,
     isPremium,
+    error,
     isLoading,
     refresh,
   } = useSubscription();
@@ -73,6 +74,14 @@ export default function PaywallScreen() {
     if (pkg.packageType === PACKAGE_TYPE.MONTHLY) return 'mensual';
     return 'otro';
   }
+
+  if (error) return (
+    <SafeAreaView style={styles.loadingContainer}>
+      <Text style={styles.fallbackText}>{error}</Text>
+      <TouchableOpacity onPress={refresh} style={styles.retryBtn}><Text style={styles.retryText}>Reintentar</Text></TouchableOpacity>
+      <TouchableOpacity onPress={() => router.back()} style={styles.retryBtn}><Text style={styles.retryText}>Volver</Text></TouchableOpacity>
+    </SafeAreaView>
+  );
 
   if (!isLoading && !isPremium && paywallOffering) {
     return (

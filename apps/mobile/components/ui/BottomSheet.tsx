@@ -1,3 +1,4 @@
+import { useReducedMotion } from 'react-native-reanimated';
 import {
   View,
   Text,
@@ -22,6 +23,7 @@ interface BottomSheetProps {
 }
 
 export function BottomSheet({ visible, onClose, title, children, footer }: BottomSheetProps) {
+  const reduceMotion = useReducedMotion();
   const { height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const close = () => {
@@ -30,7 +32,7 @@ export function BottomSheet({ visible, onClose, title, children, footer }: Botto
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+    <Modal visible={visible} transparent animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={close}>
       <View style={styles.overlay}>
         <View pointerEvents="none" style={styles.scrim} />
         <TouchableOpacity

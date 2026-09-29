@@ -14,6 +14,8 @@
       "!**/.vercel",
       "!**/.turbo",
       "!**/dist",
+      // Generated media previews may contain vendored, minified scripts.
+      "!output/**",
       "!**/ios",
       "!**/android",
       "!apps/mobile/types/supabase.ts",

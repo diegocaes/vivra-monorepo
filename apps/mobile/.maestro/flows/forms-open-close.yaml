@@ -7,9 +7,12 @@ tags:
 - launchApp
 - runFlow:
     when:
-      visible: "http://localhost:8081"
+      true: ${APP_ID == "host.exp.Exponent"}
     commands:
-      - tapOn: "http://localhost:8081"
+      - openLink: "exp://localhost:8081"
+      - extendedWaitUntil:
+          visible: "Tab Inicio"
+          timeout: 25000
 - tapOn: "Tab Inicio"
 - extendedWaitUntil:
     visible:
@@ -24,17 +27,8 @@ tags:
       - tapOn:
           text: ".*Open debugger to view warnings.*"
           point: "94%,50%"
-- tapOn: "Tab Salud"
-- assertVisible:
-    text: "Tab Salud"
-    selected: true
-- scrollUntilVisible:
-    element:
-      id: "health-grooming"
-    direction: DOWN
-    centerElement: true
-- tapOn:
-    id: "health-grooming"
+- tapOn: "Tab Cuidado"
+- tapOn: "Grooming"
 - assertVisible:
     id: "screen-grooming"
 - tapOn:
@@ -48,6 +42,7 @@ tags:
     id: "screen-grooming"
 - tapOn:
     id: "grooming-back"
+- tapOn: "Tab Salud"
 - scrollUntilVisible:
     element:
       id: "health-preventives"
