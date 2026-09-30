@@ -2,66 +2,20 @@
 import Icon from './ui/Icon.astro';
 interface Props { name: string; unreadCount: number; }
 const { name, unreadCount } = Astro.props;
-const sections = [
-  ['Vacunas', '/salud/vacunas'], ['Visitas veterinarias', '/salud/historial'],
-  ['Alimentación y comida', '/alimentacion'], ['Viajes', '/viajes'],
-  ['Pasaporte y documentos', '/pasaporte'], ['Peso', '/salud/peso'],
-  ['Preventivos', '/salud/preventivos'], ['Higiene y grooming', '/salud/grooming'], ['Cuidado', '/cuidado'],
-  ['Calendario', '/calendario'], ['Mi mascota', '/perfil'], ['Gastos', '/perfil?view=gastos'], ['Mi cuenta', '/perfil?view=cuenta'], ['Más', '/mas'],
-];
 const initials = name.split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase() || 'V';
 ---
 <header class="app-topbar no-print">
-  <form class="section-search" id="section-search" role="search">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></svg>
-    <input id="section-query" type="search" aria-label="Buscar una sección" placeholder="Buscar vacunas, visitas, comida, viajes…" autocomplete="off" aria-controls="section-results" />
-    <div id="section-results" class="search-results" hidden>
-      {sections.map(([label, href]) => <a href={href}>{label}</a>)}
-      <p hidden id="section-no-results">No encontramos esa sección.</p>
-    </div>
-  </form>
   <div class="topbar-actions">
     <details class="add-menu"><summary>＋ <span>Agregar</span></summary><div><a href="/salud/vacunas?new=1">Vacuna</a><a href="/salud/historial?new=1">Visita veterinaria</a><a href="/salud/peso?new=1">Peso</a><a href="/onboarding?add=1">Mascota</a></div></details>
     <a href="/notificaciones" class="notification-link" aria-label={`Notificaciones${unreadCount ? `, ${unreadCount} sin leer` : ''}`}><Icon name="campana" class="h-6 w-6" />{unreadCount > 0 && <span />}</a>
     <a href="/perfil?view=cuenta" class="account-avatar" aria-label="Mi cuenta">{initials}</a>
   </div>
 </header>
-<script>
-  import { navigate } from 'astro:transitions/client';
-  document.addEventListener('astro:page-load', () => {
-    const form = document.querySelector<HTMLFormElement>('#section-search');
-    const input = document.querySelector<HTMLInputElement>('#section-query');
-    const results = document.querySelector<HTMLElement>('#section-results');
-    if (!form || !input || !results) return;
-    const links = Array.from(results.querySelectorAll<HTMLAnchorElement>('a'));
-    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    input.addEventListener('input', () => {
-      results.hidden = !input.value.trim();
-      for (const link of links) link.hidden = !normalize(link.textContent ?? '').includes(normalize(input.value.trim()));
-      const empty = results.querySelector<HTMLElement>('#section-no-results');
-      if (empty) empty.hidden = links.some(link => !link.hidden);
-    });
-    input.addEventListener('keydown', event => {
-      if (event.key === 'Escape') results.hidden = true;
-      if (event.key === 'ArrowDown') { event.preventDefault(); links.find(link => !link.hidden)?.focus(); }
-    });
-    form.addEventListener('focusout', event => { if (!form.contains(event.relatedTarget as Node)) results.hidden = true; });
-    form.addEventListener('submit', event => {
-      event.preventDefault();
-      const first = links.find(link => !link.hidden);
-      if (input.value.trim() && first) void navigate(first.getAttribute('href')!);
-    });
-  });
-</script>
 <style>
-  .section-search { position: relative; display: flex; align-items: center; gap: 12px; width: min(460px, 60%); border-radius: 28px; background: #F1F0EB; padding: 12px 17px; color: #52645C; }
-  input { width: 100%; min-width: 0; outline: none; font-size: 13px; background: transparent; }
-  input::placeholder { color: #89908A; }
-  .search-results, .add-menu>div { position: absolute; top: calc(100% + 8px); left: 0; right: 0; padding: 8px; background: #FFFDFA; border: 1px solid #E8E4DC; border-radius: 16px; box-shadow: 0 14px 36px #143B3110; z-index: 60; }
-  .search-results a, .add-menu a { display: block; font-size: 13px; padding: 10px 12px; border-radius: 8px; }
-  .search-results a[hidden] { display: none; }
-  .search-results a:hover, .add-menu a:hover { background: #E5EDE1; }
-  .search-results p { padding: 12px; font-size: 13px; }
+  .app-topbar { justify-content: flex-end; }
+  .add-menu>div { position: absolute; top: calc(100% + 8px); left: 0; right: 0; padding: 8px; background: #FFFDFA; border: 1px solid #E8E4DC; border-radius: 16px; box-shadow: 0 14px 36px #143B3110; z-index: 60; }
+  .add-menu a { display: block; font-size: 13px; padding: 10px 12px; border-radius: 8px; }
+  .add-menu a:hover { background: #E5EDE1; }
   .topbar-actions { display: flex; align-items: center; gap: 25px; }
   .add-menu { position: relative; }
   .add-menu summary { cursor: pointer; list-style: none; padding: 10px 18px; background: #174C3C; color: white; font-size: 13px; border-radius: 26px; }
