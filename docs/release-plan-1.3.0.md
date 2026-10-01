@@ -6,10 +6,12 @@ Fecha: 29 de septiembre de 2026. Plan inicial y registro de decisiones.
 
 - Commit del candidato: 86d0f48. Build EAS de producción 1.3.0 (23): aef6d52d-3f48-42f4-9111-2c7b1163074c.
 - Verificación técnica: 128 pruebas correctas, tipos y build web correctos, smoke público 6/6 y exportación iOS correcta.
-- ASC: borrador 1.3.0 con novedades y notas de revisión actualizadas, liberación manual y distribución escalonada de siete días.
+- Publicación confirmada: Apple Lookup de Panamá mostró 1.3.0 disponible el 1 de octubre de 2026, con fecha de publicación 13:07:50 UTC. Build candidato: 23. Las seis capturas nuevas del iPhone del propietario sustituyeron las anteriores.
 - El usuario autorizó después usar TestFlight para simplificar la prueba en su iPhone. La preparación ad hoc se canceló; no se generó un segundo build.
-- La revisión de compras/push nativos queda a cargo del usuario. La publicación al público y el anuncio siguen pendientes. Las capturas heredadas de 1.2.3 deben actualizarse antes del envío final a revisión.
-- El resto de este documento conserva el plan inicial, incluido el camino sin TestFlight que fue sustituido por la decisión anterior.
+- El usuario confirmó que probó la app en TestFlight y la web con buen resultado. El 1 de octubre confirmó también recepción y apertura correcta del push de prueba. Campaña completada: 12 usuarios seleccionados, 11 recibos correctos incluyendo al propietario y 1 DeviceNotRegistered. Ver docs/campaigns/vivra-1.3.0-push.md.
+- Web: retirado el buscador de secciones que parecía una búsqueda de registros (8764b8d, subido a main). Verificación: 128 pruebas, tipos, build web y smoke público 6/6 correctos.
+- Herramienta de campaña validada con pnpm verify: 131 pruebas correctas y tipos sin errores. No hay diferencias en apps/mobile ni packages/shared frente al commit del build 23; no se requiere OTA.
+- El resto de este documento conserva el plan inicial como historial, con pendientes y propuestas que no describen el estado actual resumido arriba.
 
 ## Base confirmada
 
